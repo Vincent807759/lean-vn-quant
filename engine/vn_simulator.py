@@ -15,8 +15,10 @@ Features:
 - Performance evaluation with Implementation Shortfall & Kill-Switch monitoring
 """
 
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union, List
+import datetime
 import numpy as np
+import bottleneck as bn
 import numba
 from scipy import stats
 
@@ -29,13 +31,23 @@ def compute_deflated_sharpe_ratio(
     daily_returns: np.ndarray,
     n_trials: int = 26,
     risk_free_rate: float = 0.04,
-    annualization_factor: float = 252.0
+    annualization_factor: float = 252.0,
+    trial_returns: Optional[np.ndarray] = None,
+    trial_corr_matrix: Optional[np.ndarray] = None,
+    mean_trial_correlation: Optional[float] = None,
+    var_sharpe_trials: Optional[float] = None
 ) -> Dict[str, float]:
     """
     Computes the Deflated Sharpe Ratio (DSR) to account for selection bias / multiple testing,
-    non-normality (skewness, kurtosis), and sample length following:
+    non-normality (skewness, kurtosis), sample length, and factor cross-correlation following:
     Bailey, D. H., & Lopez de Prado, M. (2014). The Deflated Sharpe Ratio: Correcting for
     Selection Bias, Backtest Overfitting, and Non-Normality. Journal of Portfolio Management.
+    
+    Calibrated Enhancements (Phase 4):
+    - Calculates effective number of independent trials N_eff via Eigenvalue Participation Ratio:
+        N_eff = (sum lambda_i)^2 / sum (lambda_i^2)
+      or via correlation formula N_eff = 1 + (N - 1)(1 - rho_bar).
+    - Uses empirical Var[{SR_n}] for accurate SR_0 threshold determination.
     """
     returns = np.asarray(daily_returns, dtype=np.float64)
     T = len(returns)
@@ -44,7 +56,8 @@ def compute_deflated_sharpe_ratio(
             "deflated_sharpe_ratio": 0.0,
             "p_value": 1.0,
             "expected_max_sharpe": 0.0,
-            "annualized_sharpe": 0.0
+            "annualized_sharpe": 0.0,
+            "n_eff": 1.0
         }
         
     mean_r = float(np.mean(returns))
@@ -54,7 +67,8 @@ def compute_deflated_sharpe_ratio(
             "deflated_sharpe_ratio": 0.0,
             "p_value": 1.0,
             "expected_max_sharpe": 0.0,
-            "annualized_sharpe": 0.0
+            "annualized_sharpe": 0.0,
+            "n_eff": 1.0
         }
         
     daily_rf = risk_free_rate / annualization_factor
@@ -70,18 +84,48 @@ def compute_deflated_sharpe_ratio(
     sr_var = (1.0 - skew * daily_sr + 0.25 * (kurt - 1.0) * (daily_sr ** 2)) / max(T - 1, 1)
     sr_std = np.sqrt(max(sr_var, 1e-12))
     
-    # Expected maximum Sharpe Ratio under Null Hypothesis of zero alpha across N trials
-    # E[max_N {SR}] approx sr_std * ((1 - euler) * Z^-1(1 - 1/N) + euler * Z^-1(1 - 1/(N*e)))
-    euler_mascheroni = 0.5772156649
+    # Determine N_eff (Effective number of independent trials)
     n_trials = max(n_trials, 1)
-    if n_trials > 1:
-        z1 = stats.norm.ppf(1.0 - 1.0 / n_trials)
-        z2 = stats.norm.ppf(1.0 - 1.0 / (n_trials * np.e))
-        expected_max_daily_sr = sr_std * ((1.0 - euler_mascheroni) * z1 + euler_mascheroni * z2)
-    else:
-        expected_max_daily_sr = 0.0
+    if trial_returns is not None and trial_returns.shape[1] > 1:
+        C = np.corrcoef(trial_returns.T)
+        eigvals = np.maximum(np.linalg.eigvalsh(C), 0.0)
+        sum_l = float(np.sum(eigvals))
+        sum_l2 = float(np.sum(eigvals ** 2))
+        n_eff = (sum_l ** 2) / max(sum_l2, 1e-6)
         
-    expected_max_ann_sr = float(expected_max_daily_sr * np.sqrt(annualization_factor))
+        # Calculate empirical variance across trial Sharpe ratios
+        t_means = np.mean(trial_returns, axis=0) * annualization_factor - risk_free_rate
+        t_stds = np.std(trial_returns, axis=0, ddof=1) * np.sqrt(annualization_factor)
+        t_srs = t_means / np.maximum(t_stds, 1e-4)
+        var_sr = float(np.var(t_srs, ddof=1)) if len(t_srs) > 1 else (0.25 ** 2)
+    elif trial_corr_matrix is not None and trial_corr_matrix.shape[0] > 1:
+        eigvals = np.maximum(np.linalg.eigvalsh(trial_corr_matrix), 0.0)
+        sum_l = float(np.sum(eigvals))
+        sum_l2 = float(np.sum(eigvals ** 2))
+        n_eff = (sum_l ** 2) / max(sum_l2, 1e-6)
+        var_sr = var_sharpe_trials if var_sharpe_trials is not None else (0.25 ** 2)
+    elif mean_trial_correlation is not None:
+        rho_bar = float(np.clip(mean_trial_correlation, 0.0, 0.99))
+        n_eff = 1.0 + (n_trials - 1.0) * (1.0 - rho_bar)
+        var_sr = var_sharpe_trials if var_sharpe_trials is not None else (0.25 ** 2)
+    else:
+        # Standard unadjusted multiple testing
+        n_eff = float(n_trials)
+        var_sr = sr_var * annualization_factor
+        
+    n_eff = max(1.0, n_eff)
+    euler_mascheroni = 0.5772156649
+    
+    if n_eff > 1.0001:
+        z1 = stats.norm.ppf(1.0 - 1.0 / n_eff)
+        z2 = stats.norm.ppf(1.0 - 1.0 / (n_eff * np.e))
+        sigma_trials = np.sqrt(max(var_sr, 1e-6))
+        # Expected max annualized Sharpe ratio under the null hypothesis of selection bias
+        expected_max_ann_sr = float(sigma_trials * ((1.0 - euler_mascheroni) * z1 + euler_mascheroni * z2))
+    else:
+        expected_max_ann_sr = 0.0
+        
+    expected_max_daily_sr = expected_max_ann_sr / np.sqrt(annualization_factor)
     
     # DSR Statistic and Probability
     dsr_stat = (daily_sr - expected_max_daily_sr) / sr_std
@@ -94,6 +138,7 @@ def compute_deflated_sharpe_ratio(
         "expected_max_sharpe": expected_max_ann_sr,
         "annualized_sharpe": ann_sr,
         "n_trials": n_trials,
+        "n_eff": float(n_eff),
         "sample_skewness": skew,
         "sample_kurtosis": kurt
     }
@@ -153,6 +198,46 @@ def compute_bands_and_ticks(
 # ==============================================================================
 
 @numba.njit(fastmath=True)
+def _calc_borrow_cap(pending: float, rate: float, days: float, min_fee: float) -> float:
+    """
+    Computes maximum advance cash withdrawal capacity given pending receivables,
+    daily advance borrowing interest rate, calendar days, and minimum floor fee.
+    """
+    if pending <= min_fee:
+        return 0.0
+    eff_days = max(days, 1.0)
+    thresh = min_fee / max(rate * eff_days, 1e-8)
+    if (pending - min_fee) < thresh:
+        return pending - min_fee
+    else:
+        return pending / (1.0 + rate * eff_days)
+
+
+@numba.njit(fastmath=True)
+def _calc_dynamic_slippage(
+    qty: float,
+    adv20: float,
+    vol: float,
+    base_slippage: float = 0.0010,
+    half_spread_floor: float = 0.0012,
+    eta: float = 0.75,
+    delta: float = 0.55,
+    gamma_perm: float = 0.30
+) -> float:
+    """
+    Computes dynamic market impact slippage under HOSE microstructure:
+    IS(Q) = half_spread_floor (min 12 bps) + eta * vol * (Q / ADV20)^0.55 + gamma_perm * vol * (Q / ADV20).
+    """
+    if adv20 <= 1.0 or qty <= 0.0:
+        return max(base_slippage, half_spread_floor)
+    q_ratio = qty / adv20
+    temp_impact = eta * vol * (q_ratio ** delta)
+    perm_impact = gamma_perm * vol * q_ratio
+    total_slip = half_spread_floor + temp_impact + perm_impact
+    return max(base_slippage, max(half_spread_floor, total_slip))
+
+
+@numba.njit(fastmath=True)
 def _simulate_vn_microstructure_core(
     raw_open: np.ndarray,
     raw_close: np.ndarray,
@@ -160,33 +245,43 @@ def _simulate_vn_microstructure_core(
     floor: np.ndarray,
     adv20_shares: np.ndarray,
     target_weights: np.ndarray,
-    initial_cash: float = 1.0e9,
-    broker_fee: float = 0.0015,
-    slippage: float = 0.0010,
-    sell_tax: float = 0.0010,
-    advance_fee_rate: float = 0.00035,
-    max_adv_participation: float = 0.05
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    initial_cash: float,
+    broker_fee: float,
+    slippage: float,
+    sell_tax: float,
+    advance_fee_rate: float,
+    max_adv_participation: float,
+    calendar_days_t1: np.ndarray,
+    calendar_days_t2: np.ndarray,
+    min_advance_fee: float,
+    corp_div_ex: np.ndarray,
+    corp_div_pay_t: np.ndarray,
+    corp_stock_ratio: np.ndarray,
+    corp_stock_list_t: np.ndarray,
+    in_pit_universe: np.ndarray,
+    daily_vol: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     High-performance Numba engine simulating Vietnam microstructure:
     - T+2.5 settlement for stocks and sales proceeds
-    - Liquidity traps at ceiling and floor
-    - Lot size 100 constraint
-    - Advance cash financing costs
-    
-    Returns:
-    --------
-    Tuple:
-      - equity: shape (T,) daily portfolio equity at close
-      - cash_history: shape (T,) available cash
-      - realized_fees: shape (T,) cumulative trading fees and taxes
-      - advance_fees: shape (T,) cumulative advance interest fees
+    - Independent accounting of Brokerage Fees (Buy/Sell 0.15%) and Transfer Tax (Sell 0.10%)
+    - Dynamic advance cash borrowing interest based on calendar days with 50,000 VND floor fee
+    - Dual corporate actions ledger: dividend_cash_receivable and locked_corp_action_shares
+    - Priority queue for floor-trapped sell orders with -7%/session penalty slippage upon exit
+    - Realized daily turnover directly computed from executed transaction volume
+    - Point-in-Time constituent masking with liquidation_grace_mask (orderly exit <= 5 sessions)
+    - 3-tier order book market impact model with 12 bps half-spread floor
     """
     T, N = raw_open.shape
     equity = np.zeros(T, dtype=np.float64)
     cash_history = np.zeros(T, dtype=np.float64)
     realized_fees = np.zeros(T, dtype=np.float64)
     advance_fees = np.zeros(T, dtype=np.float64)
+    broker_fees_hist = np.zeros(T, dtype=np.float64)
+    sell_tax_hist = np.zeros(T, dtype=np.float64)
+    daily_turnover_hist = np.zeros(T, dtype=np.float64)
+    div_receivable_hist = np.zeros(T, dtype=np.float64)
+    locked_corp_hist = np.zeros(T, dtype=np.float64)
     
     cash_avail = initial_cash
     pending_cash_t1 = 0.0
@@ -197,92 +292,205 @@ def _simulate_vn_microstructure_core(
     buy_t1 = np.zeros(N, dtype=np.float64)
     buy_t0 = np.zeros(N, dtype=np.float64)
     
-    cum_trade_fees = 0.0
+    # Corporate Actions and Floor-trapped state trackers
+    div_payout_schedule = np.zeros(T, dtype=np.float64)
+    stock_listing_schedule = np.zeros((T, N), dtype=np.float64)
+    trapped_sell_shares = np.zeros(N, dtype=np.float64)
+    trapped_days = np.zeros(N, dtype=np.int64)
+    liquidation_grace_counter = np.zeros(N, dtype=np.int64)
+    locked_corp_shares = np.zeros(N, dtype=np.float64)
+    cum_div_receivable = 0.0
+    
+    cum_broker_fees = 0.0
+    cum_sell_tax = 0.0
     cum_adv_fees = 0.0
     
     for t in range(T):
         # ----------------------------------------------------------------------
-        # A. SETTLEMENT UPDATES (At Open of day t)
+        # A. SETTLEMENT UPDATES & CORPORATE ACTIONS (At Open of day t)
         # ----------------------------------------------------------------------
-        # Stocks bought at t-2 unlock into sellable today
+        # 1. Stocks bought at t-2 unlock into sellable today
         shares_sellable += buy_t1
         buy_t1 = buy_t0.copy()
         buy_t0[:] = 0.0
         
-        # Cash from sales at t-2 settles into available cash today
+        # 2. Cash from sales at t-2 settles into available cash today
         cash_avail += pending_cash_t1
         pending_cash_t1 = pending_cash_t0
         pending_cash_t0 = 0.0
         
+        # 3. Process corporate action cash dividend payouts scheduled for today
+        payout_today = div_payout_schedule[t]
+        if payout_today > 0.0:
+            cash_avail += payout_today
+            cum_div_receivable -= payout_today
+            if cum_div_receivable < 0.0:
+                cum_div_receivable = 0.0
+                
+        # 4. Process corporate action stock dividend listings scheduled for today
+        for i in range(N):
+            unlocked_stock = stock_listing_schedule[t, i]
+            if unlocked_stock > 0.0:
+                shares_sellable[i] += unlocked_stock
+                shares_held[i] += unlocked_stock
+                locked_corp_shares[i] -= unlocked_stock
+                if locked_corp_shares[i] < 0.0:
+                    locked_corp_shares[i] = 0.0
+                    
+        # 5. Check any new corporate actions taking effect on ex_date t
+        for i in range(N):
+            c_div = corp_div_ex[t, i]
+            if c_div > 0.0 and shares_held[i] > 0.0:
+                p_day = int(corp_div_pay_t[t, i])
+                div_amt = shares_held[i] * c_div
+                cum_div_receivable += div_amt
+                if p_day < T:
+                    div_payout_schedule[p_day] += div_amt
+                    
+            s_ratio = corp_stock_ratio[t, i]
+            if s_ratio > 0.0 and shares_held[i] > 0.0:
+                l_day = int(corp_stock_list_t[t, i])
+                bonus_sh = np.floor(shares_held[i] * s_ratio)
+                locked_corp_shares[i] += bonus_sh
+                if l_day < T:
+                    stock_listing_schedule[l_day, i] += bonus_sh
+
         # ----------------------------------------------------------------------
-        # B. VALUATION AT OPEN & TARGET ORDER SIZING
+        # B. POINT-IN-TIME CONSTITUENT CHECK & ORDER SIZING
         # ----------------------------------------------------------------------
         holdings_val_open = 0.0
+        locked_corp_val_open = 0.0
         for i in range(N):
             holdings_val_open += shares_held[i] * raw_open[t, i]
+            locked_corp_val_open += locked_corp_shares[i] * raw_open[t, i]
             
-        port_val_open = cash_avail + pending_cash_t1 + pending_cash_t0 + holdings_val_open
+            # Liquidation grace check: stock excluded from PIT universe
+            if not in_pit_universe[t, i]:
+                if shares_held[i] > 0.0:
+                    target_weights[t, i] = 0.0
+                    liquidation_grace_counter[i] += 1
+                else:
+                    liquidation_grace_counter[i] = 0
+            else:
+                liquidation_grace_counter[i] = 0
+            
+        port_val_open = (
+            cash_avail + pending_cash_t1 + pending_cash_t0
+            + cum_div_receivable + holdings_val_open + locked_corp_val_open
+        )
         
         delta_shares = np.zeros(N, dtype=np.float64)
         for i in range(N):
-            target_val = target_weights[t, i] * port_val_open
-            # Round target shares down to round lot 100
-            price_i = raw_open[t, i]
-            if price_i > 0:
-                target_sh = np.floor(target_val / (price_i * 100.0)) * 100.0
-            else:
+            if not in_pit_universe[t, i] and shares_held[i] > 0.0:
+                # Forcibly exit excluded stock
                 target_sh = 0.0
+            else:
+                target_val = target_weights[t, i] * port_val_open
+                price_i = raw_open[t, i]
+                if price_i > 0:
+                    target_sh = np.floor(target_val / (price_i * 100.0)) * 100.0
+                else:
+                    target_sh = 0.0
             delta_shares[i] = target_sh - shares_held[i]
             
+        daily_turnover_traded = 0.0
+
         # ----------------------------------------------------------------------
-        # C. EXECUTE SELLS FIRST (Frees cash for buys)
+        # C1. EXECUTE FLOOR-TRAPPED SELLS QUEUE FIRST (Priority Exit)
         # ----------------------------------------------------------------------
         for i in range(N):
-            if delta_shares[i] < -50.0:
+            if trapped_sell_shares[i] > 0.0:
                 p_open = raw_open[t, i]
                 flr_p = floor[t, i]
                 
-                # Liquidity Trap: Floor trapped (White on buy side, cannot sell)
+                # Check if still trapped at floor limit
                 if p_open <= flr_p + 1e-4:
-                    continue  # Order rejected, shares remain locked
-                    
+                    trapped_days[i] += 1
+                else:
+                    # Liquidity returned! Execute with adverse penalty slippage (-7%/day trapped)
+                    q_trap = trapped_sell_shares[i]
+                    penalty_rate = min(0.40, 0.07 * float(trapped_days[i]))
+                    vol_i = daily_vol[t, i]
+                    adv_i = adv20_shares[t, i]
+                    dyn_slip = _calc_dynamic_slippage(q_trap, adv_i, vol_i, base_slippage=slippage)
+                    exec_price = p_open * (1.0 - dyn_slip - penalty_rate)
+                    gross_val = q_trap * exec_price
+                    b_fee = gross_val * broker_fee
+                    s_tax = gross_val * sell_tax
+                    cum_broker_fees += b_fee
+                    cum_sell_tax += s_tax
+                    net_proceeds = gross_val - b_fee - s_tax
+                    pending_cash_t0 += net_proceeds
+                    shares_held[i] -= q_trap
+                    daily_turnover_traded += q_trap * p_open
+                    trapped_sell_shares[i] = 0.0
+                    trapped_days[i] = 0
+
+        # ----------------------------------------------------------------------
+        # C2. EXECUTE NORMAL & GRACE LIQUIDATION SELLS (Frees cash for buys)
+        # ----------------------------------------------------------------------
+        for i in range(N):
+            # Liquidation grace check: if stock excluded for >= 5 sessions, liquidate all sellable
+            if liquidation_grace_counter[i] >= 5 and shares_sellable[i] > 0.0:
+                desired_sell = shares_sellable[i]
+            elif delta_shares[i] < -50.0:
                 desired_sell = -delta_shares[i]
-                # T+2.5 Constraint: Can only sell unlocked shares
-                qty_sell = min(desired_sell, shares_sellable[i])
+            else:
+                desired_sell = 0.0
+                
+            if desired_sell > 0.0:
+                p_open = raw_open[t, i]
+                flr_p = floor[t, i]
+                
+                avail_sell = max(0.0, shares_sellable[i] - trapped_sell_shares[i])
+                qty_sell = min(desired_sell, avail_sell)
                 qty_sell = np.floor(qty_sell / 100.0) * 100.0
                 
-                # ADV participation limit
-                adv_limit = np.floor((adv20_shares[t, i] * max_adv_participation) / 100.0) * 100.0
+                # Expand participation limit to 10% ADV if grace period reached to ensure complete exit
+                eff_max_adv = max_adv_participation if liquidation_grace_counter[i] < 5 else max(max_adv_participation, 0.10)
+                adv_limit = np.floor((adv20_shares[t, i] * eff_max_adv) / 100.0) * 100.0
                 qty_sell = min(qty_sell, adv_limit)
                 
                 if qty_sell > 0.0:
-                    shares_held[i] -= qty_sell
-                    shares_sellable[i] -= qty_sell
-                    
-                    gross_val = qty_sell * p_open
-                    # Asymmetric sell costs: broker (0.15%) + slippage (0.10%) + tax (0.10%)
-                    sell_cost_rate = broker_fee + slippage + sell_tax
-                    cost_val = gross_val * sell_cost_rate
-                    cum_trade_fees += cost_val
-                    
-                    net_proceeds = gross_val - cost_val
-                    # Sales proceeds are pending for 2 days
-                    pending_cash_t0 += net_proceeds
-                    
+                    # Check floor trap at ATO open
+                    if p_open <= flr_p + 1e-4:
+                        trapped_sell_shares[i] += qty_sell
+                        trapped_days[i] = 1
+                    else:
+                        shares_held[i] -= qty_sell
+                        shares_sellable[i] -= qty_sell
+                        
+                        vol_i = daily_vol[t, i]
+                        adv_i = adv20_shares[t, i]
+                        dyn_slip = _calc_dynamic_slippage(qty_sell, adv_i, vol_i, base_slippage=slippage)
+                        exec_price = p_open * (1.0 - dyn_slip)
+                        gross_val = qty_sell * exec_price
+                        b_fee = gross_val * broker_fee
+                        s_tax = gross_val * sell_tax
+                        cum_broker_fees += b_fee
+                        cum_sell_tax += s_tax
+                        
+                        net_proceeds = gross_val - b_fee - s_tax
+                        pending_cash_t0 += net_proceeds
+                        daily_turnover_traded += qty_sell * p_open
+
         # ----------------------------------------------------------------------
         # D. EXECUTE BUYS SECOND
         # ----------------------------------------------------------------------
         for i in range(N):
+            # Only allow opening buys for valid in-universe constituents
+            if not in_pit_universe[t, i]:
+                continue
+                
             if delta_shares[i] > 50.0:
                 p_open = raw_open[t, i]
                 ceil_p = ceiling[t, i]
                 
-                # Liquidity Trap: Ceiling locked (White on sell side, cannot buy)
+                # Check ceiling lock at ATO open
                 if p_open >= ceil_p - 1e-4:
-                    continue  # Order rejected, cannot purchase
+                    continue  # Ceiling locked, cannot purchase
                     
                 desired_buy = delta_shares[i]
-                # ADV participation limit
                 adv_limit = np.floor((adv20_shares[t, i] * max_adv_participation) / 100.0) * 100.0
                 qty_buy = min(desired_buy, adv_limit)
                 qty_buy = np.floor(qty_buy / 100.0) * 100.0
@@ -290,46 +498,60 @@ def _simulate_vn_microstructure_core(
                 if qty_buy <= 0.0:
                     continue
                     
-                cost_per_share = p_open * (1.0 + broker_fee + slippage)
+                vol_i = daily_vol[t, i]
+                adv_i = adv20_shares[t, i]
+                dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
+                exec_price = p_open * (1.0 + dyn_slip)
+                cost_per_share = exec_price * (1.0 + broker_fee)
                 total_needed = qty_buy * cost_per_share
+                
+                days_t1 = calendar_days_t1[t]
+                days_t0 = calendar_days_t2[t]
                 
                 if total_needed <= cash_avail:
                     cash_avail -= total_needed
-                    cum_trade_fees += qty_buy * p_open * (broker_fee + slippage)
+                    b_fee = qty_buy * exec_price * broker_fee
+                    cum_broker_fees += b_fee
+                    daily_turnover_traded += qty_buy * p_open
                 else:
-                    # Shortfall: requires Advance Cash from pending sales proceeds
                     shortfall = total_needed - cash_avail
-                    cap_t1 = pending_cash_t1 / (1.0 + advance_fee_rate * 1.0)
-                    cap_t0 = pending_cash_t0 / (1.0 + advance_fee_rate * 2.0)
+                    cap_t1 = _calc_borrow_cap(pending_cash_t1, advance_fee_rate, days_t1, min_advance_fee)
+                    cap_t0 = _calc_borrow_cap(pending_cash_t0, advance_fee_rate, days_t0, min_advance_fee)
                     total_adv_capacity = cap_t1 + cap_t0
                     
                     if total_adv_capacity >= shortfall:
-                        # Full order can be funded via advance cash
-                        cum_trade_fees += qty_buy * p_open * (broker_fee + slippage)
                         cash_avail = 0.0
+                        b_fee = qty_buy * exec_price * broker_fee
+                        cum_broker_fees += b_fee
+                        daily_turnover_traded += qty_buy * p_open
                         
-                        # Consume pending_cash_t1 first (settles in 1 day)
                         take_t1 = min(shortfall, cap_t1)
-                        adv_cost_t1 = take_t1 * advance_fee_rate * 1.0
+                        adv_cost_t1 = max(min_advance_fee, take_t1 * advance_fee_rate * days_t1)
                         pending_cash_t1 -= (take_t1 + adv_cost_t1)
                         cum_adv_fees += adv_cost_t1
                         
                         rem = shortfall - take_t1
                         if rem > 0.0:
                             take_t0 = rem
-                            adv_cost_t0 = take_t0 * advance_fee_rate * 2.0
+                            adv_cost_t0 = max(min_advance_fee, take_t0 * advance_fee_rate * days_t0)
                             pending_cash_t0 -= (take_t0 + adv_cost_t0)
                             cum_adv_fees += adv_cost_t0
                     else:
-                        # Budget constrained: scale down buy order to exact purchasing power
                         max_budget = cash_avail + total_adv_capacity
                         scaled_qty = np.floor(max_budget / (cost_per_share * 100.0)) * 100.0
                         if scaled_qty <= 0.0:
                             continue
                             
                         qty_buy = scaled_qty
+                        vol_i = daily_vol[t, i]
+                        adv_i = adv20_shares[t, i]
+                        dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
+                        exec_price = p_open * (1.0 + dyn_slip)
+                        cost_per_share = exec_price * (1.0 + broker_fee)
                         actual_needed = qty_buy * cost_per_share
-                        cum_trade_fees += qty_buy * p_open * (broker_fee + slippage)
+                        b_fee = qty_buy * exec_price * broker_fee
+                        cum_broker_fees += b_fee
+                        daily_turnover_traded += qty_buy * p_open
                         
                         if actual_needed <= cash_avail:
                             cash_avail -= actual_needed
@@ -338,14 +560,14 @@ def _simulate_vn_microstructure_core(
                             cash_avail = 0.0
                             
                             take_t1 = min(shortfall, cap_t1)
-                            adv_cost_t1 = take_t1 * advance_fee_rate * 1.0
+                            adv_cost_t1 = max(min_advance_fee, take_t1 * advance_fee_rate * days_t1)
                             pending_cash_t1 -= (take_t1 + adv_cost_t1)
                             cum_adv_fees += adv_cost_t1
                             
                             rem = shortfall - take_t1
                             if rem > 0.0:
                                 take_t0 = rem
-                                adv_cost_t0 = take_t0 * advance_fee_rate * 2.0
+                                adv_cost_t0 = max(min_advance_fee, take_t0 * advance_fee_rate * days_t0)
                                 pending_cash_t0 -= (take_t0 + adv_cost_t0)
                                 cum_adv_fees += adv_cost_t0
                                 
@@ -356,15 +578,39 @@ def _simulate_vn_microstructure_core(
         # E. END-OF-DAY VALUATION AT CLOSE
         # ----------------------------------------------------------------------
         holdings_val_close = 0.0
+        locked_corp_val_close = 0.0
         for i in range(N):
             holdings_val_close += shares_held[i] * raw_close[t, i]
+            locked_corp_val_close += locked_corp_shares[i] * raw_close[t, i]
             
-        equity[t] = cash_avail + pending_cash_t1 + pending_cash_t0 + holdings_val_close
+        equity[t] = (
+            cash_avail + pending_cash_t1 + pending_cash_t0
+            + cum_div_receivable + holdings_val_close + locked_corp_val_close
+        )
         cash_history[t] = cash_avail
-        realized_fees[t] = cum_trade_fees
+        realized_fees[t] = cum_broker_fees + cum_sell_tax
         advance_fees[t] = cum_adv_fees
+        broker_fees_hist[t] = cum_broker_fees
+        sell_tax_hist[t] = cum_sell_tax
+        div_receivable_hist[t] = cum_div_receivable
+        locked_corp_hist[t] = locked_corp_val_close
         
-    return equity, cash_history, realized_fees, advance_fees
+        if port_val_open > 0.0:
+            daily_turnover_hist[t] = daily_turnover_traded / (2.0 * port_val_open)
+        else:
+            daily_turnover_hist[t] = 0.0
+            
+    return (
+        equity,
+        cash_history,
+        realized_fees,
+        advance_fees,
+        broker_fees_hist,
+        sell_tax_hist,
+        daily_turnover_hist,
+        div_receivable_hist,
+        locked_corp_hist
+    )
 
 
 # ==============================================================================
@@ -414,19 +660,123 @@ def simulate_vietnam(
     slippage: float = 0.0010,
     sell_tax: float = 0.0010,
     advance_fee_rate: float = 0.00035,
-    max_adv_participation: float = 0.05
+    max_adv_participation: float = 0.03,
+    calendar_days_t1: Optional[np.ndarray] = None,
+    calendar_days_t2: Optional[np.ndarray] = None,
+    min_advance_fee: float = 50000.0,
+    corp_action_div_cash: Optional[np.ndarray] = None,
+    corp_action_div_pay_t: Optional[np.ndarray] = None,
+    corp_action_stock_ratio: Optional[np.ndarray] = None,
+    corp_action_stock_list_t: Optional[np.ndarray] = None,
+    dates: Optional[Any] = None,
+    in_pit_universe: Optional[np.ndarray] = None,
+    daily_vol: Optional[np.ndarray] = None
 ) -> Dict[str, Any]:
     """
-    Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine.
+    Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
+    - Independent tax & fee accounting
+    - Calendar day advance loan financing (min 50k floor)
+    - Corporate actions dual ledger
+    - 3-tier market impact model with 12 bps half-spread floor
+    - Liquidation grace mask (<= 5 sessions orderly liquidation)
     """
     raw_open = np.asarray(raw_open, dtype=np.float64)
     raw_close = np.asarray(raw_close, dtype=np.float64)
     ceiling = np.asarray(ceiling, dtype=np.float64)
     floor = np.asarray(floor, dtype=np.float64)
     adv20_shares = np.asarray(adv20_shares, dtype=np.float64)
-    target_weights = np.asarray(target_weights, dtype=np.float64)
+    target_weights = np.asarray(target_weights, dtype=np.float64).copy()
+    T, N = raw_open.shape
     
-    eq, cash, fees, adv_fees = _simulate_vn_microstructure_core(
+    # 1. Setup Calendar Days
+    if calendar_days_t1 is None:
+        c_days_t1 = np.ones(T, dtype=np.float64)
+        if dates is not None and len(dates) == T:
+            for t in range(T - 1):
+                d0 = dates[t]
+                d1 = dates[t + 1]
+                if isinstance(d0, str):
+                    d0 = datetime.date.fromisoformat(d0)
+                if isinstance(d1, str):
+                    d1 = datetime.date.fromisoformat(d1)
+                c_days_t1[t] = max(1.0, float((d1 - d0).days))
+            d_last = dates[-1]
+            if isinstance(d_last, str):
+                d_last = datetime.date.fromisoformat(d_last)
+            c_days_t1[-1] = 3.0 if d_last.weekday() == 4 else 1.0
+        calendar_days_t1 = c_days_t1
+    else:
+        calendar_days_t1 = np.asarray(calendar_days_t1, dtype=np.float64)
+        
+    if calendar_days_t2 is None:
+        c_days_t2 = np.full(T, 2.0, dtype=np.float64)
+        if dates is not None and len(dates) == T:
+            for t in range(T - 2):
+                d0 = dates[t]
+                d2 = dates[t + 2]
+                if isinstance(d0, str):
+                    d0 = datetime.date.fromisoformat(d0)
+                if isinstance(d2, str):
+                    d2 = datetime.date.fromisoformat(d2)
+                c_days_t2[t] = max(2.0, float((d2 - d0).days))
+            for t in range(max(0, T - 2), T):
+                d_t = dates[t]
+                if isinstance(d_t, str):
+                    d_t = datetime.date.fromisoformat(d_t)
+                c_days_t2[t] = 4.0 if d_t.weekday() in (3, 4) else 2.0
+        calendar_days_t2 = c_days_t2
+    else:
+        calendar_days_t2 = np.asarray(calendar_days_t2, dtype=np.float64)
+        
+    # 2. Setup Corporate Actions matrices
+    if corp_action_div_cash is None:
+        corp_div_ex = np.zeros((T, N), dtype=np.float64)
+    else:
+        corp_div_ex = np.asarray(corp_action_div_cash, dtype=np.float64)
+        
+    if corp_action_div_pay_t is None:
+        corp_div_pay_t = np.zeros((T, N), dtype=np.float64)
+    else:
+        corp_div_pay_t = np.asarray(corp_action_div_pay_t, dtype=np.float64)
+        
+    if corp_action_stock_ratio is None:
+        corp_stock_ratio = np.zeros((T, N), dtype=np.float64)
+    else:
+        corp_stock_ratio = np.asarray(corp_action_stock_ratio, dtype=np.float64)
+        
+    if corp_action_stock_list_t is None:
+        corp_stock_list_t = np.zeros((T, N), dtype=np.float64)
+    else:
+        corp_stock_list_t = np.asarray(corp_action_stock_list_t, dtype=np.float64)
+        
+    # 3. Setup PIT Universe Mask and Daily Volatility
+    if in_pit_universe is None:
+        in_pit_universe_arr = np.ones((T, N), dtype=np.bool_)
+    else:
+        in_pit_universe_arr = np.asarray(in_pit_universe, dtype=np.bool_)
+        
+    if daily_vol is None:
+        ret = np.zeros((T, N), dtype=np.float64)
+        ret[1:] = (raw_close[1:] - raw_close[:-1]) / np.maximum(raw_close[:-1], 1.0)
+        daily_vol_arr = np.zeros((T, N), dtype=np.float64)
+        win = min(20, max(1, T))
+        for j in range(N):
+            daily_vol_arr[:, j] = bn.move_std(ret[:, j], window=win, min_count=1)
+        daily_vol_arr[np.isnan(daily_vol_arr) | (daily_vol_arr <= 1e-4)] = 0.015
+    else:
+        daily_vol_arr = np.asarray(daily_vol, dtype=np.float64)
+        
+    (
+        eq,
+        cash,
+        fees,
+        adv_fees,
+        b_fees,
+        s_tax,
+        to_hist,
+        div_rec,
+        corp_val
+    ) = _simulate_vn_microstructure_core(
         raw_open=raw_open,
         raw_close=raw_close,
         ceiling=ceiling,
@@ -438,14 +788,29 @@ def simulate_vietnam(
         slippage=slippage,
         sell_tax=sell_tax,
         advance_fee_rate=advance_fee_rate,
-        max_adv_participation=max_adv_participation
+        max_adv_participation=max_adv_participation,
+        calendar_days_t1=calendar_days_t1,
+        calendar_days_t2=calendar_days_t2,
+        min_advance_fee=min_advance_fee,
+        corp_div_ex=corp_div_ex,
+        corp_div_pay_t=corp_div_pay_t,
+        corp_stock_ratio=corp_stock_ratio,
+        corp_stock_list_t=corp_stock_list_t,
+        in_pit_universe=in_pit_universe_arr,
+        daily_vol=daily_vol_arr
     )
     
     return {
         "equity": eq,
         "cash_history": cash,
         "trading_fees": fees,
+        "broker_fees": b_fees,
+        "sell_tax": s_tax,
         "advance_interest_fees": adv_fees,
+        "realized_daily_turnover": to_hist,
+        "mean_daily_turnover": float(np.mean(to_hist)),
+        "dividend_cash_receivable": div_rec,
+        "locked_corp_action_shares_val": corp_val,
         "total_friction": fees[-1] + adv_fees[-1]
     }
 
@@ -498,6 +863,118 @@ def calculate_vn30f_hedge(
     }
 
 
+def calculate_dynamic_vn30f_hedge(
+    portfolio_value: float,
+    beta_cw: float,
+    futures_price: float,
+    lambda_contagion: float,
+    vn30_close_history: Optional[np.ndarray] = None,
+    prev_h: float = 0.0,
+    deadband: float = 0.20,
+    multiplier: float = 100000.0,
+    deriv_cash_buffer_pct: float = 0.18,
+    margin_req: float = 0.20,
+    total_margin_buffer: float = 0.30
+) -> Dict[str, Any]:
+    """
+    Dynamic Contagion Regime Hedge Overlay with VN30F1M Futures (Phase 4 / Section 4.1 Q2):
+    - Replaces static 15-contract short hedge with regime-aware logistic switching.
+    - Market regime M in {0, 1, 2}:
+        M = I(P_VN30 < SMA_50) + I(vol_10d > 1.35 * vol_60d)
+    - Logistic switching target hedge ratio h*(t):
+        * Uptrend (M=0): theta_low=0.55, theta_mid=0.70, k=12 (Hedge OFF, 0 roll cost)
+        * Shock (M>=1): theta_low=0.25, theta_mid=0.45, k=15 (Activates early downside hedge)
+    - Whipsaw Deadband Filter (delta_h = 0.20):
+        Updates only if |h*(t) - h(t-1)| >= 0.20, or lambda_tilde >= 0.80, or (h* == 0 and h(t-1) <= 0.25)
+    - Sizing: N_contracts bounded by 18% NAV derivative cash buffer.
+    """
+    contract_val = futures_price * multiplier
+    if contract_val <= 0 or portfolio_value <= 0:
+        return {
+            "contracts_to_short": 0,
+            "h_target": 0.0,
+            "h_actual": 0.0,
+            "market_regime_M": 0,
+            "margin_required": 0.0,
+            "residual_beta": beta_cw
+        }
+        
+    # 1. Determine Market Regime M in {0, 1, 2}
+    M = 0
+    if vn30_close_history is not None and len(vn30_close_history) >= 50:
+        p_hist = np.asarray(vn30_close_history, dtype=np.float64)
+        p_last = p_hist[-1]
+        sma50 = float(np.mean(p_hist[-50:]))
+        cond1 = p_last < sma50
+        
+        cond2 = False
+        if len(p_hist) >= 61:
+            rets = np.diff(np.log(np.maximum(p_hist[-61:], 1.0)))
+            vol10 = float(np.std(rets[-10:]))
+            vol60 = float(np.std(rets))
+            cond2 = vol10 > 1.35 * vol60
+            
+        M = int(cond1) + int(cond2)
+        
+    # 2. Logistic Regime Parameters
+    lambda_val = float(np.clip(lambda_contagion, 0.0, 1.0))
+    if M == 0:
+        theta_low = 0.55
+        theta_mid = 0.70
+        k = 12.0
+    else:
+        theta_low = 0.25
+        theta_mid = 0.45
+        k = 15.0
+        
+    # 3. Theoretical Target Hedge Ratio h*(t)
+    if lambda_val < theta_low:
+        h_star = 0.0
+    else:
+        h_star = 1.0 / (1.0 + np.exp(-k * (lambda_val - theta_mid)))
+        
+    # 4. Whipsaw Deadband Filter (delta_h = 0.20)
+    deadband_triggered = False
+    if abs(h_star - prev_h) >= deadband:
+        h_actual = h_star
+        deadband_triggered = True
+    elif lambda_val >= 0.80:
+        h_actual = h_star
+        deadband_triggered = True
+    elif h_star == 0.0 and prev_h <= 0.25:
+        h_actual = 0.0
+        deadband_triggered = True
+    else:
+        h_actual = prev_h
+        
+    # 5. Contract Sizing with Strict Margin Buffer Cap
+    hedge_notional = h_actual * beta_cw * portfolio_value
+    num_contracts = int(np.floor(hedge_notional / contract_val + 0.5))
+    
+    max_deriv_cash = portfolio_value * deriv_cash_buffer_pct
+    max_contracts = int(np.floor(max_deriv_cash / (total_margin_buffer * contract_val)))
+    num_contracts = max(0, min(num_contracts, max_contracts))
+    
+    margin_required = num_contracts * contract_val * margin_req
+    actual_notional = num_contracts * contract_val
+    residual_beta = beta_cw - (actual_notional / portfolio_value) if portfolio_value > 0 else 0.0
+    
+    return {
+        "contracts_to_short": num_contracts,
+        "max_contracts_allowed": max_contracts,
+        "h_target": float(h_star),
+        "h_actual": float(h_actual),
+        "market_regime_M": M,
+        "lambda_contagion": lambda_val,
+        "deadband_triggered": deadband_triggered,
+        "contract_value_vnd": contract_val,
+        "margin_required_vnd": margin_required,
+        "total_hedge_notional_vnd": actual_notional,
+        "original_beta": beta_cw,
+        "residual_beta": float(residual_beta)
+    }
+
+
 # ==============================================================================
 # 6. STRATEGY EVALUATION & RISK MANAGEMENT (KILL-SWITCH)
 # ==============================================================================
@@ -508,7 +985,12 @@ def evaluate_strategy(
     naive_equity_curve: Optional[np.ndarray] = None,
     benchmark_equity_curve: Optional[np.ndarray] = None,
     risk_free_rate: float = 0.04,
-    n_trials: int = 26
+    n_trials: int = 26,
+    initial_capital: Optional[float] = 1.0e9,
+    realized_daily_turnover: Optional[np.ndarray] = None,
+    trial_returns: Optional[np.ndarray] = None,
+    mean_trial_correlation: Optional[float] = None,
+    var_sharpe_trials: Optional[float] = None
 ) -> Dict[str, Any]:
     """
     Computes institutional quant metrics based on 252 trading sessions/year:
@@ -516,7 +998,7 @@ def evaluate_strategy(
     - Sharpe Ratio (post fee & tax), Sortino Ratio
     - Deflated Sharpe Ratio (DSR, Bailey & Lopez de Prado 2014) for multiple testing
     - Maximum Drawdown (MaxDD)
-    - Daily Turnover (%/day)
+    - Realized Daily Turnover (%/day) from actual trade ledger
     - Implementation Shortfall decomposition
     - Market Beta & Alpha relative to benchmark
     - Automated Kill-Switch monitor (Triggers if MaxDD > 25% or Shortfall > 30%)
@@ -529,7 +1011,7 @@ def evaluate_strategy(
         
     daily_returns = (eq[1:] - eq[:-1]) / np.maximum(eq[:-1], 1e-6)
     
-    initial_eq = float(eq[0])
+    initial_eq = float(initial_capital) if initial_capital is not None else float(eq[0])
     final_eq = float(eq[-1])
     total_return = (final_eq / initial_eq) - 1.0
     
@@ -554,7 +1036,10 @@ def evaluate_strategy(
         daily_returns,
         n_trials=n_trials,
         risk_free_rate=risk_free_rate,
-        annualization_factor=252.0
+        annualization_factor=252.0,
+        trial_returns=trial_returns,
+        mean_trial_correlation=mean_trial_correlation,
+        var_sharpe_trials=var_sharpe_trials
     )
     
     # Maximum Drawdown
@@ -562,15 +1047,20 @@ def evaluate_strategy(
     drawdowns = (cummax - eq) / cummax
     max_dd = float(np.max(drawdowns))
     
-    # Daily Turnover
-    w = np.asarray(daily_weights, dtype=np.float64)
-    turnovers = 0.5 * np.sum(np.abs(w[1:] - w[:-1]), axis=1)
-    daily_turnover = float(np.mean(turnovers))
+    # Daily Turnover (Realized ledger turnover preferred over theoretical weights difference)
+    if realized_daily_turnover is not None:
+        realized_arr = np.asarray(realized_daily_turnover, dtype=np.float64)
+        daily_turnover = float(np.mean(realized_arr))
+    else:
+        w = np.asarray(daily_weights, dtype=np.float64)
+        turnovers = 0.5 * np.sum(np.abs(w[1:] - w[:-1]), axis=1)
+        daily_turnover = float(np.mean(turnovers))
     
     # Implementation Shortfall
     if naive_equity_curve is not None:
         naive_eq = np.asarray(naive_equity_curve, dtype=np.float64)
-        naive_cagr = (naive_eq[-1] / naive_eq[0]) ** (1.0 / years) - 1.0
+        naive_init = float(initial_capital) if initial_capital is not None else float(naive_eq[0])
+        naive_cagr = (naive_eq[-1] / naive_init) ** (1.0 / years) - 1.0
         shortfall_pct = naive_cagr - cagr
         shortfall_ratio = (shortfall_pct / naive_cagr) if abs(naive_cagr) > 1e-12 else 0.0
     else:
@@ -614,6 +1104,7 @@ def evaluate_strategy(
         "dsr_p_value": dsr_dict["p_value"],
         "expected_max_sharpe_null": dsr_dict["expected_max_sharpe"],
         "n_trials_evaluated": n_trials,
+        "n_eff": dsr_dict.get("n_eff", float(n_trials)),
         "max_drawdown": max_dd,
         "daily_turnover": daily_turnover,
         "naive_cagr": naive_cagr,

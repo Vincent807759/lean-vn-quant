@@ -1,14 +1,26 @@
 # ==============================================================================
-# PROPRIETARY RESEARCH, TRACKERS & PRIVATE SUBSYSTEMS
+# PROPRIETARY RESEARCH, PRIVATE ALPHAS & LOCAL DOCS
 # ==============================================================================
 research/
 refs/
+private_alphas/
+local_docs/
+AGENTS.md
+GEMINI.md
 *.ipynb_checkpoints/
 
 .env
 *.env
 .env.*
 !.env.example
+
+# ==============================================================================
+# PROPRIETARY DATA, HISTORICAL CACHES & PAPER TRADING STATE
+# ==============================================================================
+*.parquet
+*.csv
+data/
+fingraph/data/
 
 # ==============================================================================
 # PYTHON BYTECODE & CACHE

@@ -38,6 +38,12 @@ dependencies = [
     "duckdb>=0.9.0",
     "requests>=2.31.0",
     "quantstats>=0.0.62",
+    "scikit-learn>=1.3.0",
+    "networkx>=3.0",
+    "feedparser>=6.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "pydantic>=2.0.0",
 ]
 
 [project.urls]
@@ -46,4 +52,4 @@ Repository = "https://github.com/Vincent807759/lean-vn-quant"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["engine*", "services*"]
+include = ["engine*", "services*", "fingraph*"]

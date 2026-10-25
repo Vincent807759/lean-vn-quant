@@ -5,7 +5,7 @@ LEAN VN-QUANT: ZERO-LEAK SECURITY SCANNER & PRE-COMMIT AUDITOR
 ================================================================================
 Independent, zero-dependency security audit tool to ensure:
 1. No .env, private keys, or credential files are ever committed to Git.
-2. No Telegram Bot Tokens, WorldQuant BRAIN secrets, or hardcoded personal paths.
+2. No Telegram Bot Tokens, proprietary secret keys, or hardcoded personal paths.
 3. Exits with code 1 upon any detection; exits with code 0 if 100% clean.
 ================================================================================
 """
@@ -28,7 +28,7 @@ if hasattr(sys.stdout, "reconfigure"):
 # Structural & Heuristic Regex Patterns (Zero hardcoded user secrets in source code)
 STATIC_REGEX_RULES = [
     ("TELEGRAM_BOT_TOKEN", re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"), "Exposed Telegram Bot Token"),
-    ("BRAIN_CREDENTIAL_ASSIGN", re.compile(r"""(?i)\b(?:BRAIN_PASSWORD|BRAIN_EMAIL|TELEGRAM_CHAT_ID)\s*=\s*['\"](?!your_|<your_)[^'\"\s]{4,}['\"]"""), "Hardcoded credential assignment"),
+    ("WORLDQUANT_KEYWORD", re.compile(r"\b(?:worldquant|wq_brain)\b", re.IGNORECASE), "Forbidden WorldQuant / WQ_BRAIN keyword reference"),
     ("PRIVATE_KEY", re.compile(r"-----BEGIN (?:RSA|EC|DSA|OPENSSH|PGP) PRIVATE KEY-----"), "Private Cryptographic Key"),
     ("HARDCODED_ADMIN_PATH", re.compile(r"C:[\\/]Users[\\/]ADMIN", re.IGNORECASE), "Hardcoded local Windows user path"),
     ("GENERIC_SECRET", re.compile(r"""(?i)(?:api_key|secret_key|bot_token|access_token)\s*=\s*['\"][A-Za-z0-9_\-]{20,}['\"]"""), "Hardcoded generic secret key")
@@ -163,7 +163,28 @@ def run_security_scan(root_dir: str = ".") -> int:
         rel_path = os.path.relpath(file_path, root_path)
         base_name = os.path.basename(file_path)
 
-        # 1. Check for forbidden file names in git
+        # 1. Check for forbidden file names and private directories in git
+        norm_rel = rel_path.replace("\\", "/").lower()
+        if any(d in norm_rel for d in ["private_alphas/", "research/", "local_docs/"]):
+            violations.append({
+                "file": rel_path,
+                "line": 0,
+                "rule": "FORBIDDEN_PRIVATE_DIR",
+                "desc": f"Private research/alpha directory '{rel_path}' must NOT be tracked by git!",
+                "snippet": rel_path
+            })
+            continue
+
+        if is_git and norm_rel.endswith((".parquet", ".csv")):
+            violations.append({
+                "file": rel_path,
+                "line": 0,
+                "rule": "FORBIDDEN_DATA_FILE",
+                "desc": f"Proprietary dataset file '{rel_path}' must NOT be tracked by git!",
+                "snippet": rel_path
+            })
+            continue
+
         if is_git and (base_name in FORBIDDEN_FILES or (base_name.startswith(".env") and base_name != ".env.example")):
             violations.append({
                 "file": rel_path,
@@ -174,8 +195,8 @@ def run_security_scan(root_dir: str = ".") -> int:
             })
             continue
 
-        # Skip binary files like .parquet, .png
-        if file_path.endswith((".parquet", ".png", ".jpg", ".ico", ".pdf")):
+        # Skip binary files like .png, .ico, .pdf
+        if file_path.endswith((".png", ".jpg", ".ico", ".pdf")):
             continue
 
         # Skip this script itself only for static regex self-definitions

@@ -374,7 +374,7 @@ def generate_html_content(data: Dict[str, Any]) -> str:
     <div class="header">
         <div>
             <h1><span>LEAN VN-QUANT</span> | Production Paper Trading Dashboard</h1>
-            <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">WorldQuant BRAIN Mathematical Standard & Realistic Vietnam T+2.5 Microstructure Engine</p>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Institutional Mathematical Standard & Realistic Vietnam T+2.5 Microstructure Engine</p>
         </div>
         <div class="live-badge">
             <span class="live-dot"></span>

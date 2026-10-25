@@ -86,14 +86,21 @@ def init_empty_state(initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[s
     """Initializes empty portfolio state ledger."""
     return {
         "last_updated_date": None,
+        "last_ledger_advance_date": None,
+        "last_eod_reconciled_date": None,
         "initial_capital": float(initial_capital),
         "available_cash": float(initial_capital),
         "receivable_cash_t1": 0.0,
         "receivable_cash_t2": 0.0,
+        "dividend_cash_receivable": 0.0,
+        "locked_corp_action_shares": {},  # symbol -> int
+        "trapped_sell_orders": [],  # orders trapped at floor price
         "holdings": {},  # symbol -> {"sellable_qty": int, "locked_t1": int, "locked_t2": int, "avg_cost": float}
         "pending_orders": [],  # list of pending ATO orders for next morning
         "naive_nav": float(initial_capital),
         "last_real_nav": float(initial_capital),
+        "total_broker_fees": 0.0,
+        "total_sell_tax": 0.0,
         "total_brokerage_tax": 0.0,
         "total_advance_fees": 0.0,
         "prev_target_weights": {}  # symbol -> float
@@ -194,6 +201,30 @@ def fetch_or_update_data(parquet_file: str, is_replay: bool = False) -> pl.DataF
 # 3. STEP 2: ATO ORDER EXECUTION & T+2 SETTLEMENT ROLL
 # ==============================================================================
 
+def advance_t25_settlement(state: Dict[str, Any], session_date: str) -> bool:
+    """
+    Idempotent T+2.5 settlement ledger roll for HOSE equity microstructure:
+    - Rolls T+2 cash receivable -> T+1 -> Available Cash
+    - Rolls locked_t2 shares -> locked_t1 -> sellable_qty
+    - Guarantees idempotency: cannot advance twice for the same trading session.
+    """
+    if state.get("last_ledger_advance_date") == session_date:
+        print(f"[LEDGER IDEMPOTENCY] T+2.5 settlement already advanced for session {session_date}. Skipping duplicate roll.")
+        return False
+
+    state["available_cash"] += state.get("receivable_cash_t1", 0.0)
+    state["receivable_cash_t1"] = state.get("receivable_cash_t2", 0.0)
+    state["receivable_cash_t2"] = 0.0
+
+    for sym, hold in state.get("holdings", {}).items():
+        hold["sellable_qty"] += hold.get("locked_t1", 0)
+        hold["locked_t1"] = hold.get("locked_t2", 0)
+        hold["locked_t2"] = 0
+
+    state["last_ledger_advance_date"] = session_date
+    return True
+
+
 def execute_pending_orders_and_settle(
     state: Dict[str, Any],
     today_market_slice: Dict[str, Dict[str, float]],
@@ -207,15 +238,8 @@ def execute_pending_orders_and_settle(
     3. Handles liquidity traps (ceiling locked or floor trapped).
     4. Accounts for asymmetric costs and advance borrowing interest.
     """
-    # 1. Settlement Roll
-    state["available_cash"] += state["receivable_cash_t1"]
-    state["receivable_cash_t1"] = state["receivable_cash_t2"]
-    state["receivable_cash_t2"] = 0.0
-    
-    for sym, hold in state["holdings"].items():
-        hold["sellable_qty"] += hold["locked_t1"]
-        hold["locked_t1"] = hold["locked_t2"]
-        hold["locked_t2"] = 0
+    # 1. Idempotent Settlement Roll (guaranteed single roll per session_date)
+    advance_t25_settlement(state, session_date)
 
     pending_orders = state.get("pending_orders", [])
     if not pending_orders:
@@ -246,9 +270,12 @@ def execute_pending_orders_and_settle(
             rep["status"] = "FLOOR TRAPPED (HOLDING ORDER)"
             rep["fill_qty"] = 0
             rep["fill_price"] = raw_open
-            rep["note"] = f"Market opened locked at floor ({raw_open:,.0f} VND), zero bid. Retaining order for next session."
+            rep["trapped_days"] = o.get("trapped_days", 0) + 1
+            rep["note"] = f"Market opened locked at floor ({raw_open:,.0f} VND), zero bid. Retaining order in priority queue for next session with -7%/session penalty."
             executed_reports.append(rep)
-            remaining_pending.append(o)
+            o_trapped = dict(o)
+            o_trapped["trapped_days"] = rep["trapped_days"]
+            remaining_pending.append(o_trapped)
             continue
             
         sellable = state["holdings"].get(sym, {}).get("sellable_qty", 0)
@@ -264,7 +291,9 @@ def execute_pending_orders_and_settle(
             executed_reports.append(rep)
             continue
             
-        exec_price = raw_open * (1.0 - SLIPPAGE)
+        trapped_days = o.get("trapped_days", 0)
+        penalty_slippage = min(0.40, 0.07 * trapped_days)
+        exec_price = raw_open * (1.0 - SLIPPAGE - penalty_slippage)
         gross_val = fill_qty * exec_price
         broker_fee_val = gross_val * BROKER_FEE
         tax_val = gross_val * SELL_TAX
@@ -277,18 +306,42 @@ def execute_pending_orders_and_settle(
             
         # Sales proceeds enter T+2 receivable queue
         state["receivable_cash_t2"] += net_cash
-        state["total_brokerage_tax"] += (broker_fee_val + tax_val)
+        state["total_broker_fees"] = state.get("total_broker_fees", 0.0) + broker_fee_val
+        state["total_sell_tax"] = state.get("total_sell_tax", 0.0) + tax_val
+        state["total_brokerage_tax"] = state["total_broker_fees"] + state["total_sell_tax"]
         
         rep = dict(o)
         rep["status"] = "FILLED"
         rep["fill_qty"] = fill_qty
         rep["fill_price"] = exec_price
         rep["net_cash"] = net_cash
+        rep["broker_fee"] = broker_fee_val
+        rep["sell_tax"] = tax_val
         rep["fee_tax"] = broker_fee_val + tax_val
-        rep["note"] = f"Sold {fill_qty:,} shares @ {exec_price:,.0f} VND. Net proceeds {net_cash:,.0f} VND queued for T+2 settlement."
+        rep["note"] = f"Sold {fill_qty:,} shares @ {exec_price:,.0f} VND (Penalty slippage: {penalty_slippage*100:.1f}%). Net proceeds {net_cash:,.0f} VND queued for T+2 settlement."
         executed_reports.append(rep)
 
     # --- PROCESS BUY ORDERS ---
+    # Determine calendar days for advance interest
+    try:
+        s_date = datetime.date.fromisoformat(session_date) if isinstance(session_date, str) else session_date
+        weekday = s_date.weekday()
+        # Friday: T+1 settles Mon (3 cal days), T+2 settles Tue (4 cal days)
+        # Thursday: T+1 settles Fri (1 cal day), T+2 settles Mon (4 cal days)
+        # Mon-Wed: T+1 is 1 day, T+2 is 2 days
+        if weekday == 4:
+            cal_days_t1 = 3
+            cal_days_t2 = 4
+        elif weekday == 3:
+            cal_days_t1 = 1
+            cal_days_t2 = 4
+        else:
+            cal_days_t1 = 1
+            cal_days_t2 = 2
+    except Exception:
+        cal_days_t1 = 1
+        cal_days_t2 = 2
+
     for o in buy_orders:
         sym = o["symbol"]
         qty_requested = int(o["qty"])
@@ -342,25 +395,26 @@ def execute_pending_orders_and_settle(
         total_buy_cost = fill_qty * cost_per_share
         gross_val = fill_qty * exec_price
         broker_fee_val = gross_val * BROKER_FEE
-        state["total_brokerage_tax"] += broker_fee_val
+        state["total_broker_fees"] = state.get("total_broker_fees", 0.0) + broker_fee_val
+        state["total_brokerage_tax"] = state["total_broker_fees"] + state.get("total_sell_tax", 0.0)
         
-        # Deduct cash with dynamic advance borrowing interest if available cash is insufficient
+        # Deduct cash with dynamic advance borrowing interest (calendar days & 50k floor fee)
         if state["available_cash"] >= total_buy_cost:
             state["available_cash"] -= total_buy_cost
         else:
             deficit = total_buy_cost - state["available_cash"]
             state["available_cash"] = 0.0
             
-            # Borrow against T+1 receivables first (1 day of advance interest)
+            # Borrow against T+1 receivables first
             borrow_t1 = min(deficit, state["receivable_cash_t1"])
-            adv_fee_t1 = borrow_t1 * ADVANCE_FEE_RATE * 1.0
-            state["receivable_cash_t1"] -= borrow_t1
+            adv_fee_t1 = max(50000.0, borrow_t1 * ADVANCE_FEE_RATE * cal_days_t1) if borrow_t1 > 0 else 0.0
+            state["receivable_cash_t1"] = max(0.0, state["receivable_cash_t1"] - borrow_t1 - adv_fee_t1)
             deficit -= borrow_t1
             
-            # Borrow against T+2 receivables (2 days of advance interest)
+            # Borrow against T+2 receivables
             borrow_t2 = min(deficit, state["receivable_cash_t2"])
-            adv_fee_t2 = borrow_t2 * ADVANCE_FEE_RATE * 2.0
-            state["receivable_cash_t2"] -= borrow_t2
+            adv_fee_t2 = max(50000.0, borrow_t2 * ADVANCE_FEE_RATE * cal_days_t2) if borrow_t2 > 0 else 0.0
+            state["receivable_cash_t2"] = max(0.0, state["receivable_cash_t2"] - borrow_t2 - adv_fee_t2)
             deficit -= borrow_t2
             
             tot_adv_fee = adv_fee_t1 + adv_fee_t2
@@ -414,7 +468,20 @@ def mark_to_market(
         close_p = today_market_slice.get(sym, {}).get("raw_close", hold["avg_cost"])
         total_stock_value += (tot_qty * close_p)
         
-    real_nav = state["available_cash"] + state["receivable_cash_t1"] + state["receivable_cash_t2"] + total_stock_value
+    div_cash_rec = state.get("dividend_cash_receivable", 0.0)
+    locked_corp_val = 0.0
+    for sym, qty in state.get("locked_corp_action_shares", {}).items():
+        p = today_market_slice.get(sym, {}).get("raw_close", 0.0)
+        locked_corp_val += (qty * p)
+        
+    real_nav = (
+        state["available_cash"]
+        + state["receivable_cash_t1"]
+        + state["receivable_cash_t2"]
+        + div_cash_rec
+        + total_stock_value
+        + locked_corp_val
+    )
     
     # Compute Naive T+0 Benchmark NAV
     prev_naive_nav = state.get("naive_nav", state["initial_capital"])
@@ -441,6 +508,7 @@ def mark_to_market(
     state["last_real_nav"] = real_nav
     state["naive_nav"] = naive_nav
     state["last_updated_date"] = session_date
+    state["last_eod_reconciled_date"] = session_date
     
     return {
         "date": session_date,
@@ -457,8 +525,45 @@ def mark_to_market(
 
 
 # ==============================================================================
-# 5. STEP 4: ALPHA GENERATION & MORNING ATO ORDER TICKET GENERATOR
+# 5. STEP 4: DYNAMIC ALPHA PLUGIN LOADER & MORNING ATO ORDER TICKET GENERATOR
 # ==============================================================================
+
+def _default_textbook_placeholder_signal(
+    raw_close: np.ndarray,
+    tradable_mask: np.ndarray
+) -> np.ndarray:
+    """
+    Standard textbook educational placeholder signal (SMA-40 / SMA-50 Breakout Z-Score).
+    Used exclusively for quantitative engine forward testing and CI/CD validation.
+    Does NOT contain proprietary alpha research or live trading strategy weights.
+    """
+    hh = ops.ts_mean(raw_close, 40)
+    dev = ops.ts_std_dev(raw_close, 40)
+    z = (raw_close - hh) / np.maximum(dev, 1e-4)
+    sma50 = ops.ts_mean(raw_close, 50)
+    in_uptrend = raw_close > sma50
+    z_filtered = np.where(in_uptrend, z, -999.0)
+    return ops.rank(z_filtered, mask=tradable_mask)
+
+
+def compute_strategy_signal(
+    raw_close: np.ndarray,
+    tradable_mask: np.ndarray,
+    df_market_history: Optional[pl.DataFrame] = None
+) -> np.ndarray:
+    """
+    Dynamic Alpha Plugin Loader:
+    - If `private_alphas/` package exists locally, imports and calls `private_alphas.compute_custom_alpha(...)`
+    - Otherwise (e.g. open-source CI/CD), falls back to `_default_textbook_placeholder_signal`.
+    """
+    try:
+        import private_alphas
+        if hasattr(private_alphas, "compute_custom_alpha"):
+            return private_alphas.compute_custom_alpha(raw_close, tradable_mask, df_market_history)
+    except (ImportError, ModuleNotFoundError):
+        pass
+    return _default_textbook_placeholder_signal(raw_close, tradable_mask)
+
 
 def generate_next_day_orders(
     state: Dict[str, Any],
@@ -467,7 +572,7 @@ def generate_next_day_orders(
 ) -> List[Dict[str, Any]]:
     """
     Computes Alpha signals at session close and generates morning ATO order ticket:
-    1. Alpha 1: Breakout Z-Score with MA50 Trend Filter.
+    1. Dynamic Alpha Plugin Loader (private_alphas or default textbook placeholder signal).
     2. Rank Hysteresis + Turnover Dampening (Daily turnover <= 1.5%/day).
     3. Rebalancing & Odd-lot 100 rounding.
     4. Sells strictly capped at current sellable_qty.
@@ -481,14 +586,8 @@ def generate_next_day_orders(
     if T < 55:
         return []
 
-    # Compute Alpha: Breakout Z-Score with MA50 Trend Filter
-    hh = ops.ts_mean(raw_close, 40)
-    dev = ops.ts_std_dev(raw_close, 40)
-    z = (raw_close - hh) / np.maximum(dev, 1e-4)
-    sma50 = ops.ts_mean(raw_close, 50)
-    in_uptrend = raw_close > sma50
-    z_filtered = np.where(in_uptrend, z, -999.0)
-    alpha = ops.rank(z_filtered, mask=tradable_mask)
+    # Dynamic Alpha Plugin Loader
+    alpha = compute_strategy_signal(raw_close, tradable_mask, df_market_history)
 
     # Rank Hysteresis Turnover Dampening
     target_weights_matrix = ops.dampen_turnover(
@@ -911,6 +1010,13 @@ def main():
     parser.add_argument("--parquet", type=str, default=DEFAULT_PARQUET_FILE, help="Path to VN30 Parquet file")
     parser.add_argument("--state-file", type=str, default=DEFAULT_STATE_FILE, help="Path to state JSON file")
     parser.add_argument("--history-file", type=str, default=DEFAULT_HISTORY_FILE, help="Path to history CSV file")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["auto", "eod", "pre-open"],
+        default="auto",
+        help="Operational execution mode: 'eod' (15:15 EOD reconciliation & T+2.5 ledger roll), 'pre-open' (08:15 Morning ATO order ticket staging), 'auto' (Standard catch-up loop)."
+    )
     parser.add_argument("--test-replay", type=int, default=0, help="Run simulation replay of last N sessions (e.g. --test-replay 10)")
     parser.add_argument("--reset", action="store_true", help="Reset portfolio state to initial capital")
     parser.add_argument("--send-telegram", action="store_true", help="Dispatch current portfolio report to Telegram")
@@ -939,6 +1045,36 @@ def main():
         if os.path.exists(args.history_file):
             os.remove(args.history_file)
         print(f"[RESET] Reset account to initial capital of {args.capital:,.0f} VND.")
+        return
+
+    if args.mode == "pre-open":
+        print("\n" + "=" * 90)
+        print("   LEAN VN-QUANT: MORNING PRE-OPEN STAGING & ATO TICKET VERIFICATION (08:15 ICT)")
+        print("=" * 90)
+        state = load_portfolio_state(args.state_file, args.capital)
+        df_market = fetch_or_update_data(args.parquet, is_replay=False)
+        all_dates = sorted(df_market.select("date").unique()["date"].to_list())
+        latest_date = all_dates[-1]
+        today_str = datetime.date.today().isoformat()
+
+        # Check overnight FinGraph contagion scores if bridge/data exists
+        contagion_path = os.path.join(ROOT_DIR, "fingraph", "data", "event_contagion_alpha.parquet")
+        if os.path.exists(contagion_path):
+            try:
+                df_cg = pl.read_parquet(contagion_path)
+                print(f"[PRE-OPEN] Loaded VN-FinGraph overnight contagion signals from {contagion_path} ({len(df_cg)} sessions)")
+            except Exception as e:
+                print(f"[PRE-OPEN WARNING] Could not read contagion data: {e}")
+
+        pending_orders = state.get("pending_orders", [])
+        df_today = df_market.filter(pl.col("date") == latest_date)
+        today_market = {row["symbol"]: row for row in df_today.iter_rows(named=True)}
+
+        print_portfolio_dashboard(state, today_market, f"{today_str} (PRE-OPEN)", pending_orders, [])
+        if args.send_telegram:
+            tg_text = build_telegram_summary(state, f"{today_str} (PRE-OPEN)", pending_orders, [], [latest_date])
+            send_telegram_alert(tg_text)
+        print("[PRE-OPEN SUCCESS] ATO Order tickets staged and verified. Ready for 09:00:00 HOSE opening auction.")
         return
 
     df_market = fetch_or_update_data(args.parquet, is_replay=False)

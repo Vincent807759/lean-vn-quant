@@ -9,7 +9,7 @@ Multi-factor quantitative research and machine learning combiner module:
    - Alpha 3: Short-term Mean Reversion (5-day price oscillation reversal)
    - Alpha 4: Volume Volatility Dampener (Volume compression to price volatility ratio)
    - Alpha 5: Intraday Liquidity Flow (Close-to-Open order flow pressure and liquidity)
-2. Gram-Schmidt QR Orthogonalization filter (brain_ops.check_and_orthogonalize)
+2. Gram-Schmidt QR & Ridge Factor Orthogonalization (alpha_ops.check_and_orthogonalize)
    purges factor multicollinearity down to cross-correlation < 0.20.
 3. Purged Walk-Forward Cross-Validation with T+3 Embargo:
    Strictly prevents look-ahead bias and dynamic factor weighting proportional to positive forward IC.
@@ -337,6 +337,49 @@ def run_comparative_experiment(parquet_path: str = DEFAULT_PARQUET) -> Dict[str,
         "multi_equity": res_multi["equity"].tolist()
     }
     return comparison_results
+
+
+# ==============================================================================
+# 5. VN-FINGRAPH CONTAGION INTEGRATION & HAWKES/OU DECAY PIPELINE
+# ==============================================================================
+
+def load_and_decay_fingraph_alpha(
+    fingraph_parquet_path: str,
+    target_dates: List[Any],
+    target_symbols: List[str],
+    tau_sessions: float = 5.0
+) -> np.ndarray:
+    """
+    Ingests VN-FinGraph event contagion alpha from Parquet,
+    applies continuous Hawkes/OU exponential decay and Van der Waerden normal score transform,
+    and returns aligned stationary factor matrix matching (T, N).
+    """
+    if not os.path.exists(fingraph_parquet_path):
+        raise FileNotFoundError(f"VN-FinGraph parquet not found at: {fingraph_parquet_path}")
+        
+    df_fg = pl.read_parquet(fingraph_parquet_path)
+    T = len(target_dates)
+    N = len(target_symbols)
+    raw_fg = np.zeros((T, N), dtype=np.float64)
+    
+    date_strs = [str(d)[:10] for d in target_dates]
+    df_dates = df_fg["date"].to_list()
+    date_to_idx = {d: i for i, d in enumerate(df_dates)}
+    
+    fg_cols = set(df_fg.columns)
+    for j, sym in enumerate(target_symbols):
+        if sym in fg_cols:
+            col_vals = df_fg[sym].to_numpy()
+            for t, d_str in enumerate(date_strs):
+                if d_str in date_to_idx:
+                    raw_fg[t, j] = col_vals[date_to_idx[d_str]]
+                    
+    # Apply Hawkes/OU exponential decay filter
+    decayed_fg = ops.apply_hawkes_ou_decay(raw_fg, tau_sessions=tau_sessions)
+    
+    # Apply cross-sectional Van der Waerden Inverse Normal Rank transform
+    stationary_alpha = ops.van_der_waerden_transform(decayed_fg)
+    return stationary_alpha
 
 
 if __name__ == "__main__":
