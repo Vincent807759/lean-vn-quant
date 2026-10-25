@@ -1,0 +1,48 @@
+name: Lean VN-Quant Production CI/CD Audit
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quantitative-audit:
+    name: Zero-Leak Security & Quantitative Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Production Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Step 1 - Zero-Leak Security & Secret Audit
+        run: |
+          python scripts/security_scan.py .
+
+      - name: Step 2 - Core Quantitative & Microstructure Verification
+        run: |
+          python run_verification.py
+
+      - name: Step 3 - Forward-Testing Ledger & Replay Audit
+        run: |
+          python services/daily_paper_trader.py --test-replay 10
+
+      - name: Step 4 - Multi-Alpha Orthogonal Combiner Audit
+        run: |
+          python engine/ml_alpha_combiner.py

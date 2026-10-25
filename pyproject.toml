@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lean-vn-quant"
+version = "2.0.0"
+description = "Systematic quantitative execution and microstructure engine for Vietnam Equities (VN30)"
+readme = "README.md"
+authors = [
+    { name = "Vincent Cao", email = "vincentcao706@gmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.11"
+keywords = [
+    "quantitative-finance",
+    "vietnam-stock-market",
+    "vn30",
+    "microstructure",
+    "systematic-trading",
+    "numba",
+    "polars"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "numba>=0.58.0",
+    "bottleneck>=1.3.7",
+    "polars>=0.20.0",
+    "pyarrow>=14.0.0",
+    "duckdb>=0.9.0",
+    "requests>=2.31.0",
+    "quantstats>=0.0.62",
+]
+
+[project.urls]
+Homepage = "https://github.com/Vincent807759/lean-vn-quant"
+Repository = "https://github.com/Vincent807759/lean-vn-quant"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["engine*", "services*"]

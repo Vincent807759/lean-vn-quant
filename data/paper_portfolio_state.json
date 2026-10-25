@@ -1,0 +1,139 @@
+{
+  "last_updated_date": "2026-10-23",
+  "initial_capital": 100000000.0,
+  "available_cash": 0.0,
+  "receivable_cash_t1": 6416919.5,
+  "receivable_cash_t2": 3393091.0124999993,
+  "holdings": {
+    "ACB": {
+      "sellable_qty": 100,
+      "locked_t1": 0,
+      "locked_t2": 0,
+      "avg_cost": 20420.399999999998
+    },
+    "HDB": {
+      "sellable_qty": 300,
+      "locked_t1": 0,
+      "locked_t2": 0,
+      "avg_cost": 22726.870833333334
+    },
+    "POW": {
+      "sellable_qty": 100,
+      "locked_t1": 0,
+      "locked_t2": 0,
+      "avg_cost": 12512.499999999998
+    },
+    "SSB": {
+      "sellable_qty": 900,
+      "locked_t1": 0,
+      "locked_t2": 0,
+      "avg_cost": 16116.1
+    },
+    "VNM": {
+      "sellable_qty": 100,
+      "locked_t1": 0,
+      "locked_t2": 0,
+      "avg_cost": 58158.09999999999
+    },
+    "VPB": {
+      "sellable_qty": 200,
+      "locked_t1": 0,
+      "locked_t2": 0,
+      "avg_cost": 24401.928571428572
+    },
+    "VIB": {
+      "sellable_qty": 100,
+      "locked_t1": 0,
+      "locked_t2": 300,
+      "avg_cost": 13988.974999999999
+    },
+    "TCB": {
+      "sellable_qty": 100,
+      "locked_t1": 0,
+      "locked_t2": 300,
+      "avg_cost": 33925.55833333333
+    },
+    "MSN": {
+      "sellable_qty": 100,
+      "locked_t1": 0,
+      "locked_t2": 300,
+      "avg_cost": 73973.9
+    },
+    "TPB": {
+      "sellable_qty": 0,
+      "locked_t1": 0,
+      "locked_t2": 300,
+      "avg_cost": 12762.749999999998
+    }
+  },
+  "pending_orders": [
+    {
+      "action": "SELL",
+      "symbol": "MSN",
+      "qty": 100,
+      "est_price": 74200.0,
+      "est_value": 7420000.0,
+      "target_weight": 0.07507431097494745
+    },
+    {
+      "action": "SELL",
+      "symbol": "SSB",
+      "qty": 100,
+      "est_price": 16650.0,
+      "est_value": 1665000.0,
+      "target_weight": 0.1508669439585057
+    },
+    {
+      "action": "SELL",
+      "symbol": "TCB",
+      "qty": 100,
+      "est_price": 34200.0,
+      "est_value": 3420000.0,
+      "target_weight": 0.023881665809308936
+    },
+    {
+      "action": "SELL",
+      "symbol": "VIB",
+      "qty": 100,
+      "est_price": 14200.0,
+      "est_value": 1420000.0,
+      "target_weight": 0.031232791907200692
+    }
+  ],
+  "naive_nav": 100631992.06615977,
+  "last_real_nav": 98465010.5125,
+  "total_brokerage_tax": 581784.4875,
+  "total_advance_fees": 27567.361313625006,
+  "prev_target_weights": {
+    "ACB": 0.03713218659138459,
+    "BCM": 0.00020559302182071885,
+    "BID": 0.008820186414851999,
+    "BVH": 0.066801203431551,
+    "CTG": 0.00036486343668345263,
+    "FPT": 0.0012709288338541666,
+    "GAS": 0.0298089069516054,
+    "GVR": 0.0022403705855315228,
+    "HDB": 0.07866777576199943,
+    "HPG": 0.0029107125415999196,
+    "MBB": 0.009572365825086858,
+    "MSN": 0.07507431097494745,
+    "MWG": 0.03399031127869145,
+    "PLX": 0.02132619888746677,
+    "POW": 0.023007609668472068,
+    "SAB": 0.03298547498331149,
+    "SHB": 0.0007533626602579935,
+    "SSB": 0.1508669439585057,
+    "SSI": 0.0008091607834146095,
+    "STB": 0.0526488124998222,
+    "TCB": 0.023881665809308936,
+    "TPB": 0.01637058214883333,
+    "VCB": 0.006586143383911561,
+    "VHM": 0.028095067292873744,
+    "VIB": 0.031232791907200692,
+    "VIC": 0.07095892230679166,
+    "VJC": 0.05291143578529629,
+    "VNM": 0.06517553092076069,
+    "VPB": 0.07059591087500165,
+    "VRE": 0.004934670479162596
+  }
+}
