@@ -11,6 +11,7 @@ Strict constraints:
 """
 
 from typing import List, Optional, Tuple, Dict, Any
+import os
 import datetime
 import requests
 import numpy as np
@@ -253,6 +254,9 @@ def fetch_vn_ohlcv(
     if force_fallback:
         df = generate_fallback_data(symbols, start_date, end_date)
         if save_parquet:
+            parent_dir = os.path.dirname(save_parquet)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
             df.write_parquet(save_parquet)
         return df
         
@@ -321,6 +325,9 @@ def fetch_vn_ohlcv(
         df = pl.DataFrame(records).sort(["date", "symbol"])
         
     if save_parquet:
+        parent_dir = os.path.dirname(save_parquet)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
         df.write_parquet(save_parquet)
         
     return df

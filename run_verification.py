@@ -289,11 +289,12 @@ def test_4_full_backtest():
         df_market = dp.pl.read_parquet(parquet_file)
         print(f"        Loaded {len(df_market)} bars from existing verified Parquet storage.")
     else:
+        is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
         df_market = dp.fetch_vn_ohlcv(
             start_date="2023-01-01",
             end_date="2026-10-24",
             save_parquet=parquet_file,
-            force_fallback=False
+            force_fallback=is_ci
         )
     
     # Audit Proof: Print 5 first and 5 last rows of FPT and HPG

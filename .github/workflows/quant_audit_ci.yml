@@ -30,6 +30,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Initialize Ephemeral Quant Directories
+        run: |
+          mkdir -p data fingraph/data
+
       - name: Step 1 - Zero-Leak Secret & Security Audit
         run: |
           python scripts/security_scan.py
