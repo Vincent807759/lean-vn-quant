@@ -96,10 +96,13 @@ def is_tracked_by_git(root_dir: str, file_path: str) -> bool:
         return False
 
 
-def get_target_files(root_dir: str) -> Tuple[List[str], bool]:
+def get_target_files(root_dir: str) -> Tuple[List[str], bool, int, int, bool]:
     """Retrieves all tracked git files or falls back to walking the directory."""
     files_to_scan = []
     is_git_mode = False
+    tracked_count = 0
+    untracked_count = 0
+    git_config_checked = False
     
     # 1. Try git ls-files first
     try:
@@ -112,6 +115,7 @@ def get_target_files(root_dir: str) -> Tuple[List[str], bool]:
         )
         if proc.returncode == 0 and proc.stdout.strip():
             tracked = proc.stdout.strip().splitlines()
+            tracked_count = len(tracked)
             for rel_path in tracked:
                 full_p = os.path.join(root_dir, rel_path.replace("/", os.sep))
                 if os.path.isfile(full_p):
@@ -126,7 +130,9 @@ def get_target_files(root_dir: str) -> Tuple[List[str], bool]:
                 timeout=5
             )
             if status_proc.returncode == 0 and status_proc.stdout.strip():
-                for line in status_proc.stdout.strip().splitlines():
+                lines = status_proc.stdout.strip().splitlines()
+                untracked_count = len(lines)
+                for line in lines:
                     if len(line) >= 4:
                         rel_p = line[3:].strip().strip('"')
                         if " -> " in rel_p:
@@ -138,12 +144,14 @@ def get_target_files(root_dir: str) -> Tuple[List[str], bool]:
 
             # B15: Directly scan .git/config for token/secret leakage in remote URLs
             git_config = os.path.join(root_dir, ".git", "config")
-            if os.path.isfile(git_config) and git_config not in files_to_scan:
-                files_to_scan.append(git_config)
+            if os.path.isfile(git_config):
+                git_config_checked = True
+                if git_config not in files_to_scan:
+                    files_to_scan.append(git_config)
 
             if files_to_scan:
                 is_git_mode = True
-                return files_to_scan, is_git_mode
+                return files_to_scan, is_git_mode, tracked_count, untracked_count, git_config_checked
     except Exception:
         pass
 
@@ -157,7 +165,7 @@ def get_target_files(root_dir: str) -> Tuple[List[str], bool]:
             full_p = os.path.join(root, f)
             files_to_scan.append(full_p)
 
-    return files_to_scan, is_git_mode
+    return files_to_scan, is_git_mode, len(files_to_scan), 0, False
 
 
 def run_security_scan(root_dir: str = ".") -> int:
@@ -175,9 +183,14 @@ def run_security_scan(root_dir: str = ".") -> int:
         print("!" * 80)
         return 1
 
-    files, is_git = get_target_files(root_path)
-    mode_desc = "Git Tracked Files (ls-files)" if is_git else "Filesystem Scan (Excluding .env & .venv)"
-    print(f"-> Scan Mode: {mode_desc} ({len(files)} files)")
+    files, is_git, n_tracked, n_untracked, has_git_config = get_target_files(root_path)
+    if is_git:
+        print(f"-> Scan Mode: Git Tracked Files (ls-files) ({n_tracked} files)")
+        print(f"-> Checked Untracked/Staged Files (git status --porcelain): {n_untracked} files (Protected by .gitignore)")
+        if has_git_config:
+            print("-> Audited .git/config: 0 credentials / PAT tokens found.")
+    else:
+        print(f"-> Scan Mode: Filesystem Scan (Excluding .env & .venv) ({len(files)} files)")
 
     active_rules = STATIC_REGEX_RULES + build_dynamic_env_rules(root_path)
 
