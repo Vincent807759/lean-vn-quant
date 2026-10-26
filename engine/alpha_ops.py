@@ -249,7 +249,7 @@ def ts_rank(x: np.ndarray, d: int) -> np.ndarray:
     return (raw_rk + 1.0) / 2.0
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, cache=True)
 def _ts_decay_linear_numba(x: np.ndarray, d: int) -> np.ndarray:
     T, N = x.shape
     out = np.full((T, N), np.nan, dtype=np.float64)
@@ -281,7 +281,7 @@ def ts_decay_linear(x: np.ndarray, d: int) -> np.ndarray:
     return _ts_decay_linear_numba(x, d)
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, cache=True)
 def _ts_corr_numba(x: np.ndarray, y: np.ndarray, d: int) -> np.ndarray:
     T, N = x.shape
     out = np.full((T, N), np.nan, dtype=np.float64)

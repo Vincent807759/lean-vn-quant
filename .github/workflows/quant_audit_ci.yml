@@ -38,6 +38,6 @@ jobs:
         run: |
           python scripts/security_scan.py
 
-      - name: Step 2 - Execute Full Institutional Verification Suite
+      - name: Step 2 - Execute Hermetic Pytest Verification Suite
         run: |
-          python run_verification.py
+          python -m pytest tests/ -v

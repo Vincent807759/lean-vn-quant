@@ -197,7 +197,7 @@ def compute_bands_and_ticks(
 # 2. NUMBA JIT MICROSTRUCTURE SIMULATION CORE
 # ==============================================================================
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, cache=True)
 def _calc_borrow_cap(pending: float, rate: float, days: float, min_fee: float) -> float:
     """
     Computes maximum advance cash withdrawal capacity given pending receivables,
@@ -213,7 +213,7 @@ def _calc_borrow_cap(pending: float, rate: float, days: float, min_fee: float) -
         return pending / (1.0 + rate * eff_days)
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, cache=True)
 def _calc_dynamic_slippage(
     qty: float,
     adv20: float,
@@ -237,7 +237,7 @@ def _calc_dynamic_slippage(
     return max(base_slippage, max(half_spread_floor, total_slip))
 
 
-@numba.njit(debug=True)
+@numba.njit(cache=True)
 def _simulate_vn_microstructure_core(
     raw_open: np.ndarray,
     raw_close: np.ndarray,

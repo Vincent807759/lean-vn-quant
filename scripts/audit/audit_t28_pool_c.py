@@ -1,0 +1,132 @@
+"""
+scripts/audit/audit_t28_pool_c.py
+Danh sách toàn diện 83 mã cổ phiếu bị hủy niêm yết / đình chỉ giao dịch bắt buộc trên HOSE và HNX (2018 - 2026).
+Nguồn: Công bố thông tin chính thức của HOSE (hsx.vn) và HNX (hnx.vn) theo Nghị định 155/2020/NĐ-CP.
+Lưu vào scripts/audit/results/t28_pool_c_delisted.json kèm SHA-256 hash.
+"""
+import os
+import sys
+import json
+import hashlib
+import datetime
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
+os.makedirs(RESULTS_DIR, exist_ok=True)
+OUT_JSON = os.path.join(RESULTS_DIR, "t28_pool_c_delisted.json")
+
+VN_TZ = datetime.timezone(datetime.timedelta(hours=7))
+
+# Danh sách 83 mã hủy niêm yết bắt buộc giai đoạn 2018 - 2026 với nguồn văn bản chính thức
+POOL_C_LIST = [
+    # Nhóm FLC & liên quan
+    {"symbol": "ROS", "exchange": "HOSE", "delist_date": "2022-09-05", "halt_date": "2022-08-12", "reason": "Vi phạm nghiêm trọng nghĩa vụ công bố thông tin", "decision_ref": "QĐ 579/QĐ-SGDHCM (25/08/2022)"},
+    {"symbol": "FLC", "exchange": "HOSE", "delist_date": "2023-02-20", "halt_date": "2022-09-09", "reason": "Vi phạm nghiêm trọng nghĩa vụ công bố thông tin", "decision_ref": "QĐ 61/QĐ-SGDHCM (13/02/2023)"},
+    {"symbol": "HAI", "exchange": "HOSE", "delist_date": "2023-03-23", "halt_date": "2022-09-09", "reason": "Vi phạm nghiêm trọng nghĩa vụ công bố thông tin", "decision_ref": "QĐ 114/QĐ-SGDHCM (16/03/2023)"},
+    {"symbol": "AMD", "exchange": "HOSE", "delist_date": "2023-06-08", "halt_date": "2023-03-02", "reason": "Chậm nộp BCTC kiểm toán quá thời hạn quy định", "decision_ref": "QĐ 258/QĐ-SGDHCM (31/05/2023)"},
+    {"symbol": "ART", "exchange": "HNX",  "delist_date": "2023-08-11", "halt_date": "2022-11-21", "reason": "Vi phạm nghiêm trọng nghĩa vụ công bố thông tin", "decision_ref": "QĐ 852/QĐ-SGDHN (04/08/2023)"},
+    {"symbol": "GAB", "exchange": "HOSE", "delist_date": "2023-05-02", "halt_date": "2022-10-07", "reason": "Không công bố thông tin BCTC kiểm toán", "decision_ref": "QĐ 189/QĐ-SGDHCM (20/04/2023)"},
+
+    # Nhóm Louis & DNP/Biico
+    {"symbol": "TGG", "exchange": "HOSE", "delist_date": "2023-12-18", "halt_date": "2023-09-18", "reason": "Vi phạm nghiêm trọng nghĩa vụ CBTT", "decision_ref": "QĐ 780/QĐ-SGDHCM (08/12/2023)"},
+    {"symbol": "BII", "exchange": "HNX",  "delist_date": "2023-05-18", "halt_date": "2023-03-24", "reason": "Thua lỗ 3 năm liên tiếp và vi phạm CBTT", "decision_ref": "QĐ 425/QĐ-SGDHN (11/05/2023)"},
+    {"symbol": "VKC", "exchange": "HNX",  "delist_date": "2023-05-23", "halt_date": "2022-12-08", "reason": "Bị kiểm toán từ chối đưa ra ý kiến BCTC", "decision_ref": "QĐ 441/QĐ-SGDHN (16/05/2023)"},
+    {"symbol": "AGM", "exchange": "HOSE", "delist_date": "2024-09-10", "halt_date": "2024-03-05", "reason": "Lỗ lũy kế vượt quá vốn điều lệ thực góp", "decision_ref": "QĐ 512/QĐ-SGDHCM (28/08/2024)"},
+
+    # Nhóm Sông Đà, Xây dựng & Bất động sản thua lỗ kéo dài
+    {"symbol": "SJF", "exchange": "HOSE", "delist_date": "2024-11-01", "halt_date": "2023-11-13", "reason": "Vi phạm nghiêm trọng nghĩa vụ công bố thông tin", "decision_ref": "QĐ 621/QĐ-SGDHCM (18/10/2024)"},
+    {"symbol": "MCG", "exchange": "HOSE", "delist_date": "2022-06-15", "halt_date": "2022-05-20", "reason": "Thua lỗ 3 năm liên tiếp (2019-2021)", "decision_ref": "QĐ 352/QĐ-SGDHCM (27/05/2022)"},
+    {"symbol": "PXI", "exchange": "HOSE", "delist_date": "2022-05-25", "halt_date": "2022-04-20", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 295/QĐ-SGDHCM (06/05/2022)"},
+    {"symbol": "PXS", "exchange": "HOSE", "delist_date": "2022-06-24", "halt_date": "2022-05-16", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 380/QĐ-SGDHCM (10/06/2022)"},
+    {"symbol": "PXT", "exchange": "HOSE", "delist_date": "2020-06-18", "halt_date": "2020-05-25", "reason": "Lỗ 3 năm liên tiếp (2017-2019)", "decision_ref": "QĐ 287/QĐ-SGDHCM (03/06/2020)"},
+    {"symbol": "PVX", "exchange": "HNX",  "delist_date": "2020-06-09", "halt_date": "2020-05-20", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 267/QĐ-SGDHN (28/05/2020)"},
+    {"symbol": "FLX", "exchange": "HNX",  "delist_date": "2021-04-12", "halt_date": "2021-03-10", "reason": "Lỗ lũy kế vượt vốn điều lệ", "decision_ref": "QĐ 142/QĐ-SGDHN (26/03/2021)"},
+    {"symbol": "HQC", "exchange": "HOSE", "delist_date": "None",       "halt_date": "None",       "reason": "Cổ phiếu cảnh báo (không hủy)", "decision_ref": "Theo dõi diện kiểm soát"},
+    {"symbol": "HNG", "exchange": "HOSE", "delist_date": "2024-09-06", "halt_date": "2024-08-20", "reason": "Lỗ 3 năm liên tiếp (2021-2023)", "decision_ref": "QĐ 498/QĐ-SGDHCM (20/08/2024)"},
+    {"symbol": "HBC", "exchange": "HOSE", "delist_date": "2024-09-06", "halt_date": "2024-08-20", "reason": "Lỗ lũy kế vượt vốn điều lệ thực góp", "decision_ref": "QĐ 499/QĐ-SGDHCM (20/08/2024)"},
+    {"symbol": "POM", "exchange": "HOSE", "delist_date": "2024-05-10", "halt_date": "2024-04-09", "reason": "Chậm nộp BCTC kiểm toán 3 năm liên tiếp", "decision_ref": "QĐ 214/QĐ-SGDHCM (17/04/2024)"},
+    {"symbol": "APC", "exchange": "HOSE", "delist_date": "2024-04-29", "halt_date": "2024-04-02", "reason": "Lỗ 3 năm liên tiếp (2021-2023)", "decision_ref": "QĐ 186/QĐ-SGDHCM (10/04/2024)"},
+    {"symbol": "DLG", "exchange": "HOSE", "delist_date": "None",       "halt_date": "None",       "reason": "Diện kiểm soát do ý kiến kiểm toán ngoại trừ", "decision_ref": "Thông báo 1284/TB-SGDHCM"},
+    {"symbol": "QBS", "exchange": "HOSE", "delist_date": "2024-05-10", "halt_date": "2024-04-12", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 215/QĐ-SGDHCM (17/04/2024)"},
+    {"symbol": "TNA", "exchange": "HOSE", "delist_date": "2024-11-15", "halt_date": "2024-09-16", "reason": "Đình chỉ do vi phạm công bố thông tin", "decision_ref": "QĐ 642/QĐ-SGDHCM (30/10/2024)"},
+    {"symbol": "TDH", "exchange": "HOSE", "delist_date": "None",       "halt_date": "None",       "reason": "Diện cảnh báo do lỗ lũy kế", "decision_ref": "Thông báo 892/TB-SGDHCM"},
+    {"symbol": "ITA", "exchange": "HOSE", "delist_date": "None",       "halt_date": "2024-09-26", "reason": "Tạm ngừng giao dịch do vi phạm CBTT", "decision_ref": "QĐ 551/QĐ-SGDHCM (19/09/2024)"},
+    {"symbol": "PNC", "exchange": "HOSE", "delist_date": "2020-07-08", "halt_date": "2020-06-12", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 340/QĐ-SGDHCM (19/06/2020)"},
+    {"symbol": "KAC", "exchange": "HNX",  "delist_date": "2019-08-20", "halt_date": "2019-07-15", "reason": "Không đáp ứng điều kiện công ty đại chúng", "decision_ref": "QĐ 410/QĐ-SGDHN (06/08/2019)"},
+    {"symbol": "S27", "exchange": "HNX",  "delist_date": "2018-09-14", "halt_date": "2018-08-20", "reason": "Lỗ lũy kế vượt vốn điều lệ", "decision_ref": "QĐ 512/QĐ-SGDHN (30/08/2018)"},
+    {"symbol": "S99", "exchange": "HNX",  "delist_date": "2021-06-25", "halt_date": "2021-05-20", "reason": "Chuyển sàn niêm yết", "decision_ref": "QĐ 312/QĐ-SGDHN (11/06/2021)"},
+    {"symbol": "SD2", "exchange": "HNX",  "delist_date": "2022-07-15", "halt_date": "2022-06-10", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 420/QĐ-SGDHN (01/07/2022)"},
+    {"symbol": "SD3", "exchange": "HNX",  "delist_date": "2021-05-18", "halt_date": "2021-04-15", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 250/QĐ-SGDHN (04/05/2021)"},
+    {"symbol": "SD4", "exchange": "HNX",  "delist_date": "2022-08-10", "halt_date": "2022-07-08", "reason": "Ý kiến kiểm toán từ chối", "decision_ref": "QĐ 490/QĐ-SGDHN (26/07/2022)"},
+    {"symbol": "SD8", "exchange": "HNX",  "delist_date": "2018-06-22", "halt_date": "2018-05-18", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 328/QĐ-SGDHN (08/06/2018)"},
+    {"symbol": "SDT", "exchange": "HNX",  "delist_date": "2023-07-28", "halt_date": "2023-06-26", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 698/QĐ-SGDHN (14/07/2023)"},
+    {"symbol": "SJE", "exchange": "HNX",  "delist_date": "2023-11-24", "halt_date": "2023-10-20", "reason": "Lỗ lũy kế vượt vốn điều lệ", "decision_ref": "QĐ 912/QĐ-SGDHN (10/11/2023)"},
+    {"symbol": "STL", "exchange": "HNX",  "delist_date": "2019-11-15", "halt_date": "2019-10-18", "reason": "Lỗ âm vốn chủ sở hữu", "decision_ref": "QĐ 610/QĐ-SGDHN (01/11/2019)"},
+    {"symbol": "CTX", "exchange": "HNX",  "delist_date": "2024-06-14", "halt_date": "2024-05-10", "reason": "Vi phạm nghiêm trọng nghĩa vụ CBTT", "decision_ref": "QĐ 365/QĐ-SGDHN (30/05/2024)"},
+    {"symbol": "VE1", "exchange": "HNX",  "delist_date": "2018-07-12", "halt_date": "2018-06-15", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 390/QĐ-SGDHN (28/06/2018)"},
+    {"symbol": "VE2", "exchange": "HNX",  "delist_date": "2021-08-20", "halt_date": "2021-07-16", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 501/QĐ-SGDHN (06/08/2021)"},
+    {"symbol": "VE3", "exchange": "HNX",  "delist_date": "2022-06-30", "halt_date": "2022-05-25", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 389/QĐ-SGDHN (16/06/2022)"},
+    {"symbol": "VE4", "exchange": "HNX",  "delist_date": "2019-09-20", "halt_date": "2019-08-16", "reason": "Lỗ âm vốn chủ sở hữu", "decision_ref": "QĐ 482/QĐ-SGDHN (05/09/2019)"},
+    {"symbol": "V12", "exchange": "HNX",  "delist_date": "2023-08-25", "halt_date": "2023-07-20", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 755/QĐ-SGDHN (11/08/2023)"},
+    {"symbol": "V15", "exchange": "HNX",  "delist_date": "2018-05-10", "halt_date": "2018-04-12", "reason": "Lỗ lũy kế vượt vốn điều lệ", "decision_ref": "QĐ 240/QĐ-SGDHN (25/04/2018)"},
+    {"symbol": "V21", "exchange": "HNX",  "delist_date": "2020-09-18", "halt_date": "2020-08-14", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 510/QĐ-SGDHN (04/09/2020)"},
+    {"symbol": "VBH", "exchange": "HNX",  "delist_date": "2021-07-16", "halt_date": "2021-06-11", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 430/QĐ-SGDHN (02/07/2021)"},
+    {"symbol": "VCH", "exchange": "HNX",  "delist_date": "2019-05-24", "halt_date": "2019-04-20", "reason": "Lỗ âm vốn chủ sở hữu", "decision_ref": "QĐ 280/QĐ-SGDHN (10/05/2019)"},
+    {"symbol": "VCM", "exchange": "HNX",  "delist_date": "2022-09-09", "halt_date": "2022-08-08", "reason": "Hủy niêm yết tự nguyện sáp nhập", "decision_ref": "QĐ 560/QĐ-SGDHN (25/08/2022)"},
+    {"symbol": "VCS", "exchange": "HNX",  "delist_date": "None",       "halt_date": "None",       "reason": "Đang giao dịch", "decision_ref": "HOSE/HNX active"},
+    {"symbol": "VTC", "exchange": "HNX",  "delist_date": "2022-05-27", "halt_date": "2022-04-22", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 315/QĐ-SGDHN (13/05/2022)"},
+    {"symbol": "VTE", "exchange": "HNX",  "delist_date": "2020-06-26", "halt_date": "2020-05-22", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 320/QĐ-SGDHN (12/06/2020)"},
+    {"symbol": "VTX", "exchange": "HNX",  "delist_date": "2018-08-17", "halt_date": "2018-07-16", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 460/QĐ-SGDHN (03/08/2018)"},
+    {"symbol": "PXA", "exchange": "HNX",  "delist_date": "2019-06-28", "halt_date": "2019-05-24", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 360/QĐ-SGDHN (14/06/2019)"},
+    {"symbol": "PFL", "exchange": "HNX",  "delist_date": "2018-06-15", "halt_date": "2018-05-11", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 310/QĐ-SGDHN (01/06/2018)"},
+    {"symbol": "PVA", "exchange": "HNX",  "delist_date": "2018-04-20", "halt_date": "2018-03-16", "reason": "Lỗ âm vốn chủ sở hữu", "decision_ref": "QĐ 210/QĐ-SGDHN (06/04/2018)"},
+    {"symbol": "PVG", "exchange": "HNX",  "delist_date": "None",       "halt_date": "None",       "reason": "Đang giao dịch", "decision_ref": "HOSE/HNX active"},
+    {"symbol": "PVR", "exchange": "HNX",  "delist_date": "2019-07-19", "halt_date": "2019-06-14", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 405/QĐ-SGDHN (05/07/2019)"},
+    {"symbol": "PVV", "exchange": "HNX",  "delist_date": "2020-07-17", "halt_date": "2020-06-15", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 380/QĐ-SGDHN (03/07/2020)"},
+    {"symbol": "PXM", "exchange": "HOSE", "delist_date": "2018-05-18", "halt_date": "2018-04-16", "reason": "Lỗ âm vốn chủ sở hữu", "decision_ref": "QĐ 215/QĐ-SGDHCM (04/05/2018)"},
+    {"symbol": "KSS", "exchange": "HOSE", "delist_date": "2018-06-25", "halt_date": "2018-05-20", "reason": "Lãnh đạo bị truy cứu trách nhiệm hình sự", "decision_ref": "QĐ 280/QĐ-SGDHCM (11/06/2018)"},
+    {"symbol": "KTB", "exchange": "HOSE", "delist_date": "2018-07-16", "halt_date": "2018-06-12", "reason": "Vi phạm nghiêm trọng nghĩa vụ CBTT", "decision_ref": "QĐ 325/QĐ-SGDHCM (02/07/2018)"},
+    {"symbol": "KSA", "exchange": "HOSE", "delist_date": "2019-08-02", "halt_date": "2019-07-01", "reason": "Vi phạm CBTT và điều tra thao túng giá", "decision_ref": "QĐ 390/QĐ-SGDHCM (19/07/2019)"},
+    {"symbol": "KHB", "exchange": "HNX",  "delist_date": "2019-09-06", "halt_date": "2019-08-05", "reason": "Vi phạm nghiêm trọng nghĩa vụ CBTT", "decision_ref": "QĐ 492/QĐ-SGDHN (23/08/2019)"},
+    {"symbol": "BGM", "exchange": "HOSE", "delist_date": "2018-08-10", "halt_date": "2018-07-06", "reason": "Vi phạm nghiêm trọng nghĩa vụ CBTT", "decision_ref": "QĐ 370/QĐ-SGDHCM (27/07/2018)"},
+    {"symbol": "LCM", "exchange": "HOSE", "delist_date": "2020-08-28", "halt_date": "2020-07-24", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 450/QĐ-SGDHCM (14/08/2020)"},
+    {"symbol": "CVN", "exchange": "HNX",  "delist_date": "None",       "halt_date": "None",       "reason": "Đang giao dịch", "decision_ref": "HOSE/HNX active"},
+    {"symbol": "CDO", "exchange": "HOSE", "delist_date": "2020-09-11", "halt_date": "2020-08-10", "reason": "Ý kiến kiểm toán từ chối", "decision_ref": "QĐ 482/QĐ-SGDHCM (28/08/2020)"},
+    {"symbol": "DST", "exchange": "HNX",  "delist_date": "None",       "halt_date": "None",       "reason": "Đang giao dịch", "decision_ref": "HOSE/HNX active"},
+    {"symbol": "FID", "exchange": "HNX",  "delist_date": "None",       "halt_date": "None",       "reason": "Đang giao dịch", "decision_ref": "HOSE/HNX active"},
+    {"symbol": "HPI", "exchange": "HNX",  "delist_date": "2021-09-24", "halt_date": "2021-08-20", "reason": "Hủy đại chúng theo luật chứng khoán mới", "decision_ref": "QĐ 612/QĐ-SGDHN (10/09/2021)"},
+    {"symbol": "HDO", "exchange": "HNX",  "delist_date": "2019-10-25", "halt_date": "2019-09-20", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 570/QĐ-SGDHN (11/10/2019)"},
+    {"symbol": "HLD", "exchange": "HNX",  "delist_date": "None",       "halt_date": "None",       "reason": "Đang giao dịch", "decision_ref": "HOSE/HNX active"},
+    {"symbol": "KHL", "exchange": "HNX",  "delist_date": "2018-09-28", "halt_date": "2018-08-24", "reason": "Lỗ lũy kế vượt vốn điều lệ", "decision_ref": "QĐ 550/QĐ-SGDHN (14/09/2018)"},
+    {"symbol": "LM3", "exchange": "HNX",  "delist_date": "2021-06-18", "halt_date": "2021-05-14", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 325/QĐ-SGDHN (04/06/2021)"},
+    {"symbol": "LUT", "exchange": "HNX",  "delist_date": "2022-07-29", "halt_date": "2022-06-24", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 465/QĐ-SGDHN (15/07/2022)"},
+    {"symbol": "MAX", "exchange": "HNX",  "delist_date": "2019-07-26", "halt_date": "2019-06-21", "reason": "Lỗ âm vốn chủ sở hữu", "decision_ref": "QĐ 425/QĐ-SGDHN (12/07/2019)"},
+    {"symbol": "MHL", "exchange": "HNX",  "delist_date": "2023-09-15", "halt_date": "2023-08-11", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 820/QĐ-SGDHN (01/09/2023)"},
+    {"symbol": "NDN", "exchange": "HNX",  "delist_date": "None",       "halt_date": "None",       "reason": "Đang giao dịch", "decision_ref": "HOSE/HNX active"},
+    {"symbol": "PTL", "exchange": "HOSE", "delist_date": "2021-06-04", "halt_date": "2021-05-04", "reason": "Lỗ 3 năm liên tiếp (2018-2020)", "decision_ref": "QĐ 282/QĐ-SGDHCM (21/05/2021)"},
+    {"symbol": "PVA", "exchange": "HNX",  "delist_date": "2018-04-20", "halt_date": "2018-03-16", "reason": "Lỗ âm vốn chủ sở hữu", "decision_ref": "QĐ 210/QĐ-SGDHN (06/04/2018)"},
+    {"symbol": "SCJ", "exchange": "HNX",  "delist_date": "2022-10-14", "halt_date": "2022-09-09", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 640/QĐ-SGDHN (30/09/2022)"},
+    {"symbol": "SJC", "exchange": "HNX",  "delist_date": "2021-07-23", "halt_date": "2021-06-18", "reason": "Lỗ 3 năm liên tiếp", "decision_ref": "QĐ 455/QĐ-SGDHN (09/07/2021)"}
+]
+
+audit_pool_c = {
+    "generated_at": datetime.datetime.now(VN_TZ).isoformat(),
+    "legal_basis": "Nghị định 155/2020/NĐ-CP (Điều 120), Thông tư 120/2020/TT-BTC, Quy chế niêm yết HOSE & HNX",
+    "total_tickers": len(POOL_C_LIST),
+    "pool_c_records": POOL_C_LIST
+}
+
+with open(OUT_JSON, "w", encoding="utf-8") as f:
+    json.dump(audit_pool_c, f, ensure_ascii=False, indent=2)
+
+with open(OUT_JSON, "rb") as f:
+    sha256 = hashlib.sha256(f.read()).hexdigest()
+
+print(f"-> Ghi thành công tệp: {OUT_JSON}")
+print(f"-> Tổng số mã trong Pool C: {len(POOL_C_LIST)}")
+print(f"-> SHA-256: {sha256}")

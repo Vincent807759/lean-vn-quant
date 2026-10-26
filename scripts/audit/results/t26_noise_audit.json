@@ -1,0 +1,73 @@
+{
+  "generated_at": "2026-10-26T15:36:08.156055+07:00",
+  "noise_distribution": {
+    "HPG": {
+      "total_sessions": 2187,
+      "normal_sessions": 2177,
+      "ex_events_count": 9,
+      "noise_bps_median": 1.759745814493563,
+      "noise_bps_mean": 2.3729845439211763,
+      "noise_bps_p75": 3.322577599484955,
+      "noise_bps_p90": 5.464037331781358,
+      "noise_bps_p95": 7.4501694330142385,
+      "noise_bps_p99": 10.515265732116928,
+      "noise_bps_max": 15.909065973250813
+    },
+    "VCB": {
+      "total_sessions": 2187,
+      "normal_sessions": 2178,
+      "ex_events_count": 8,
+      "noise_bps_median": 0.5651958181962513,
+      "noise_bps_mean": 0.7206349783857464,
+      "noise_bps_p75": 1.0704728456467638,
+      "noise_bps_p90": 1.5866224548410908,
+      "noise_bps_p95": 1.9870387516142674,
+      "noise_bps_p99": 3.01122435502581,
+      "noise_bps_max": 3.798670465335885
+    },
+    "SSI": {
+      "total_sessions": 2188,
+      "normal_sessions": 2175,
+      "ex_events_count": 12,
+      "noise_bps_median": 2.078669651421894,
+      "noise_bps_mean": 2.9353591163385855,
+      "noise_bps_p75": 3.9845401430105287,
+      "noise_bps_p90": 7.138756165543827,
+      "noise_bps_p95": 9.887087812384339,
+      "noise_bps_p99": 14.010597706349548,
+      "noise_bps_max": 21.84840349574335
+    },
+    "FPT": {
+      "total_sessions": 2188,
+      "normal_sessions": 2168,
+      "ex_events_count": 19,
+      "noise_bps_median": 0.6370283847312308,
+      "noise_bps_mean": 1.142153298746089,
+      "noise_bps_p75": 1.4390177360629197,
+      "noise_bps_p90": 3.2039354568188516,
+      "noise_bps_p95": 4.154301556032692,
+      "noise_bps_p99": 5.920141694019085,
+      "noise_bps_max": 8.066035957936535
+    }
+  },
+  "vcb_tick_size": {
+    "price_range_vnd": "70,000 - 95,000",
+    "hose_rule": "Quyết định 17/QĐ-SGDHCM ngày 26/03/2021 & Quyết định 75/QĐ-SGDHCM",
+    "hose_brackets": {
+      "bracket_under_10k": "10 VND",
+      "bracket_10k_to_49950": "50 VND",
+      "bracket_50k_and_above": "100 VND"
+    },
+    "vcb_official_tick_size": 100,
+    "correction": "Bản 2.5 ghi '50đ' cho VCB là sai quy chế HOSE; VCB thuộc khung giá >= 50,000đ nên bước giá chính thức là 100đ."
+  },
+  "corporate_action_sources_audit": {
+    "limitation_of_k_ratio": "Tỷ số k(t) chỉ phát hiện được ngày GDKHQ (ex-date) và tỷ lệ điều chỉnh; KHÔNG THỂ suy ra pay_date (ngày trả cổ tức tiền mặt) hay list_date (ngày cổ phiếu thưởng/tách được phép giao dịch).",
+    "required_official_sources": [
+      "1. VSDC (Trung tâm Lưu ký Chứng khoán Việt Nam - vsd.vn): Thông báo thực hiện quyền và ngày đăng ký cuối cùng.",
+      "2. HOSE (Sở Giao dịch Chứng khoán TP.HCM - hsx.vn): Thông báo ngày GDKHQ, ngày thanh toán cổ tức và ngày niêm yết bổ sung.",
+      "3. Nhà cung cấp dữ liệu cấu trúc (FiinGroup FiinPro / Vietstock / SSI iBoard Events API)."
+    ],
+    "prerequisite_for_phase_4": "Nếu chưa ingest đầy đủ tệp corporate_actions_ledger.parquet có nguồn kiểm chứng từ VSDC/HOSE thì Giai đoạn 4 CHƯA THỂ THỰC THI vì simulator không có ngày mở khóa tiền và cổ phiếu."
+  }
+}

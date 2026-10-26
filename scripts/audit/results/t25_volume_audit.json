@@ -1,0 +1,5117 @@
+{
+  "generated_at": "2026-10-26T15:33:09.435058+07:00",
+  "summary": {
+    "HPG": {
+      "total_days": 2187,
+      "mismatch_days": 109,
+      "pct_mismatch": 4.983996342021033,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 31,
+      "mismatch_pre_2022_09_12": 23,
+      "mismatch_post_2022_09_12": 86
+    },
+    "VCB": {
+      "total_days": 2187,
+      "mismatch_days": 55,
+      "pct_mismatch": 2.5148605395518975,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 13,
+      "mismatch_post_2022_09_12": 42
+    },
+    "SSI": {
+      "total_days": 2188,
+      "mismatch_days": 82,
+      "pct_mismatch": 3.7477148080438756,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 15,
+      "mismatch_pre_2022_09_12": 19,
+      "mismatch_post_2022_09_12": 63
+    },
+    "FPT": {
+      "total_days": 2188,
+      "mismatch_days": 63,
+      "pct_mismatch": 2.8793418647166362,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 17,
+      "mismatch_post_2022_09_12": 46
+    },
+    "VNM": {
+      "total_days": 2187,
+      "mismatch_days": 56,
+      "pct_mismatch": 2.5605852766346593,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 12,
+      "mismatch_post_2022_09_12": 44
+    },
+    "MWG": {
+      "total_days": 2188,
+      "mismatch_days": 61,
+      "pct_mismatch": 2.787934186471664,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 15,
+      "mismatch_post_2022_09_12": 46
+    },
+    "VIC": {
+      "total_days": 2188,
+      "mismatch_days": 59,
+      "pct_mismatch": 2.696526508226691,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 14,
+      "mismatch_post_2022_09_12": 45
+    },
+    "VHM": {
+      "total_days": 2101,
+      "mismatch_days": 63,
+      "pct_mismatch": 2.9985721085197525,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 12,
+      "mismatch_post_2022_09_12": 51
+    },
+    "MSN": {
+      "total_days": 2188,
+      "mismatch_days": 58,
+      "pct_mismatch": 2.6508226691042047,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 11,
+      "mismatch_post_2022_09_12": 47
+    },
+    "BMP": {
+      "total_days": 2187,
+      "mismatch_days": 57,
+      "pct_mismatch": 2.606310013717421,
+      "diff_equals_pt_count": 0,
+      "diff_has_oddlot_count": 0,
+      "mismatch_pre_2022_09_12": 13,
+      "mismatch_post_2022_09_12": 44
+    }
+  },
+  "details_sample": {
+    "HPG": [
+      {
+        "date": "2021-07-05",
+        "entrade_vol": 37065500.0,
+        "cafef_match_vol": 36861600.0,
+        "cafef_pt_vol": 4282400.0,
+        "diff": 203900.0,
+        "diff_pct": 0.5531501616858736,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 39626500.0,
+        "cafef_match_vol": 48216300.0,
+        "cafef_pt_vol": 200000.0,
+        "diff": -8589800.0,
+        "diff_pct": -17.815137204638265,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-16",
+        "entrade_vol": 22253700.0,
+        "cafef_match_vol": 22253900.0,
+        "cafef_pt_vol": 157960.0,
+        "diff": -200.0,
+        "diff_pct": -0.0008987188762419172,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-19",
+        "entrade_vol": 39399300.0,
+        "cafef_match_vol": 39426100.0,
+        "cafef_pt_vol": 315000.0,
+        "diff": -26800.0,
+        "diff_pct": -0.06797527526181894,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-21",
+        "entrade_vol": 21315700.0,
+        "cafef_match_vol": 21335700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -20000.0,
+        "diff_pct": -0.09373960076304036,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 28755100.0,
+        "cafef_match_vol": 28904400.0,
+        "cafef_pt_vol": 1701000.0,
+        "diff": -149300.0,
+        "diff_pct": -0.5165303552400327,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-26",
+        "entrade_vol": 23484400.0,
+        "cafef_match_vol": 23485200.0,
+        "cafef_pt_vol": 884595.0,
+        "diff": -800.0,
+        "diff_pct": -0.0034064006267777156,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 24064800.0,
+        "cafef_match_vol": 24207000.0,
+        "cafef_pt_vol": 600000.0,
+        "diff": -142200.0,
+        "diff_pct": -0.5874333870368075,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-04",
+        "entrade_vol": 24329100.0,
+        "cafef_match_vol": 24177600.0,
+        "cafef_pt_vol": 254056.0,
+        "diff": 151500.0,
+        "diff_pct": 0.626613063331348,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-10",
+        "entrade_vol": 23318400.0,
+        "cafef_match_vol": 23186500.0,
+        "cafef_pt_vol": 2975600.0,
+        "diff": 131900.0,
+        "diff_pct": 0.5688655036335799,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-25",
+        "entrade_vol": 16395500.0,
+        "cafef_match_vol": 16402800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -7300.0,
+        "diff_pct": -0.04450459677616017,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-09-06",
+        "entrade_vol": 48098800.0,
+        "cafef_match_vol": 48098900.0,
+        "cafef_pt_vol": 835000.0,
+        "diff": -100.0,
+        "diff_pct": -0.0002079049624835495,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-10-27",
+        "entrade_vol": 28937500.0,
+        "cafef_match_vol": 28938100.0,
+        "cafef_pt_vol": 837000.0,
+        "diff": -600.0,
+        "diff_pct": -0.0020733911348706376,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-11-18",
+        "entrade_vol": 58592300.0,
+        "cafef_match_vol": 58606300.0,
+        "cafef_pt_vol": 2386500.0,
+        "diff": -14000.0,
+        "diff_pct": -0.02388821679580523,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-12-13",
+        "entrade_vol": 14305900.0,
+        "cafef_match_vol": 14309600.0,
+        "cafef_pt_vol": 2813418.0,
+        "diff": -3700.0,
+        "diff_pct": -0.025856767484765474,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-06",
+        "entrade_vol": 17171200.0,
+        "cafef_match_vol": 17172700.0,
+        "cafef_pt_vol": 413600.0,
+        "diff": -1500.0,
+        "diff_pct": -0.00873479417913316,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 15946500.0,
+        "cafef_match_vol": 17477500.0,
+        "cafef_pt_vol": 3175700.0,
+        "diff": -1531000.0,
+        "diff_pct": -8.759834072378773,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 17705400.0,
+        "cafef_match_vol": 13682800.0,
+        "cafef_pt_vol": 182300.0,
+        "diff": 4022600.0,
+        "diff_pct": 29.398953430584385,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 14665400.0,
+        "cafef_match_vol": 10346900.0,
+        "cafef_pt_vol": 420000.0,
+        "diff": 4318500.0,
+        "diff_pct": 41.737138659888465,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 38200000.0,
+        "cafef_match_vol": 38456100.0,
+        "cafef_pt_vol": 554400.0,
+        "diff": -256100.0,
+        "diff_pct": -0.665954165919061,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 12684700.0,
+        "cafef_match_vol": 12986000.0,
+        "cafef_pt_vol": 1454873.0,
+        "diff": -301300.0,
+        "diff_pct": -2.320190974896042,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 12663500.0,
+        "cafef_match_vol": 12698000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -34500.0,
+        "diff_pct": -0.27169633013072925,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 22699000.0,
+        "cafef_match_vol": 27729900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -5030900.0,
+        "diff_pct": -18.142510430978835,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 26167100.0,
+        "cafef_match_vol": 26170900.0,
+        "cafef_pt_vol": 320000.0,
+        "diff": -3800.0,
+        "diff_pct": -0.014519943907164063,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-15",
+        "entrade_vol": 13683900.0,
+        "cafef_match_vol": 13730400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -46500.0,
+        "diff_pct": -0.33866456913127074,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-14",
+        "entrade_vol": 22588500.0,
+        "cafef_match_vol": 22588600.0,
+        "cafef_pt_vol": 1000000.0,
+        "diff": -100.0,
+        "diff_pct": -0.00044270118555377497,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 17053000.0,
+        "cafef_match_vol": 17061300.0,
+        "cafef_pt_vol": 5770550.0,
+        "diff": -8300.0,
+        "diff_pct": -0.04864811005023064,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-11-01",
+        "entrade_vol": 81552304.0,
+        "cafef_match_vol": 81552300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 4.0,
+        "diff_pct": 4.904827944766732e-06,
+        "is_odd_lot": true,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-11-10",
+        "entrade_vol": 79749504.0,
+        "cafef_match_vol": 79749500.0,
+        "cafef_pt_vol": 122100.0,
+        "diff": 4.0,
+        "diff_pct": 5.015705427620236e-06,
+        "is_odd_lot": true,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-12-20",
+        "entrade_vol": 45551300.0,
+        "cafef_match_vol": 45551800.0,
+        "cafef_pt_vol": 263000.0,
+        "diff": -500.0,
+        "diff_pct": -0.0010976514649256451,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-02-06",
+        "entrade_vol": 22269800.0,
+        "cafef_match_vol": 22282300.0,
+        "cafef_pt_vol": 780000.0,
+        "diff": -12500.0,
+        "diff_pct": -0.056098338142830856,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 11963600.0,
+        "cafef_match_vol": 12857700.0,
+        "cafef_pt_vol": 80000.0,
+        "diff": -894100.0,
+        "diff_pct": -6.953809779354006,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 9895200.0,
+        "cafef_match_vol": 10743900.0,
+        "cafef_pt_vol": 3475800.0,
+        "diff": -848700.0,
+        "diff_pct": -7.899366151955993,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 12147800.0,
+        "cafef_match_vol": 13689600.0,
+        "cafef_pt_vol": 1660000.0,
+        "diff": -1541800.0,
+        "diff_pct": -11.26256428237494,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 19611100.0,
+        "cafef_match_vol": 20268000.0,
+        "cafef_pt_vol": 315800.0,
+        "diff": -656900.0,
+        "diff_pct": -3.241069666469311,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 11175800.0,
+        "cafef_match_vol": 12329100.0,
+        "cafef_pt_vol": 172000.0,
+        "diff": -1153300.0,
+        "diff_pct": -9.354291878563723,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 16925100.0,
+        "cafef_match_vol": 17942900.0,
+        "cafef_pt_vol": 315940.0,
+        "diff": -1017800.0,
+        "diff_pct": -5.672438680480859,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 20118100.0,
+        "cafef_match_vol": 20958100.0,
+        "cafef_pt_vol": 143000.0,
+        "diff": -840000.0,
+        "diff_pct": -4.007996908116671,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 22399300.0,
+        "cafef_match_vol": 23770300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1371000.0,
+        "diff_pct": -5.76770171180002,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 20755000.0,
+        "cafef_match_vol": 21370500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -615500.0,
+        "diff_pct": -2.8801385086918883,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 19205400.0,
+        "cafef_match_vol": 19864400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -659000.0,
+        "diff_pct": -3.317492599826826,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 25803200.0,
+        "cafef_match_vol": 27838900.0,
+        "cafef_pt_vol": 50000.0,
+        "diff": -2035700.0,
+        "diff_pct": -7.312429729622938,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 18438600.0,
+        "cafef_match_vol": 18563000.0,
+        "cafef_pt_vol": 8.0,
+        "diff": -124400.0,
+        "diff_pct": -0.6701502989818456,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 25901800.0,
+        "cafef_match_vol": 26545700.0,
+        "cafef_pt_vol": 300000.0,
+        "diff": -643900.0,
+        "diff_pct": -2.425628256177083,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 13700300.0,
+        "cafef_match_vol": 14416200.0,
+        "cafef_pt_vol": 250016.0,
+        "diff": -715900.0,
+        "diff_pct": -4.9659410940469755,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 10267000.0,
+        "cafef_match_vol": 10638200.0,
+        "cafef_pt_vol": 150000.0,
+        "diff": -371200.0,
+        "diff_pct": -3.4893121016713353,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 14227900.0,
+        "cafef_match_vol": 14712400.0,
+        "cafef_pt_vol": 365408.0,
+        "diff": -484500.0,
+        "diff_pct": -3.293140480139202,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 12664700.0,
+        "cafef_match_vol": 13607900.0,
+        "cafef_pt_vol": 200000.0,
+        "diff": -943200.0,
+        "diff_pct": -6.931267866459924,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 8797600.0,
+        "cafef_match_vol": 9275500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -477900.0,
+        "diff_pct": -5.152282895800766,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 11053400.0,
+        "cafef_match_vol": 11571700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -518300.0,
+        "diff_pct": -4.47903073878514,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "VCB": [
+      {
+        "date": "2021-07-05",
+        "entrade_vol": 2049100.0,
+        "cafef_match_vol": 1937000.0,
+        "cafef_pt_vol": 366900.0,
+        "diff": 112100.0,
+        "diff_pct": 5.787299948373774,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 1249600.0,
+        "cafef_match_vol": 1669600.0,
+        "cafef_pt_vol": 85000.0,
+        "diff": -420000.0,
+        "diff_pct": -25.155725922376615,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 1668700.0,
+        "cafef_match_vol": 1700300.0,
+        "cafef_pt_vol": 44000.0,
+        "diff": -31600.0,
+        "diff_pct": -1.8584955596071282,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 1279800.0,
+        "cafef_match_vol": 1285000.0,
+        "cafef_pt_vol": 110000.0,
+        "diff": -5200.0,
+        "diff_pct": -0.4046692607003891,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-11",
+        "entrade_vol": 1711700.0,
+        "cafef_match_vol": 1711800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -0.0058418039490594695,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-09-06",
+        "entrade_vol": 904500.0,
+        "cafef_match_vol": 905000.0,
+        "cafef_pt_vol": 73700.0,
+        "diff": -500.0,
+        "diff_pct": -0.05524861878453039,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 941200.0,
+        "cafef_match_vol": 1097000.0,
+        "cafef_pt_vol": 59000.0,
+        "diff": -155800.0,
+        "diff_pct": -14.202370100273473,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 914800.0,
+        "cafef_match_vol": 659600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 255200.0,
+        "diff_pct": 38.690115221346275,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 2794300.0,
+        "cafef_match_vol": 1377000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 1417300.0,
+        "diff_pct": 102.92665214233843,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 996900.0,
+        "cafef_match_vol": 1002800.0,
+        "cafef_pt_vol": 780000.0,
+        "diff": -5900.0,
+        "diff_pct": -0.5883526126844835,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 1007700.0,
+        "cafef_match_vol": 1018600.0,
+        "cafef_pt_vol": 30000.0,
+        "diff": -10900.0,
+        "diff_pct": -1.0700962104849794,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 2771900.0,
+        "cafef_match_vol": 2776600.0,
+        "cafef_pt_vol": 2044000.0,
+        "diff": -4700.0,
+        "diff_pct": -0.16927177123100193,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 1101400.0,
+        "cafef_match_vol": 1777800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -676400.0,
+        "diff_pct": -38.047024412194844,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 699800.0,
+        "cafef_match_vol": 700800.0,
+        "cafef_pt_vol": 325000.0,
+        "diff": -1000.0,
+        "diff_pct": -0.14269406392694062,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 1241000.0,
+        "cafef_match_vol": 1241400.0,
+        "cafef_pt_vol": 60000.0,
+        "diff": -400.0,
+        "diff_pct": -0.03222168519413565,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 763600.0,
+        "cafef_match_vol": 849500.0,
+        "cafef_pt_vol": 1096000.0,
+        "diff": -85900.0,
+        "diff_pct": -10.11183048852266,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 415300.0,
+        "cafef_match_vol": 630000.0,
+        "cafef_pt_vol": 43000.0,
+        "diff": -214700.0,
+        "diff_pct": -34.07936507936508,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 784100.0,
+        "cafef_match_vol": 845800.0,
+        "cafef_pt_vol": 43000.0,
+        "diff": -61700.0,
+        "diff_pct": -7.294868763301017,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 664000.0,
+        "cafef_match_vol": 950600.0,
+        "cafef_pt_vol": 83000.0,
+        "diff": -286600.0,
+        "diff_pct": -30.149379339364614,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 699600.0,
+        "cafef_match_vol": 736700.0,
+        "cafef_pt_vol": 76000.0,
+        "diff": -37100.0,
+        "diff_pct": -5.0359712230215825,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 226500.0,
+        "cafef_match_vol": 269900.0,
+        "cafef_pt_vol": 43000.0,
+        "diff": -43400.0,
+        "diff_pct": -16.08002964060763,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 286700.0,
+        "cafef_match_vol": 336000.0,
+        "cafef_pt_vol": 96000.0,
+        "diff": -49300.0,
+        "diff_pct": -14.672619047619047,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 350000.0,
+        "cafef_match_vol": 376300.0,
+        "cafef_pt_vol": 43000.0,
+        "diff": -26300.0,
+        "diff_pct": -6.989104437948446,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 645000.0,
+        "cafef_match_vol": 747200.0,
+        "cafef_pt_vol": 96000.0,
+        "diff": -102200.0,
+        "diff_pct": -13.677730192719487,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 583500.0,
+        "cafef_match_vol": 639300.0,
+        "cafef_pt_vol": 43000.0,
+        "diff": -55800.0,
+        "diff_pct": -8.728296574378227,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 546800.0,
+        "cafef_match_vol": 751600.0,
+        "cafef_pt_vol": 76000.0,
+        "diff": -204800.0,
+        "diff_pct": -27.248536455561467,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 457700.0,
+        "cafef_match_vol": 518400.0,
+        "cafef_pt_vol": 63000.0,
+        "diff": -60700.0,
+        "diff_pct": -11.709104938271606,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 451400.0,
+        "cafef_match_vol": 491000.0,
+        "cafef_pt_vol": 76000.0,
+        "diff": -39600.0,
+        "diff_pct": -8.065173116089614,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 390100.0,
+        "cafef_match_vol": 414800.0,
+        "cafef_pt_vol": 63000.0,
+        "diff": -24700.0,
+        "diff_pct": -5.954676952748312,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 457900.0,
+        "cafef_match_vol": 488900.0,
+        "cafef_pt_vol": 76000.0,
+        "diff": -31000.0,
+        "diff_pct": -6.340764982614032,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 611900.0,
+        "cafef_match_vol": 695100.0,
+        "cafef_pt_vol": 63000.0,
+        "diff": -83200.0,
+        "diff_pct": -11.969500791253058,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 363200.0,
+        "cafef_match_vol": 416900.0,
+        "cafef_pt_vol": 76000.0,
+        "diff": -53700.0,
+        "diff_pct": -12.880786759414727,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 223700.0,
+        "cafef_match_vol": 257800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -34100.0,
+        "diff_pct": -13.227307990690457,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 313600.0,
+        "cafef_match_vol": 356500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -42900.0,
+        "diff_pct": -12.03366058906031,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 470400.0,
+        "cafef_match_vol": 505800.0,
+        "cafef_pt_vol": 36000.0,
+        "diff": -35400.0,
+        "diff_pct": -6.998813760379596,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 502400.0,
+        "cafef_match_vol": 545800.0,
+        "cafef_pt_vol": 20000.0,
+        "diff": -43400.0,
+        "diff_pct": -7.951630633931843,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 605200.0,
+        "cafef_match_vol": 710200.0,
+        "cafef_pt_vol": 2302274.0,
+        "diff": -105000.0,
+        "diff_pct": -14.784567727400733,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 515100.0,
+        "cafef_match_vol": 580400.0,
+        "cafef_pt_vol": 140900.0,
+        "diff": -65300.0,
+        "diff_pct": -11.250861474844935,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 464000.0,
+        "cafef_match_vol": 704700.0,
+        "cafef_pt_vol": 36000.0,
+        "diff": -240700.0,
+        "diff_pct": -34.15637860082305,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 447300.0,
+        "cafef_match_vol": 496000.0,
+        "cafef_pt_vol": 63001.0,
+        "diff": -48700.0,
+        "diff_pct": -9.818548387096774,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-05",
+        "entrade_vol": 113900.0,
+        "cafef_match_vol": 225700.0,
+        "cafef_pt_vol": 174800.0,
+        "diff": -111800.0,
+        "diff_pct": -49.53478068232167,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-09",
+        "entrade_vol": 530900.0,
+        "cafef_match_vol": 563400.0,
+        "cafef_pt_vol": 456000.0,
+        "diff": -32500.0,
+        "diff_pct": -5.768548100816472,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-10",
+        "entrade_vol": 334000.0,
+        "cafef_match_vol": 417400.0,
+        "cafef_pt_vol": 403000.0,
+        "diff": -83400.0,
+        "diff_pct": -19.980833732630572,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-11",
+        "entrade_vol": 459000.0,
+        "cafef_match_vol": 505600.0,
+        "cafef_pt_vol": 176000.0,
+        "diff": -46600.0,
+        "diff_pct": -9.216772151898734,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-12",
+        "entrade_vol": 602400.0,
+        "cafef_match_vol": 710500.0,
+        "cafef_pt_vol": 183000.0,
+        "diff": -108100.0,
+        "diff_pct": -15.2146375791696,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-15",
+        "entrade_vol": 418500.0,
+        "cafef_match_vol": 450500.0,
+        "cafef_pt_vol": 228401.0,
+        "diff": -32000.0,
+        "diff_pct": -7.103218645948946,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-16",
+        "entrade_vol": 647700.0,
+        "cafef_match_vol": 666100.0,
+        "cafef_pt_vol": 63000.0,
+        "diff": -18400.0,
+        "diff_pct": -2.7623479957964268,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-17",
+        "entrade_vol": 517900.0,
+        "cafef_match_vol": 572700.0,
+        "cafef_pt_vol": 56000.0,
+        "diff": -54800.0,
+        "diff_pct": -9.568709621093067,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-18",
+        "entrade_vol": 1434300.0,
+        "cafef_match_vol": 1678500.0,
+        "cafef_pt_vol": 216300.0,
+        "diff": -244200.0,
+        "diff_pct": -14.54870420017873,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-19",
+        "entrade_vol": 416900.0,
+        "cafef_match_vol": 439900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -23000.0,
+        "diff_pct": -5.228461013866788,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "SSI": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 13319200.0,
+        "cafef_match_vol": 16593800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -3274600.0,
+        "diff_pct": -19.733876508093385,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-19",
+        "entrade_vol": 16571300.0,
+        "cafef_match_vol": 16575100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -3800.0,
+        "diff_pct": -0.022925955197857027,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-20",
+        "entrade_vol": 15305000.0,
+        "cafef_match_vol": 15305500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -500.0,
+        "diff_pct": -0.0032667995165136716,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-21",
+        "entrade_vol": 9502600.0,
+        "cafef_match_vol": 9507600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -5000.0,
+        "diff_pct": -0.05258950734149523,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 12157100.0,
+        "cafef_match_vol": 12283900.0,
+        "cafef_pt_vol": 194700.0,
+        "diff": -126800.0,
+        "diff_pct": -1.0322454595039035,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-26",
+        "entrade_vol": 9688700.0,
+        "cafef_match_vol": 9710400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -21700.0,
+        "diff_pct": -0.22347174163783162,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 15213200.0,
+        "cafef_match_vol": 15405800.0,
+        "cafef_pt_vol": 60000.0,
+        "diff": -192600.0,
+        "diff_pct": -1.2501785041997169,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-09-06",
+        "entrade_vol": 17068900.0,
+        "cafef_match_vol": 17069400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -500.0,
+        "diff_pct": -0.002929218367370851,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-10-27",
+        "entrade_vol": 12399000.0,
+        "cafef_match_vol": 12399100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -0.0008065101499302369,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-11-18",
+        "entrade_vol": 40954800.0,
+        "cafef_match_vol": 40958900.0,
+        "cafef_pt_vol": 300000.0,
+        "diff": -4100.0,
+        "diff_pct": -0.010010034449167336,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-06",
+        "entrade_vol": 13247500.0,
+        "cafef_match_vol": 13248000.0,
+        "cafef_pt_vol": 109400.0,
+        "diff": -500.0,
+        "diff_pct": -0.0037741545893719805,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 14840200.0,
+        "cafef_match_vol": 17471200.0,
+        "cafef_pt_vol": 112700.0,
+        "diff": -2631000.0,
+        "diff_pct": -15.059068638673931,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 11085500.0,
+        "cafef_match_vol": 8305000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 2780500.0,
+        "diff_pct": 33.47983142685129,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 9055600.0,
+        "cafef_match_vol": 5954300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 3101300.0,
+        "diff_pct": 52.08504778059554,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 11519800.0,
+        "cafef_match_vol": 11608800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -89000.0,
+        "diff_pct": -0.7666597753428434,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-25",
+        "entrade_vol": 7921600.0,
+        "cafef_match_vol": 7927800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -6200.0,
+        "diff_pct": -0.07820580741189233,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 4040700.0,
+        "cafef_match_vol": 4100800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -60100.0,
+        "diff_pct": -1.4655676941084665,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 7067400.0,
+        "cafef_match_vol": 7077100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -9700.0,
+        "diff_pct": -0.1370617908465332,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 27493000.0,
+        "cafef_match_vol": 35526300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -8033300.0,
+        "diff_pct": -22.61226190174603,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 11997400.0,
+        "cafef_match_vol": 11998300.0,
+        "cafef_pt_vol": 222500.0,
+        "diff": -900.0,
+        "diff_pct": -0.00750106265054216,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-15",
+        "entrade_vol": 9382000.0,
+        "cafef_match_vol": 9452700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -70700.0,
+        "diff_pct": -0.7479344525902651,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-14",
+        "entrade_vol": 22035600.0,
+        "cafef_match_vol": 22036600.0,
+        "cafef_pt_vol": 120000.0,
+        "diff": -1000.0,
+        "diff_pct": -0.0045379051214797204,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 13659200.0,
+        "cafef_match_vol": 13716400.0,
+        "cafef_pt_vol": 3325100.0,
+        "diff": -57200.0,
+        "diff_pct": -0.4170190428975533,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 11224300.0,
+        "cafef_match_vol": 12303400.0,
+        "cafef_pt_vol": 2233000.0,
+        "diff": -1079100.0,
+        "diff_pct": -8.770746297771348,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 16405000.0,
+        "cafef_match_vol": 17493200.0,
+        "cafef_pt_vol": 800000.0,
+        "diff": -1088200.0,
+        "diff_pct": -6.220702901698946,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 17851800.0,
+        "cafef_match_vol": 18614400.0,
+        "cafef_pt_vol": 78000.0,
+        "diff": -762600.0,
+        "diff_pct": -4.096828261990717,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 22678800.0,
+        "cafef_match_vol": 23493200.0,
+        "cafef_pt_vol": 3130000.0,
+        "diff": -814400.0,
+        "diff_pct": -3.4665349973609385,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 17833100.0,
+        "cafef_match_vol": 18885500.0,
+        "cafef_pt_vol": 215000.0,
+        "diff": -1052400.0,
+        "diff_pct": -5.57252918906039,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 14413800.0,
+        "cafef_match_vol": 15837600.0,
+        "cafef_pt_vol": 340000.0,
+        "diff": -1423800.0,
+        "diff_pct": -8.989998484618882,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 21860300.0,
+        "cafef_match_vol": 23213000.0,
+        "cafef_pt_vol": 180000.0,
+        "diff": -1352700.0,
+        "diff_pct": -5.827338129496403,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 30654900.0,
+        "cafef_match_vol": 31980500.0,
+        "cafef_pt_vol": 455000.0,
+        "diff": -1325600.0,
+        "diff_pct": -4.145025875142665,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 31071600.0,
+        "cafef_match_vol": 31835600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -764000.0,
+        "diff_pct": -2.3998291221148653,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 29983800.0,
+        "cafef_match_vol": 31003800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1020000.0,
+        "diff_pct": -3.2899193002148124,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 17129200.0,
+        "cafef_match_vol": 18373200.0,
+        "cafef_pt_vol": 45000.0,
+        "diff": -1244000.0,
+        "diff_pct": -6.770731282520193,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 22151000.0,
+        "cafef_match_vol": 25225900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -3074900.0,
+        "diff_pct": -12.189456074907138,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 25020200.0,
+        "cafef_match_vol": 25286000.0,
+        "cafef_pt_vol": 45000.0,
+        "diff": -265800.0,
+        "diff_pct": -1.0511745629992881,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 25160800.0,
+        "cafef_match_vol": 26255600.0,
+        "cafef_pt_vol": 240000.0,
+        "diff": -1094800.0,
+        "diff_pct": -4.169777114215634,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 24231700.0,
+        "cafef_match_vol": 25248600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1016900.0,
+        "diff_pct": -4.0275500423785875,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 15668000.0,
+        "cafef_match_vol": 17022900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1354900.0,
+        "diff_pct": -7.959278383824142,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 16638300.0,
+        "cafef_match_vol": 17746800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1108500.0,
+        "diff_pct": -6.2461964973967135,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 22609500.0,
+        "cafef_match_vol": 26940800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -4331300.0,
+        "diff_pct": -16.077102387456943,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 12517900.0,
+        "cafef_match_vol": 12903000.0,
+        "cafef_pt_vol": 56300.0,
+        "diff": -385100.0,
+        "diff_pct": -2.984577230101527,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 12877800.0,
+        "cafef_match_vol": 13629400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -751600.0,
+        "diff_pct": -5.5145494299088735,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 8463800.0,
+        "cafef_match_vol": 9547400.0,
+        "cafef_pt_vol": 711000.0,
+        "diff": -1083600.0,
+        "diff_pct": -11.349686825732661,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 30064700.0,
+        "cafef_match_vol": 30661000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -596300.0,
+        "diff_pct": -1.9448158898926975,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 9321800.0,
+        "cafef_match_vol": 9652100.0,
+        "cafef_pt_vol": 511000.0,
+        "diff": -330300.0,
+        "diff_pct": -3.4220532319391634,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 17466300.0,
+        "cafef_match_vol": 18712800.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -1246500.0,
+        "diff_pct": -6.661215852250865,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 16096000.0,
+        "cafef_match_vol": 17553400.0,
+        "cafef_pt_vol": 5464273.0,
+        "diff": -1457400.0,
+        "diff_pct": -8.302665010767145,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 8550700.0,
+        "cafef_match_vol": 9135900.0,
+        "cafef_pt_vol": 1.0,
+        "diff": -585200.0,
+        "diff_pct": -6.405499184535733,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 14030700.0,
+        "cafef_match_vol": 16660000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -2629300.0,
+        "diff_pct": -15.782112845138055,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "FPT": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 1967400.0,
+        "cafef_match_vol": 2640500.0,
+        "cafef_pt_vol": 1183600.0,
+        "diff": -673100.0,
+        "diff_pct": -25.49138420753645,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-21",
+        "entrade_vol": 3368900.0,
+        "cafef_match_vol": 3369200.0,
+        "cafef_pt_vol": 971486.0,
+        "diff": -300.0,
+        "diff_pct": -0.00890419090585302,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 6693400.0,
+        "cafef_match_vol": 6755700.0,
+        "cafef_pt_vol": 990000.0,
+        "diff": -62300.0,
+        "diff_pct": -0.9221842296135115,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-26",
+        "entrade_vol": 5772500.0,
+        "cafef_match_vol": 5773100.0,
+        "cafef_pt_vol": 1674500.0,
+        "diff": -600.0,
+        "diff_pct": -0.010393029741386776,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 4228500.0,
+        "cafef_match_vol": 4275900.0,
+        "cafef_pt_vol": 513600.0,
+        "diff": -47400.0,
+        "diff_pct": -1.1085385532870273,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-04",
+        "entrade_vol": 2818400.0,
+        "cafef_match_vol": 2772100.0,
+        "cafef_pt_vol": 390000.0,
+        "diff": 46300.0,
+        "diff_pct": 1.6702139172468526,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-10-06",
+        "entrade_vol": 1571100.0,
+        "cafef_match_vol": 1571300.0,
+        "cafef_pt_vol": 652100.0,
+        "diff": -200.0,
+        "diff_pct": -0.012728314134792846,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-10-22",
+        "entrade_vol": 2023200.0,
+        "cafef_match_vol": 2023400.0,
+        "cafef_pt_vol": 778500.0,
+        "diff": -200.0,
+        "diff_pct": -0.009884353069091627,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-11-18",
+        "entrade_vol": 2004700.0,
+        "cafef_match_vol": 2005000.0,
+        "cafef_pt_vol": 837000.0,
+        "diff": -300.0,
+        "diff_pct": -0.014962593516209476,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 1640800.0,
+        "cafef_match_vol": 1882400.0,
+        "cafef_pt_vol": 987000.0,
+        "diff": -241600.0,
+        "diff_pct": -12.834679133021677,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 744900.0,
+        "cafef_match_vol": 649300.0,
+        "cafef_pt_vol": 50000.0,
+        "diff": 95600.0,
+        "diff_pct": 14.723548436778069,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 1334600.0,
+        "cafef_match_vol": 767900.0,
+        "cafef_pt_vol": 21000.0,
+        "diff": 566700.0,
+        "diff_pct": 73.79867170204454,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 1687800.0,
+        "cafef_match_vol": 1698000.0,
+        "cafef_pt_vol": 222300.0,
+        "diff": -10200.0,
+        "diff_pct": -0.6007067137809188,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-17",
+        "entrade_vol": 1046000.0,
+        "cafef_match_vol": 1180600.0,
+        "cafef_pt_vol": 1571700.0,
+        "diff": -134600.0,
+        "diff_pct": -11.40098255124513,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 8154300.0,
+        "cafef_match_vol": 8224300.0,
+        "cafef_pt_vol": 243700.0,
+        "diff": -70000.0,
+        "diff_pct": -0.8511362669163334,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 5691600.0,
+        "cafef_match_vol": 5708900.0,
+        "cafef_pt_vol": 6169300.0,
+        "diff": -17300.0,
+        "diff_pct": -0.30303561106342725,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 1314800.0,
+        "cafef_match_vol": 1879700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -564900.0,
+        "diff_pct": -30.052667978932806,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 1145400.0,
+        "cafef_match_vol": 716000.0,
+        "cafef_pt_vol": 51000.0,
+        "diff": 429400.0,
+        "diff_pct": 59.97206703910615,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 706800.0,
+        "cafef_match_vol": 707400.0,
+        "cafef_pt_vol": 23520.0,
+        "diff": -600.0,
+        "diff_pct": -0.08481764206955046,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-02-06",
+        "entrade_vol": 943400.0,
+        "cafef_match_vol": 944400.0,
+        "cafef_pt_vol": 71324.0,
+        "diff": -1000.0,
+        "diff_pct": -0.10588733587462938,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 548000.0,
+        "cafef_match_vol": 610400.0,
+        "cafef_pt_vol": 352140.0,
+        "diff": -62400.0,
+        "diff_pct": -10.222804718217562,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 313700.0,
+        "cafef_match_vol": 356600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -42900.0,
+        "diff_pct": -12.030286034772855,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 281800.0,
+        "cafef_match_vol": 366700.0,
+        "cafef_pt_vol": 24000.0,
+        "diff": -84900.0,
+        "diff_pct": -23.152440687210255,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 718500.0,
+        "cafef_match_vol": 767200.0,
+        "cafef_pt_vol": 291080.0,
+        "diff": -48700.0,
+        "diff_pct": -6.3477580813347245,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 928000.0,
+        "cafef_match_vol": 1000400.0,
+        "cafef_pt_vol": 610800.0,
+        "diff": -72400.0,
+        "diff_pct": -7.237105157936825,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 369400.0,
+        "cafef_match_vol": 404500.0,
+        "cafef_pt_vol": 445800.0,
+        "diff": -35100.0,
+        "diff_pct": -8.677379480840544,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 337000.0,
+        "cafef_match_vol": 408400.0,
+        "cafef_pt_vol": 559800.0,
+        "diff": -71400.0,
+        "diff_pct": -17.482859941234082,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 564900.0,
+        "cafef_match_vol": 671600.0,
+        "cafef_pt_vol": 1072000.0,
+        "diff": -106700.0,
+        "diff_pct": -15.887432995830853,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 1075300.0,
+        "cafef_match_vol": 1170200.0,
+        "cafef_pt_vol": 20000.0,
+        "diff": -94900.0,
+        "diff_pct": -8.109724833361819,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 528100.0,
+        "cafef_match_vol": 584600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -56500.0,
+        "diff_pct": -9.6647280191584,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 373700.0,
+        "cafef_match_vol": 422000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -48300.0,
+        "diff_pct": -11.445497630331754,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 571400.0,
+        "cafef_match_vol": 612900.0,
+        "cafef_pt_vol": 20012.0,
+        "diff": -41500.0,
+        "diff_pct": -6.771088268885626,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 237400.0,
+        "cafef_match_vol": 359800.0,
+        "cafef_pt_vol": 3958578.0,
+        "diff": -122400.0,
+        "diff_pct": -34.018899388549194,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 726000.0,
+        "cafef_match_vol": 769800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -43800.0,
+        "diff_pct": -5.689789555728761,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 512800.0,
+        "cafef_match_vol": 534000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -21200.0,
+        "diff_pct": -3.9700374531835205,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 549900.0,
+        "cafef_match_vol": 574700.0,
+        "cafef_pt_vol": 63504.0,
+        "diff": -24800.0,
+        "diff_pct": -4.315294936488603,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 488300.0,
+        "cafef_match_vol": 540500.0,
+        "cafef_pt_vol": 20000.0,
+        "diff": -52200.0,
+        "diff_pct": -9.657724329324699,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 347000.0,
+        "cafef_match_vol": 398800.0,
+        "cafef_pt_vol": 163700.0,
+        "diff": -51800.0,
+        "diff_pct": -12.988966900702106,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 400700.0,
+        "cafef_match_vol": 449900.0,
+        "cafef_pt_vol": 173220.0,
+        "diff": -49200.0,
+        "diff_pct": -10.935763503000667,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 260800.0,
+        "cafef_match_vol": 301600.0,
+        "cafef_pt_vol": 31300.0,
+        "diff": -40800.0,
+        "diff_pct": -13.527851458885943,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 372400.0,
+        "cafef_match_vol": 419800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -47400.0,
+        "diff_pct": -11.291090995712244,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 330600.0,
+        "cafef_match_vol": 364400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -33800.0,
+        "diff_pct": -9.275521405049396,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 248000.0,
+        "cafef_match_vol": 324000.0,
+        "cafef_pt_vol": 59200.0,
+        "diff": -76000.0,
+        "diff_pct": -23.456790123456788,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 781900.0,
+        "cafef_match_vol": 794500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -12600.0,
+        "diff_pct": -1.5859030837004406,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 480500.0,
+        "cafef_match_vol": 540000.0,
+        "cafef_pt_vol": 417240.0,
+        "diff": -59500.0,
+        "diff_pct": -11.018518518518519,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 706100.0,
+        "cafef_match_vol": 772000.0,
+        "cafef_pt_vol": 518700.0,
+        "diff": -65900.0,
+        "diff_pct": -8.536269430051814,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 206900.0,
+        "cafef_match_vol": 221000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -14100.0,
+        "diff_pct": -6.380090497737556,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 540200.0,
+        "cafef_match_vol": 945600.0,
+        "cafef_pt_vol": 10402.0,
+        "diff": -405400.0,
+        "diff_pct": -42.87225042301184,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 461000.0,
+        "cafef_match_vol": 497200.0,
+        "cafef_pt_vol": 1926668.0,
+        "diff": -36200.0,
+        "diff_pct": -7.280772325020113,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-05",
+        "entrade_vol": 297500.0,
+        "cafef_match_vol": 319200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -21700.0,
+        "diff_pct": -6.798245614035088,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "VNM": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 3993400.0,
+        "cafef_match_vol": 4706900.0,
+        "cafef_pt_vol": 110000.0,
+        "diff": -713500.0,
+        "diff_pct": -15.158596953408827,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 4102400.0,
+        "cafef_match_vol": 4126700.0,
+        "cafef_pt_vol": 431900.0,
+        "diff": -24300.0,
+        "diff_pct": -0.5888482322436814,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-26",
+        "entrade_vol": 2791400.0,
+        "cafef_match_vol": 2791500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -0.0035823034210997673,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 2543500.0,
+        "cafef_match_vol": 2574300.0,
+        "cafef_pt_vol": 220000.0,
+        "diff": -30800.0,
+        "diff_pct": -1.196441751155654,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-10",
+        "entrade_vol": 5965600.0,
+        "cafef_match_vol": 5833300.0,
+        "cafef_pt_vol": 257600.0,
+        "diff": 132300.0,
+        "diff_pct": 2.2680129600740577,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 1735600.0,
+        "cafef_match_vol": 2146400.0,
+        "cafef_pt_vol": 247400.0,
+        "diff": -410800.0,
+        "diff_pct": -19.139023481177787,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 1764900.0,
+        "cafef_match_vol": 1309600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 455300.0,
+        "diff_pct": 34.766340867440434,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 1488400.0,
+        "cafef_match_vol": 736700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 751700.0,
+        "diff_pct": 102.03610696348582,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 3511900.0,
+        "cafef_match_vol": 3530800.0,
+        "cafef_pt_vol": 669000.0,
+        "diff": -18900.0,
+        "diff_pct": -0.535289452815226,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 2118000.0,
+        "cafef_match_vol": 2139300.0,
+        "cafef_pt_vol": 645640.0,
+        "diff": -21300.0,
+        "diff_pct": -0.9956527836208106,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 2796700.0,
+        "cafef_match_vol": 2800400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -3700.0,
+        "diff_pct": -0.13212398228824454,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 2031400.0,
+        "cafef_match_vol": 2600900.0,
+        "cafef_pt_vol": 458200.0,
+        "diff": -569500.0,
+        "diff_pct": -21.89626667691953,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-15",
+        "entrade_vol": 1207200.0,
+        "cafef_match_vol": 1207500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -300.0,
+        "diff_pct": -0.02484472049689441,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 1671300.0,
+        "cafef_match_vol": 1679700.0,
+        "cafef_pt_vol": 133000.0,
+        "diff": -8400.0,
+        "diff_pct": -0.500089301661011,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 710300.0,
+        "cafef_match_vol": 900200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -189900.0,
+        "diff_pct": -21.09531215285492,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 1194400.0,
+        "cafef_match_vol": 1285000.0,
+        "cafef_pt_vol": 520000.0,
+        "diff": -90600.0,
+        "diff_pct": -7.0505836575875485,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 850300.0,
+        "cafef_match_vol": 932300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -82000.0,
+        "diff_pct": -8.795452107690657,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 1212200.0,
+        "cafef_match_vol": 1371500.0,
+        "cafef_pt_vol": 20000.0,
+        "diff": -159300.0,
+        "diff_pct": -11.615020051039009,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 1437800.0,
+        "cafef_match_vol": 1650000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -212200.0,
+        "diff_pct": -12.860606060606061,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 842100.0,
+        "cafef_match_vol": 907400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -65300.0,
+        "diff_pct": -7.196385276614503,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 781300.0,
+        "cafef_match_vol": 838700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -57400.0,
+        "diff_pct": -6.843925122212949,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 877700.0,
+        "cafef_match_vol": 1076100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -198400.0,
+        "diff_pct": -18.436948239011244,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 775400.0,
+        "cafef_match_vol": 850600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -75200.0,
+        "diff_pct": -8.840818245944039,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 1659100.0,
+        "cafef_match_vol": 1819000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -159900.0,
+        "diff_pct": -8.790544255085212,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 903000.0,
+        "cafef_match_vol": 963400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -60400.0,
+        "diff_pct": -6.269462320946648,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 866600.0,
+        "cafef_match_vol": 905600.0,
+        "cafef_pt_vol": 61700.0,
+        "diff": -39000.0,
+        "diff_pct": -4.306537102473499,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 702800.0,
+        "cafef_match_vol": 794400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -91600.0,
+        "diff_pct": -11.530715005035248,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 764400.0,
+        "cafef_match_vol": 832700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -68300.0,
+        "diff_pct": -8.202233697610184,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 717800.0,
+        "cafef_match_vol": 782800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -65000.0,
+        "diff_pct": -8.30352580480327,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 910700.0,
+        "cafef_match_vol": 979100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -68400.0,
+        "diff_pct": -6.986007557961393,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 812500.0,
+        "cafef_match_vol": 889600.0,
+        "cafef_pt_vol": 858600.0,
+        "diff": -77100.0,
+        "diff_pct": -8.66681654676259,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 1214800.0,
+        "cafef_match_vol": 1294000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -79200.0,
+        "diff_pct": -6.120556414219474,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 1216500.0,
+        "cafef_match_vol": 1365400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -148900.0,
+        "diff_pct": -10.90522923685367,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 712600.0,
+        "cafef_match_vol": 931800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -219200.0,
+        "diff_pct": -23.52436145095514,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 690300.0,
+        "cafef_match_vol": 816300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -126000.0,
+        "diff_pct": -15.43550165380375,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 783700.0,
+        "cafef_match_vol": 822300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -38600.0,
+        "diff_pct": -4.694150553326037,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 971800.0,
+        "cafef_match_vol": 1107600.0,
+        "cafef_pt_vol": 26200.0,
+        "diff": -135800.0,
+        "diff_pct": -12.260743950884796,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 1267500.0,
+        "cafef_match_vol": 1370200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -102700.0,
+        "diff_pct": -7.495256166982922,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 858700.0,
+        "cafef_match_vol": 941600.0,
+        "cafef_pt_vol": 807400.0,
+        "diff": -82900.0,
+        "diff_pct": -8.804163126593032,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 1226400.0,
+        "cafef_match_vol": 1369100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -142700.0,
+        "diff_pct": -10.422905558396026,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 760200.0,
+        "cafef_match_vol": 1116700.0,
+        "cafef_pt_vol": 1019600.0,
+        "diff": -356500.0,
+        "diff_pct": -31.92442016656219,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 2491100.0,
+        "cafef_match_vol": 2657800.0,
+        "cafef_pt_vol": 364400.0,
+        "diff": -166700.0,
+        "diff_pct": -6.272104748288059,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-05",
+        "entrade_vol": 660100.0,
+        "cafef_match_vol": 712200.0,
+        "cafef_pt_vol": 574000.0,
+        "diff": -52100.0,
+        "diff_pct": -7.315360853692783,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-08",
+        "entrade_vol": 1101700.0,
+        "cafef_match_vol": 1227700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -126000.0,
+        "diff_pct": -10.263093589639162,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-09",
+        "entrade_vol": 809200.0,
+        "cafef_match_vol": 871300.0,
+        "cafef_pt_vol": 743900.0,
+        "diff": -62100.0,
+        "diff_pct": -7.127281074256858,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-10",
+        "entrade_vol": 826800.0,
+        "cafef_match_vol": 951600.0,
+        "cafef_pt_vol": 300001.0,
+        "diff": -124800.0,
+        "diff_pct": -13.114754098360656,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-11",
+        "entrade_vol": 412100.0,
+        "cafef_match_vol": 447300.0,
+        "cafef_pt_vol": 320200.0,
+        "diff": -35200.0,
+        "diff_pct": -7.869438855354348,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-12",
+        "entrade_vol": 868600.0,
+        "cafef_match_vol": 1214100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -345500.0,
+        "diff_pct": -28.457293468412814,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-15",
+        "entrade_vol": 1436500.0,
+        "cafef_match_vol": 1537800.0,
+        "cafef_pt_vol": 567800.0,
+        "diff": -101300.0,
+        "diff_pct": -6.587332552997789,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-16",
+        "entrade_vol": 1308100.0,
+        "cafef_match_vol": 1380300.0,
+        "cafef_pt_vol": 567100.0,
+        "diff": -72200.0,
+        "diff_pct": -5.230746939071216,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "MWG": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 790100.0,
+        "cafef_match_vol": 956200.0,
+        "cafef_pt_vol": 2073333.0,
+        "diff": -166100.0,
+        "diff_pct": -17.370842919891235,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 1197500.0,
+        "cafef_match_vol": 1223900.0,
+        "cafef_pt_vol": 842315.0,
+        "diff": -26400.0,
+        "diff_pct": -2.1570389737723668,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-26",
+        "entrade_vol": 1139100.0,
+        "cafef_match_vol": 1139800.0,
+        "cafef_pt_vol": 121100.0,
+        "diff": -700.0,
+        "diff_pct": -0.06141428320758028,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 1630900.0,
+        "cafef_match_vol": 1632800.0,
+        "cafef_pt_vol": 831300.0,
+        "diff": -1900.0,
+        "diff_pct": -0.11636452719255266,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-04",
+        "entrade_vol": 829400.0,
+        "cafef_match_vol": 815700.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": 13700.0,
+        "diff_pct": 1.6795390462179722,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-12-03",
+        "entrade_vol": 1051700.0,
+        "cafef_match_vol": 1052100.0,
+        "cafef_pt_vol": 64100.0,
+        "diff": -400.0,
+        "diff_pct": -0.038019199695846405,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-06",
+        "entrade_vol": 770900.0,
+        "cafef_match_vol": 771100.0,
+        "cafef_pt_vol": 2711300.0,
+        "diff": -200.0,
+        "diff_pct": -0.025936973155232784,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 772200.0,
+        "cafef_match_vol": 927000.0,
+        "cafef_pt_vol": 4543400.0,
+        "diff": -154800.0,
+        "diff_pct": -16.699029126213592,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 954800.0,
+        "cafef_match_vol": 792400.0,
+        "cafef_pt_vol": 921550.0,
+        "diff": 162400.0,
+        "diff_pct": 20.49469964664311,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 896900.0,
+        "cafef_match_vol": 294400.0,
+        "cafef_pt_vol": 338000.0,
+        "diff": 602500.0,
+        "diff_pct": 204.65353260869566,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 1139800.0,
+        "cafef_match_vol": 1144500.0,
+        "cafef_pt_vol": 345100.0,
+        "diff": -4700.0,
+        "diff_pct": -0.4106596767147226,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 2287900.0,
+        "cafef_match_vol": 2341100.0,
+        "cafef_pt_vol": 899400.0,
+        "diff": -53200.0,
+        "diff_pct": -2.2724360343428303,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 4042700.0,
+        "cafef_match_vol": 4049300.0,
+        "cafef_pt_vol": 590000.0,
+        "diff": -6600.0,
+        "diff_pct": -0.16299113427012077,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-05-10",
+        "entrade_vol": 1818500.0,
+        "cafef_match_vol": 1818800.0,
+        "cafef_pt_vol": 805000.0,
+        "diff": -300.0,
+        "diff_pct": -0.016494391906751706,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 1394900.0,
+        "cafef_match_vol": 2121500.0,
+        "cafef_pt_vol": 31000.0,
+        "diff": -726600.0,
+        "diff_pct": -34.249351873674286,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 7345700.0,
+        "cafef_match_vol": 7347100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1400.0,
+        "diff_pct": -0.019055137401151476,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-15",
+        "entrade_vol": 3178000.0,
+        "cafef_match_vol": 3182500.0,
+        "cafef_pt_vol": 889100.0,
+        "diff": -4500.0,
+        "diff_pct": -0.14139827179890022,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 2670100.0,
+        "cafef_match_vol": 2674800.0,
+        "cafef_pt_vol": 136000.0,
+        "diff": -4700.0,
+        "diff_pct": -0.17571407208015552,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 1181500.0,
+        "cafef_match_vol": 1507000.0,
+        "cafef_pt_vol": 1130000.0,
+        "diff": -325500.0,
+        "diff_pct": -21.599203715992036,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 1155400.0,
+        "cafef_match_vol": 1238600.0,
+        "cafef_pt_vol": 1651900.0,
+        "diff": -83200.0,
+        "diff_pct": -6.7172614241886,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 2261100.0,
+        "cafef_match_vol": 2465100.0,
+        "cafef_pt_vol": 705000.0,
+        "diff": -204000.0,
+        "diff_pct": -8.275526347815504,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 3965200.0,
+        "cafef_match_vol": 4198400.0,
+        "cafef_pt_vol": 1631300.0,
+        "diff": -233200.0,
+        "diff_pct": -5.554496951219512,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 1573100.0,
+        "cafef_match_vol": 1830200.0,
+        "cafef_pt_vol": 1176104.0,
+        "diff": -257100.0,
+        "diff_pct": -14.047645066112993,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 2470800.0,
+        "cafef_match_vol": 2665800.0,
+        "cafef_pt_vol": 3825300.0,
+        "diff": -195000.0,
+        "diff_pct": -7.314877335133918,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 1659500.0,
+        "cafef_match_vol": 1815500.0,
+        "cafef_pt_vol": 1658900.0,
+        "diff": -156000.0,
+        "diff_pct": -8.592674194436794,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 1837200.0,
+        "cafef_match_vol": 2112100.0,
+        "cafef_pt_vol": 1073000.0,
+        "diff": -274900.0,
+        "diff_pct": -13.015482221485724,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 2985700.0,
+        "cafef_match_vol": 3133300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -147600.0,
+        "diff_pct": -4.710688411578847,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 1741600.0,
+        "cafef_match_vol": 1971300.0,
+        "cafef_pt_vol": 559800.0,
+        "diff": -229700.0,
+        "diff_pct": -11.65220920204941,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 1886100.0,
+        "cafef_match_vol": 2032200.0,
+        "cafef_pt_vol": 628800.0,
+        "diff": -146100.0,
+        "diff_pct": -7.189253026276941,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 5488700.0,
+        "cafef_match_vol": 5829400.0,
+        "cafef_pt_vol": 5403972.0,
+        "diff": -340700.0,
+        "diff_pct": -5.844512299722098,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 2593600.0,
+        "cafef_match_vol": 2852300.0,
+        "cafef_pt_vol": 2897200.0,
+        "diff": -258700.0,
+        "diff_pct": -9.069873435473127,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 3818100.0,
+        "cafef_match_vol": 3970800.0,
+        "cafef_pt_vol": 1695700.0,
+        "diff": -152700.0,
+        "diff_pct": -3.8455726805681474,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 2903200.0,
+        "cafef_match_vol": 3135000.0,
+        "cafef_pt_vol": 581000.0,
+        "diff": -231800.0,
+        "diff_pct": -7.3939393939393945,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 2183100.0,
+        "cafef_match_vol": 2679300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -496200.0,
+        "diff_pct": -18.51976262456612,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 1275200.0,
+        "cafef_match_vol": 1406900.0,
+        "cafef_pt_vol": 464400.0,
+        "diff": -131700.0,
+        "diff_pct": -9.361006468121403,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 2578200.0,
+        "cafef_match_vol": 2755700.0,
+        "cafef_pt_vol": 875000.0,
+        "diff": -177500.0,
+        "diff_pct": -6.441194614798418,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 2834200.0,
+        "cafef_match_vol": 2949400.0,
+        "cafef_pt_vol": 801400.0,
+        "diff": -115200.0,
+        "diff_pct": -3.90587916186343,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 1246900.0,
+        "cafef_match_vol": 1416200.0,
+        "cafef_pt_vol": 1080000.0,
+        "diff": -169300.0,
+        "diff_pct": -11.95452619686485,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 2422500.0,
+        "cafef_match_vol": 2811100.0,
+        "cafef_pt_vol": 484400.0,
+        "diff": -388600.0,
+        "diff_pct": -13.823770054427092,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 3050800.0,
+        "cafef_match_vol": 3211100.0,
+        "cafef_pt_vol": 2067100.0,
+        "diff": -160300.0,
+        "diff_pct": -4.9920587960511975,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 2611400.0,
+        "cafef_match_vol": 2735300.0,
+        "cafef_pt_vol": 966056.0,
+        "diff": -123900.0,
+        "diff_pct": -4.529667678134026,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 1733100.0,
+        "cafef_match_vol": 1835600.0,
+        "cafef_pt_vol": 50000.0,
+        "diff": -102500.0,
+        "diff_pct": -5.584005229897581,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 983900.0,
+        "cafef_match_vol": 1286400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -302500.0,
+        "diff_pct": -23.51523631840796,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 1826600.0,
+        "cafef_match_vol": 2517300.0,
+        "cafef_pt_vol": 3162111.0,
+        "diff": -690700.0,
+        "diff_pct": -27.438128153179996,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 2300900.0,
+        "cafef_match_vol": 2462500.0,
+        "cafef_pt_vol": 1617900.0,
+        "diff": -161600.0,
+        "diff_pct": -6.562436548223351,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-05",
+        "entrade_vol": 1114200.0,
+        "cafef_match_vol": 1173200.0,
+        "cafef_pt_vol": 2469400.0,
+        "diff": -59000.0,
+        "diff_pct": -5.028980565973406,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-08",
+        "entrade_vol": 1166800.0,
+        "cafef_match_vol": 1273100.0,
+        "cafef_pt_vol": 76100.0,
+        "diff": -106300.0,
+        "diff_pct": -8.34969758856335,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-09",
+        "entrade_vol": 827400.0,
+        "cafef_match_vol": 931100.0,
+        "cafef_pt_vol": 50001.0,
+        "diff": -103700.0,
+        "diff_pct": -11.137364407689828,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-10",
+        "entrade_vol": 2118000.0,
+        "cafef_match_vol": 2354900.0,
+        "cafef_pt_vol": 776701.0,
+        "diff": -236900.0,
+        "diff_pct": -10.05987515393435,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-11",
+        "entrade_vol": 1541900.0,
+        "cafef_match_vol": 1659900.0,
+        "cafef_pt_vol": 599400.0,
+        "diff": -118000.0,
+        "diff_pct": -7.108861979637328,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "VIC": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 2639000.0,
+        "cafef_match_vol": 3006500.0,
+        "cafef_pt_vol": 388100.0,
+        "diff": -367500.0,
+        "diff_pct": -12.223515715948778,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-22",
+        "entrade_vol": 2237300.0,
+        "cafef_match_vol": 2242200.0,
+        "cafef_pt_vol": 4399710.0,
+        "diff": -4900.0,
+        "diff_pct": -0.2185353670502185,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 3037100.0,
+        "cafef_match_vol": 3088800.0,
+        "cafef_pt_vol": 1908596.0,
+        "diff": -51700.0,
+        "diff_pct": -1.673789173789174,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-26",
+        "entrade_vol": 1940000.0,
+        "cafef_match_vol": 1940200.0,
+        "cafef_pt_vol": 156100.0,
+        "diff": -200.0,
+        "diff_pct": -0.010308215647871353,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 1676900.0,
+        "cafef_match_vol": 1682400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -5500.0,
+        "diff_pct": -0.32691393247741324,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-09-06",
+        "entrade_vol": 1926300.0,
+        "cafef_match_vol": 1928800.0,
+        "cafef_pt_vol": 197000.0,
+        "diff": -2500.0,
+        "diff_pct": -0.1296142679386147,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-12-13",
+        "entrade_vol": 4075700.0,
+        "cafef_match_vol": 4076200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -500.0,
+        "diff_pct": -0.012266326480545606,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 2594000.0,
+        "cafef_match_vol": 2908500.0,
+        "cafef_pt_vol": 192000.0,
+        "diff": -314500.0,
+        "diff_pct": -10.81313391782706,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 2479700.0,
+        "cafef_match_vol": 1612700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 867000.0,
+        "diff_pct": 53.76077385750605,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 1689300.0,
+        "cafef_match_vol": 730800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 958500.0,
+        "diff_pct": 131.1576354679803,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 2427800.0,
+        "cafef_match_vol": 2442600.0,
+        "cafef_pt_vol": 621000.0,
+        "diff": -14800.0,
+        "diff_pct": -0.6059117333988373,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 2722800.0,
+        "cafef_match_vol": 2798300.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -75500.0,
+        "diff_pct": -2.6980666833434586,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 1844100.0,
+        "cafef_match_vol": 1867300.0,
+        "cafef_pt_vol": 30000.0,
+        "diff": -23200.0,
+        "diff_pct": -1.2424356022063943,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 958300.0,
+        "cafef_match_vol": 1372600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -414300.0,
+        "diff_pct": -30.183593180824715,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 551100.0,
+        "cafef_match_vol": 552900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1800.0,
+        "diff_pct": -0.32555615843733043,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 738200.0,
+        "cafef_match_vol": 738700.0,
+        "cafef_pt_vol": 1000000.0,
+        "diff": -500.0,
+        "diff_pct": -0.06768647624204684,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-12-20",
+        "entrade_vol": 2088300.0,
+        "cafef_match_vol": 2088400.0,
+        "cafef_pt_vol": 1000000.0,
+        "diff": -100.0,
+        "diff_pct": -0.004788354721317755,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-12-26",
+        "entrade_vol": 2367800.0,
+        "cafef_match_vol": 1832300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 535500.0,
+        "diff_pct": 29.225563499426947,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-21",
+        "entrade_vol": 1766700.0,
+        "cafef_match_vol": 1215600.0,
+        "cafef_pt_vol": 1500000.0,
+        "diff": 551100.0,
+        "diff_pct": 45.33563672260612,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 965900.0,
+        "cafef_match_vol": 1797500.0,
+        "cafef_pt_vol": 1254000.0,
+        "diff": -831600.0,
+        "diff_pct": -46.26425591098749,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 1254600.0,
+        "cafef_match_vol": 2073800.0,
+        "cafef_pt_vol": 641000.0,
+        "diff": -819200.0,
+        "diff_pct": -39.50236281222876,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 722200.0,
+        "cafef_match_vol": 830700.0,
+        "cafef_pt_vol": 1149000.0,
+        "diff": -108500.0,
+        "diff_pct": -13.061273624653907,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 608100.0,
+        "cafef_match_vol": 702000.0,
+        "cafef_pt_vol": 560000.0,
+        "diff": -93900.0,
+        "diff_pct": -13.376068376068377,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 718100.0,
+        "cafef_match_vol": 782500.0,
+        "cafef_pt_vol": 7195000.0,
+        "diff": -64400.0,
+        "diff_pct": -8.230031948881788,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 475600.0,
+        "cafef_match_vol": 585700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -110100.0,
+        "diff_pct": -18.79801946388936,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 935600.0,
+        "cafef_match_vol": 993600.0,
+        "cafef_pt_vol": 485000.0,
+        "diff": -58000.0,
+        "diff_pct": -5.837359098228664,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 4605300.0,
+        "cafef_match_vol": 4851800.0,
+        "cafef_pt_vol": 543800.0,
+        "diff": -246500.0,
+        "diff_pct": -5.080588647512264,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 1708000.0,
+        "cafef_match_vol": 1871700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -163700.0,
+        "diff_pct": -8.746059731794626,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 1869100.0,
+        "cafef_match_vol": 1974100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -105000.0,
+        "diff_pct": -5.3188794893875695,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 1788200.0,
+        "cafef_match_vol": 2064900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -276700.0,
+        "diff_pct": -13.400164656884112,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 2311500.0,
+        "cafef_match_vol": 2379600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -68100.0,
+        "diff_pct": -2.8618255168935955,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 1777500.0,
+        "cafef_match_vol": 2145100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -367600.0,
+        "diff_pct": -17.136730222367255,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 1534300.0,
+        "cafef_match_vol": 1847000.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -312700.0,
+        "diff_pct": -16.93015701136979,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 2696100.0,
+        "cafef_match_vol": 3646300.0,
+        "cafef_pt_vol": 360000.0,
+        "diff": -950200.0,
+        "diff_pct": -26.059292981926884,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 1628400.0,
+        "cafef_match_vol": 1919800.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -291400.0,
+        "diff_pct": -15.178664444212938,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 1324900.0,
+        "cafef_match_vol": 1662600.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -337700.0,
+        "diff_pct": -20.311560206904847,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 1237500.0,
+        "cafef_match_vol": 1758200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -520700.0,
+        "diff_pct": -29.61551586850188,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 1260900.0,
+        "cafef_match_vol": 1755800.0,
+        "cafef_pt_vol": 560000.0,
+        "diff": -494900.0,
+        "diff_pct": -28.18658161521813,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 1086400.0,
+        "cafef_match_vol": 1698600.0,
+        "cafef_pt_vol": 29800.0,
+        "diff": -612200.0,
+        "diff_pct": -36.04144589662074,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 888100.0,
+        "cafef_match_vol": 1496200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -608100.0,
+        "diff_pct": -40.642962170832774,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 1834700.0,
+        "cafef_match_vol": 2716400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -881700.0,
+        "diff_pct": -32.45840082462082,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 1305700.0,
+        "cafef_match_vol": 1836600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -530900.0,
+        "diff_pct": -28.90667537841664,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 2897300.0,
+        "cafef_match_vol": 3596000.0,
+        "cafef_pt_vol": 740000.0,
+        "diff": -698700.0,
+        "diff_pct": -19.42992213570634,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 1404000.0,
+        "cafef_match_vol": 2241100.0,
+        "cafef_pt_vol": 180000.0,
+        "diff": -837100.0,
+        "diff_pct": -37.35219311945027,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 1226800.0,
+        "cafef_match_vol": 1498400.0,
+        "cafef_pt_vol": 380000.0,
+        "diff": -271600.0,
+        "diff_pct": -18.126001067805657,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-05",
+        "entrade_vol": 1172000.0,
+        "cafef_match_vol": 1298800.0,
+        "cafef_pt_vol": 49200.0,
+        "diff": -126800.0,
+        "diff_pct": -9.762858022790267,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-08",
+        "entrade_vol": 1004800.0,
+        "cafef_match_vol": 1338200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -333400.0,
+        "diff_pct": -24.914063667613213,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-09",
+        "entrade_vol": 1023000.0,
+        "cafef_match_vol": 1113400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -90400.0,
+        "diff_pct": -8.1192742949524,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-10",
+        "entrade_vol": 911300.0,
+        "cafef_match_vol": 1069300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -158000.0,
+        "diff_pct": -14.776021696436922,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-11",
+        "entrade_vol": 1014700.0,
+        "cafef_match_vol": 1190300.0,
+        "cafef_pt_vol": 1.0,
+        "diff": -175600.0,
+        "diff_pct": -14.752583382340587,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "VHM": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 2814500.0,
+        "cafef_match_vol": 4255400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1440900.0,
+        "diff_pct": -33.860506650373644,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 2592800.0,
+        "cafef_match_vol": 2635200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -42400.0,
+        "diff_pct": -1.6089860352155434,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 4799700.0,
+        "cafef_match_vol": 4807700.0,
+        "cafef_pt_vol": 1600000.0,
+        "diff": -8000.0,
+        "diff_pct": -0.166399733760426,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-11",
+        "entrade_vol": 8249500.0,
+        "cafef_match_vol": 8250600.0,
+        "cafef_pt_vol": 3801100.0,
+        "diff": -1100.0,
+        "diff_pct": -0.013332363706881924,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-11-18",
+        "entrade_vol": 6312700.0,
+        "cafef_match_vol": 6316700.0,
+        "cafef_pt_vol": 45000.0,
+        "diff": -4000.0,
+        "diff_pct": -0.06332420409390979,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 9110500.0,
+        "cafef_match_vol": 9915000.0,
+        "cafef_pt_vol": 337300.0,
+        "diff": -804500.0,
+        "diff_pct": -8.113968734241048,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 3344400.0,
+        "cafef_match_vol": 2848500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 495900.0,
+        "diff_pct": 17.40916271721959,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 3627700.0,
+        "cafef_match_vol": 2159700.0,
+        "cafef_pt_vol": 384000.0,
+        "diff": 1468000.0,
+        "diff_pct": 67.97240357457054,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 7593900.0,
+        "cafef_match_vol": 7634300.0,
+        "cafef_pt_vol": 25000.0,
+        "diff": -40400.0,
+        "diff_pct": -0.5291906265145462,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 2862600.0,
+        "cafef_match_vol": 2945900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -83300.0,
+        "diff_pct": -2.827658779999321,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 6143200.0,
+        "cafef_match_vol": 6187200.0,
+        "cafef_pt_vol": 138800.0,
+        "diff": -44000.0,
+        "diff_pct": -0.7111455908973364,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 3186400.0,
+        "cafef_match_vol": 4320200.0,
+        "cafef_pt_vol": 530000.0,
+        "diff": -1133800.0,
+        "diff_pct": -26.24415536317763,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 3854700.0,
+        "cafef_match_vol": 3868500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -13800.0,
+        "diff_pct": -0.3567274137262505,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-15",
+        "entrade_vol": 1904900.0,
+        "cafef_match_vol": 1910900.0,
+        "cafef_pt_vol": 8646000.0,
+        "diff": -6000.0,
+        "diff_pct": -0.3139881731121461,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-27",
+        "entrade_vol": 1238200.0,
+        "cafef_match_vol": 1239500.0,
+        "cafef_pt_vol": 106900.0,
+        "diff": -1300.0,
+        "diff_pct": -0.10488100040338846,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 2933000.0,
+        "cafef_match_vol": 2934700.0,
+        "cafef_pt_vol": 2046000.0,
+        "diff": -1700.0,
+        "diff_pct": -0.057927556479367565,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 4074500.0,
+        "cafef_match_vol": 4394900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -320400.0,
+        "diff_pct": -7.290268265489545,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 2033500.0,
+        "cafef_match_vol": 2271200.0,
+        "cafef_pt_vol": 750000.0,
+        "diff": -237700.0,
+        "diff_pct": -10.465833039802748,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 2380400.0,
+        "cafef_match_vol": 2609300.0,
+        "cafef_pt_vol": 795000.0,
+        "diff": -228900.0,
+        "diff_pct": -8.7724677116468,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 1622900.0,
+        "cafef_match_vol": 1869300.0,
+        "cafef_pt_vol": 8104290.0,
+        "diff": -246400.0,
+        "diff_pct": -13.181404803937301,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 2390800.0,
+        "cafef_match_vol": 2550000.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -159200.0,
+        "diff_pct": -6.243137254901961,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 1099000.0,
+        "cafef_match_vol": 1251100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -152100.0,
+        "diff_pct": -12.157301574614339,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 1604300.0,
+        "cafef_match_vol": 1675100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -70800.0,
+        "diff_pct": -4.226613336517223,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 2352500.0,
+        "cafef_match_vol": 2718900.0,
+        "cafef_pt_vol": 479500.0,
+        "diff": -366400.0,
+        "diff_pct": -13.476038103644855,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 2725900.0,
+        "cafef_match_vol": 2842200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -116300.0,
+        "diff_pct": -4.091900640349025,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 1201100.0,
+        "cafef_match_vol": 1515600.0,
+        "cafef_pt_vol": 592600.0,
+        "diff": -314500.0,
+        "diff_pct": -20.75085774610715,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 2100200.0,
+        "cafef_match_vol": 2188900.0,
+        "cafef_pt_vol": 480000.0,
+        "diff": -88700.0,
+        "diff_pct": -4.0522636940929235,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 979500.0,
+        "cafef_match_vol": 1034200.0,
+        "cafef_pt_vol": 200000.0,
+        "diff": -54700.0,
+        "diff_pct": -5.289112357377683,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 666700.0,
+        "cafef_match_vol": 779800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -113100.0,
+        "diff_pct": -14.503718902282635,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 1272900.0,
+        "cafef_match_vol": 1326100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -53200.0,
+        "diff_pct": -4.011763818716537,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 1949500.0,
+        "cafef_match_vol": 2077500.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -128000.0,
+        "diff_pct": -6.161251504211792,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 1883900.0,
+        "cafef_match_vol": 2031500.0,
+        "cafef_pt_vol": 435000.0,
+        "diff": -147600.0,
+        "diff_pct": -7.265567314792025,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 1177100.0,
+        "cafef_match_vol": 1340500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -163400.0,
+        "diff_pct": -12.189481536740022,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 1011200.0,
+        "cafef_match_vol": 1318400.0,
+        "cafef_pt_vol": 250000.0,
+        "diff": -307200.0,
+        "diff_pct": -23.300970873786408,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 956200.0,
+        "cafef_match_vol": 1028000.0,
+        "cafef_pt_vol": 6662200.0,
+        "diff": -71800.0,
+        "diff_pct": -6.98443579766537,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 1664400.0,
+        "cafef_match_vol": 1761600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -97200.0,
+        "diff_pct": -5.517711171662126,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 880200.0,
+        "cafef_match_vol": 973100.0,
+        "cafef_pt_vol": 300000.0,
+        "diff": -92900.0,
+        "diff_pct": -9.54680916658103,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 430300.0,
+        "cafef_match_vol": 483600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -53300.0,
+        "diff_pct": -11.021505376344086,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 697500.0,
+        "cafef_match_vol": 734700.0,
+        "cafef_pt_vol": 34100.0,
+        "diff": -37200.0,
+        "diff_pct": -5.063291139240507,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 1296100.0,
+        "cafef_match_vol": 1344800.0,
+        "cafef_pt_vol": 402500.0,
+        "diff": -48700.0,
+        "diff_pct": -3.6213563355145744,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 889200.0,
+        "cafef_match_vol": 2139000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1249800.0,
+        "diff_pct": -58.42917251051893,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 1949600.0,
+        "cafef_match_vol": 2276700.0,
+        "cafef_pt_vol": 160000.0,
+        "diff": -327100.0,
+        "diff_pct": -14.367285984099793,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 2160800.0,
+        "cafef_match_vol": 2648000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -487200.0,
+        "diff_pct": -18.398791540785496,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 756500.0,
+        "cafef_match_vol": 1144900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -388400.0,
+        "diff_pct": -33.92436020613154,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 851100.0,
+        "cafef_match_vol": 1314400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -463300.0,
+        "diff_pct": -35.24802191113816,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-05",
+        "entrade_vol": 437500.0,
+        "cafef_match_vol": 793200.0,
+        "cafef_pt_vol": 1.0,
+        "diff": -355700.0,
+        "diff_pct": -44.843671205244576,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-08",
+        "entrade_vol": 765000.0,
+        "cafef_match_vol": 1057500.0,
+        "cafef_pt_vol": 597630.0,
+        "diff": -292500.0,
+        "diff_pct": -27.659574468085108,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-09",
+        "entrade_vol": 976000.0,
+        "cafef_match_vol": 1270100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -294100.0,
+        "diff_pct": -23.155657034879145,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-11",
+        "entrade_vol": 369600.0,
+        "cafef_match_vol": 523900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -154300.0,
+        "diff_pct": -29.452185531589997,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-12",
+        "entrade_vol": 1081200.0,
+        "cafef_match_vol": 1439700.0,
+        "cafef_pt_vol": 400000.0,
+        "diff": -358500.0,
+        "diff_pct": -24.901021046051262,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "MSN": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 1564800.0,
+        "cafef_match_vol": 2094500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -529700.0,
+        "diff_pct": -25.290045356887088,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-19",
+        "entrade_vol": 1431200.0,
+        "cafef_match_vol": 1431300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -0.006986655488017886,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 1612800.0,
+        "cafef_match_vol": 1647400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -34600.0,
+        "diff_pct": -2.100279227874226,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 1246700.0,
+        "cafef_match_vol": 1268100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -21400.0,
+        "diff_pct": -1.687564072234051,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 348800.0,
+        "cafef_match_vol": 445400.0,
+        "cafef_pt_vol": 1826000.0,
+        "diff": -96600.0,
+        "diff_pct": -21.688370004490345,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 1268700.0,
+        "cafef_match_vol": 787300.0,
+        "cafef_pt_vol": 32965170.0,
+        "diff": 481400.0,
+        "diff_pct": 61.145687793725386,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 874800.0,
+        "cafef_match_vol": 473500.0,
+        "cafef_pt_vol": 1066800.0,
+        "diff": 401300.0,
+        "diff_pct": 84.75184794086589,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 938500.0,
+        "cafef_match_vol": 942300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -3800.0,
+        "diff_pct": -0.403268598111005,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 571700.0,
+        "cafef_match_vol": 595200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -23500.0,
+        "diff_pct": -3.948252688172043,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 1750500.0,
+        "cafef_match_vol": 1750600.0,
+        "cafef_pt_vol": 1200000.0,
+        "diff": -100.0,
+        "diff_pct": -0.005712327202102137,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 719500.0,
+        "cafef_match_vol": 1114600.0,
+        "cafef_pt_vol": 137000.0,
+        "diff": -395100.0,
+        "diff_pct": -35.44769424008613,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-12",
+        "entrade_vol": 326100.0,
+        "cafef_match_vol": 327700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1600.0,
+        "diff_pct": -0.4882514494964907,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-09-15",
+        "entrade_vol": 537300.0,
+        "cafef_match_vol": 538400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1100.0,
+        "diff_pct": -0.20430906389301637,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 1478600.0,
+        "cafef_match_vol": 1481400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -2800.0,
+        "diff_pct": -0.18901039557175645,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 1703500.0,
+        "cafef_match_vol": 2038600.0,
+        "cafef_pt_vol": 1100000.0,
+        "diff": -335100.0,
+        "diff_pct": -16.437751398018246,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 1353700.0,
+        "cafef_match_vol": 1501600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -147900.0,
+        "diff_pct": -9.849493873201919,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 1538900.0,
+        "cafef_match_vol": 1640300.0,
+        "cafef_pt_vol": 579000.0,
+        "diff": -101400.0,
+        "diff_pct": -6.1817960129244645,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 1526800.0,
+        "cafef_match_vol": 1759500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -232700.0,
+        "diff_pct": -13.225348110258597,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 939400.0,
+        "cafef_match_vol": 1178200.0,
+        "cafef_pt_vol": 798000.0,
+        "diff": -238800.0,
+        "diff_pct": -20.26820573756578,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 1040000.0,
+        "cafef_match_vol": 1105900.0,
+        "cafef_pt_vol": 718000.0,
+        "diff": -65900.0,
+        "diff_pct": -5.9589474636043045,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 1099300.0,
+        "cafef_match_vol": 1340600.0,
+        "cafef_pt_vol": 1618800.0,
+        "diff": -241300.0,
+        "diff_pct": -17.9994032522751,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 1511300.0,
+        "cafef_match_vol": 1651800.0,
+        "cafef_pt_vol": 3785100.0,
+        "diff": -140500.0,
+        "diff_pct": -8.505872381644267,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 1223200.0,
+        "cafef_match_vol": 1319600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -96400.0,
+        "diff_pct": -7.305244013337376,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 770200.0,
+        "cafef_match_vol": 835000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -64800.0,
+        "diff_pct": -7.760479041916167,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 906000.0,
+        "cafef_match_vol": 1050000.0,
+        "cafef_pt_vol": 100000.0,
+        "diff": -144000.0,
+        "diff_pct": -13.714285714285715,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 530700.0,
+        "cafef_match_vol": 611100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -80400.0,
+        "diff_pct": -13.156602847324498,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 836800.0,
+        "cafef_match_vol": 863300.0,
+        "cafef_pt_vol": 4706000.0,
+        "diff": -26500.0,
+        "diff_pct": -3.0696165875130315,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 680200.0,
+        "cafef_match_vol": 753700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -73500.0,
+        "diff_pct": -9.751890672681439,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 1137200.0,
+        "cafef_match_vol": 1223300.0,
+        "cafef_pt_vol": 118100.0,
+        "diff": -86100.0,
+        "diff_pct": -7.038338919316603,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 1243800.0,
+        "cafef_match_vol": 1415100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -171300.0,
+        "diff_pct": -12.105151579393683,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 870800.0,
+        "cafef_match_vol": 912500.0,
+        "cafef_pt_vol": 2515000.0,
+        "diff": -41700.0,
+        "diff_pct": -4.5698630136986305,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 488000.0,
+        "cafef_match_vol": 536300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -48300.0,
+        "diff_pct": -9.006153272422152,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 1192200.0,
+        "cafef_match_vol": 1244600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -52400.0,
+        "diff_pct": -4.210188012212759,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 692200.0,
+        "cafef_match_vol": 754800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -62600.0,
+        "diff_pct": -8.29358770535241,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 1032200.0,
+        "cafef_match_vol": 1126600.0,
+        "cafef_pt_vol": 20100.0,
+        "diff": -94400.0,
+        "diff_pct": -8.37919403515001,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 1308700.0,
+        "cafef_match_vol": 1591200.0,
+        "cafef_pt_vol": 1480000.0,
+        "diff": -282500.0,
+        "diff_pct": -17.753896430367018,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 916300.0,
+        "cafef_match_vol": 1018400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -102100.0,
+        "diff_pct": -10.025530243519245,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 1097800.0,
+        "cafef_match_vol": 1167500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -69700.0,
+        "diff_pct": -5.970021413276231,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 423200.0,
+        "cafef_match_vol": 466300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -43100.0,
+        "diff_pct": -9.242976624490671,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 374700.0,
+        "cafef_match_vol": 612100.0,
+        "cafef_pt_vol": 1265000.0,
+        "diff": -237400.0,
+        "diff_pct": -38.784512334585855,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 702400.0,
+        "cafef_match_vol": 824100.0,
+        "cafef_pt_vol": 1.0,
+        "diff": -121700.0,
+        "diff_pct": -14.767625288193182,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-08",
+        "entrade_vol": 963500.0,
+        "cafef_match_vol": 1035000.0,
+        "cafef_pt_vol": 1367000.0,
+        "diff": -71500.0,
+        "diff_pct": -6.908212560386473,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-09",
+        "entrade_vol": 621800.0,
+        "cafef_match_vol": 646900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -25100.0,
+        "diff_pct": -3.880043283351368,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-10",
+        "entrade_vol": 696600.0,
+        "cafef_match_vol": 749900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -53300.0,
+        "diff_pct": -7.10761434857981,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-11",
+        "entrade_vol": 445100.0,
+        "cafef_match_vol": 454100.0,
+        "cafef_pt_vol": 2716000.0,
+        "diff": -9000.0,
+        "diff_pct": -1.9819423034573882,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-12",
+        "entrade_vol": 396400.0,
+        "cafef_match_vol": 431700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -35300.0,
+        "diff_pct": -8.17697475098448,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-15",
+        "entrade_vol": 674600.0,
+        "cafef_match_vol": 718700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -44100.0,
+        "diff_pct": -6.136079031584806,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-16",
+        "entrade_vol": 331700.0,
+        "cafef_match_vol": 384400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -52700.0,
+        "diff_pct": -13.709677419354838,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-17",
+        "entrade_vol": 573200.0,
+        "cafef_match_vol": 645600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -72400.0,
+        "diff_pct": -11.214374225526642,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-18",
+        "entrade_vol": 860100.0,
+        "cafef_match_vol": 994700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -134600.0,
+        "diff_pct": -13.531718105961597,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ],
+    "BMP": [
+      {
+        "date": "2021-07-06",
+        "entrade_vol": 92500.0,
+        "cafef_match_vol": 106100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -13600.0,
+        "diff_pct": -12.818096135721019,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-07-23",
+        "entrade_vol": 15300.0,
+        "cafef_match_vol": 15500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -200.0,
+        "diff_pct": -1.2903225806451613,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-08-02",
+        "entrade_vol": 101500.0,
+        "cafef_match_vol": 102700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1200.0,
+        "diff_pct": -1.1684518013631937,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2021-12-28",
+        "entrade_vol": 57000.0,
+        "cafef_match_vol": 57100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -0.17513134851138354,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-10",
+        "entrade_vol": 68100.0,
+        "cafef_match_vol": 68900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -800.0,
+        "diff_pct": -1.1611030478955007,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-19",
+        "entrade_vol": 22800.0,
+        "cafef_match_vol": 19300.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 3500.0,
+        "diff_pct": 18.134715025906736,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-01-20",
+        "entrade_vol": 22100.0,
+        "cafef_match_vol": 11500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": 10600.0,
+        "diff_pct": 92.17391304347827,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-07",
+        "entrade_vol": 132900.0,
+        "cafef_match_vol": 133400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -500.0,
+        "diff_pct": -0.3748125937031484,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-03-29",
+        "entrade_vol": 64000.0,
+        "cafef_match_vol": 64200.0,
+        "cafef_pt_vol": 104000.0,
+        "diff": -200.0,
+        "diff_pct": -0.3115264797507788,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-04-22",
+        "entrade_vol": 104000.0,
+        "cafef_match_vol": 105800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1800.0,
+        "diff_pct": -1.7013232514177694,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-06-08",
+        "entrade_vol": 20800.0,
+        "cafef_match_vol": 21800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -1000.0,
+        "diff_pct": -4.587155963302752,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-07-19",
+        "entrade_vol": 4600.0,
+        "cafef_match_vol": 4700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -2.127659574468085,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-08-02",
+        "entrade_vol": 16600.0,
+        "cafef_match_vol": 25100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -8500.0,
+        "diff_pct": -33.86454183266932,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2022-10-17",
+        "entrade_vol": 26300.0,
+        "cafef_match_vol": 26400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -0.3787878787878788,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-01-06",
+        "entrade_vol": 4500.0,
+        "cafef_match_vol": 4600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -100.0,
+        "diff_pct": -2.1739130434782608,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-22",
+        "entrade_vol": 500.0,
+        "cafef_match_vol": 19100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -18600.0,
+        "diff_pct": -97.38219895287958,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-23",
+        "entrade_vol": 20700.0,
+        "cafef_match_vol": 26000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -5300.0,
+        "diff_pct": -20.384615384615383,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-24",
+        "entrade_vol": 108400.0,
+        "cafef_match_vol": 133500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -25100.0,
+        "diff_pct": -18.801498127340825,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-27",
+        "entrade_vol": 11400.0,
+        "cafef_match_vol": 48400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -37000.0,
+        "diff_pct": -76.44628099173553,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-28",
+        "entrade_vol": 1700.0,
+        "cafef_match_vol": 12500.0,
+        "cafef_pt_vol": 20000.0,
+        "diff": -10800.0,
+        "diff_pct": -86.4,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-29",
+        "entrade_vol": 100.0,
+        "cafef_match_vol": 15800.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -15700.0,
+        "diff_pct": -99.36708860759494,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-30",
+        "entrade_vol": 18800.0,
+        "cafef_match_vol": 39900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -21100.0,
+        "diff_pct": -52.88220551378446,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-03-31",
+        "entrade_vol": 7200.0,
+        "cafef_match_vol": 56400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -49200.0,
+        "diff_pct": -87.2340425531915,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-03",
+        "entrade_vol": 40700.0,
+        "cafef_match_vol": 66200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -25500.0,
+        "diff_pct": -38.51963746223565,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-04",
+        "entrade_vol": 18800.0,
+        "cafef_match_vol": 47100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -28300.0,
+        "diff_pct": -60.08492569002123,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-05",
+        "entrade_vol": 26700.0,
+        "cafef_match_vol": 70200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -43500.0,
+        "diff_pct": -61.965811965811966,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-06",
+        "entrade_vol": 64900.0,
+        "cafef_match_vol": 88100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -23200.0,
+        "diff_pct": -26.333711691259932,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-07",
+        "entrade_vol": 37100.0,
+        "cafef_match_vol": 141700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -104600.0,
+        "diff_pct": -73.81792519407199,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-10",
+        "entrade_vol": 69900.0,
+        "cafef_match_vol": 77700.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -7800.0,
+        "diff_pct": -10.038610038610038,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-11",
+        "entrade_vol": 13100.0,
+        "cafef_match_vol": 22600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -9500.0,
+        "diff_pct": -42.0353982300885,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-12",
+        "entrade_vol": 29300.0,
+        "cafef_match_vol": 39000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -9700.0,
+        "diff_pct": -24.871794871794872,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-13",
+        "entrade_vol": 40800.0,
+        "cafef_match_vol": 52200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -11400.0,
+        "diff_pct": -21.839080459770116,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-14",
+        "entrade_vol": 50800.0,
+        "cafef_match_vol": 51000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -200.0,
+        "diff_pct": -0.39215686274509803,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-17",
+        "entrade_vol": 68900.0,
+        "cafef_match_vol": 74100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -5200.0,
+        "diff_pct": -7.017543859649122,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-18",
+        "entrade_vol": 22300.0,
+        "cafef_match_vol": 52300.0,
+        "cafef_pt_vol": 105000.0,
+        "diff": -30000.0,
+        "diff_pct": -57.361376673040155,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-19",
+        "entrade_vol": 996200.0,
+        "cafef_match_vol": 1026500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -30300.0,
+        "diff_pct": -2.9517778860204578,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-20",
+        "entrade_vol": 441100.0,
+        "cafef_match_vol": 572400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -131300.0,
+        "diff_pct": -22.938504542278125,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-21",
+        "entrade_vol": 454200.0,
+        "cafef_match_vol": 566600.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -112400.0,
+        "diff_pct": -19.837627956230143,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-24",
+        "entrade_vol": 457600.0,
+        "cafef_match_vol": 480000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -22400.0,
+        "diff_pct": -4.666666666666667,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-25",
+        "entrade_vol": 738500.0,
+        "cafef_match_vol": 758000.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -19500.0,
+        "diff_pct": -2.5725593667546174,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-26",
+        "entrade_vol": 854800.0,
+        "cafef_match_vol": 864000.0,
+        "cafef_pt_vol": 85400.0,
+        "diff": -9200.0,
+        "diff_pct": -1.0648148148148149,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-27",
+        "entrade_vol": 487500.0,
+        "cafef_match_vol": 506000.0,
+        "cafef_pt_vol": 51100.0,
+        "diff": -18500.0,
+        "diff_pct": -3.6561264822134385,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-04-28",
+        "entrade_vol": 354100.0,
+        "cafef_match_vol": 389400.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -35300.0,
+        "diff_pct": -9.065228556753981,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-04",
+        "entrade_vol": 506800.0,
+        "cafef_match_vol": 557100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -50300.0,
+        "diff_pct": -9.028899658948124,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-08",
+        "entrade_vol": 248400.0,
+        "cafef_match_vol": 275100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -26700.0,
+        "diff_pct": -9.70556161395856,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-09",
+        "entrade_vol": 610900.0,
+        "cafef_match_vol": 623900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -13000.0,
+        "diff_pct": -2.083667254367687,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-10",
+        "entrade_vol": 322700.0,
+        "cafef_match_vol": 349900.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -27200.0,
+        "diff_pct": -7.773649614175479,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-11",
+        "entrade_vol": 445000.0,
+        "cafef_match_vol": 459200.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -14200.0,
+        "diff_pct": -3.092334494773519,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-12",
+        "entrade_vol": 178000.0,
+        "cafef_match_vol": 202500.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -24500.0,
+        "diff_pct": -12.098765432098766,
+        "is_odd_lot": false,
+        "equals_pt": false
+      },
+      {
+        "date": "2023-05-15",
+        "entrade_vol": 279100.0,
+        "cafef_match_vol": 295100.0,
+        "cafef_pt_vol": 0.0,
+        "diff": -16000.0,
+        "diff_pct": -5.421890884445951,
+        "is_odd_lot": false,
+        "equals_pt": false
+      }
+    ]
+  }
+}
