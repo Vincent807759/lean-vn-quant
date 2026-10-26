@@ -158,10 +158,55 @@ def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
 # 2. STEP 1: MARKET DATA INGESTION FROM REST API / PARQUET
 # ==============================================================================
 
-def fetch_or_update_data(parquet_file: str, is_replay: bool = False) -> pl.DataFrame:
+def check_cache_overlap_and_reconcile(
+    df_cache: pl.DataFrame,
+    df_new: pl.DataFrame,
+    overlap_window: int = 20,
+    tolerance: float = 1e-6
+) -> bool:
+    """
+    Checks the overlap of up to `overlap_window` sessions between cached data and newly fetched data.
+    Adheres to B2/S2/T3:
+    Returns True if cache is valid (relative price difference <= tolerance on all overlapping bars).
+    Returns False if corporate actions (splits, dividends) rewrote historical prices, requiring full refetch.
+    """
+    cache_dates = set(df_cache["date"].unique().to_list())
+    new_dates = set(df_new["date"].unique().to_list())
+    common_dates = sorted(cache_dates & new_dates)
+    
+    if not common_dates:
+        return True
+        
+    overlap_dates = common_dates[-overlap_window:]
+    
+    cache_sub = df_cache.filter(pl.col("date").is_in(overlap_dates)).select(["date", "symbol", "adj_close"])
+    new_sub = df_new.filter(pl.col("date").is_in(overlap_dates)).select(["date", "symbol", "adj_close"])
+    
+    joined = cache_sub.join(new_sub, on=["date", "symbol"], suffix="_new")
+    if len(joined) == 0:
+        return True
+        
+    diffs = (joined["adj_close"] - joined["adj_close_new"]).abs() / joined["adj_close"]
+    max_diff = diffs.max()
+    
+    if max_diff is not None and max_diff > tolerance:
+        return False
+    return True
+
+
+def fetch_or_update_data(
+    parquet_file: str,
+    is_replay: bool = False,
+    calibration_file: Optional[str] = None
+) -> pl.DataFrame:
     """
     Ingests or updates VN30 daily OHLCV dataset.
     Uses cached Parquet file if in replay mode or if no new candles available.
+    Adheres to B2/S2/T3/T8:
+    - Drops incomplete intraday candle if fetched before 15:05 ICT.
+    - Validates 20 overlapping bars with tolerance 1e-6.
+    - On corporate action mismatch: Refetches entire history and invalidates/refreshes calibration table.
+    - On API error: preserves cached storage untouched.
     """
     if not os.path.exists(parquet_file):
         print(f"[DATA] Parquet storage {parquet_file} not found. Fetching historical data from Entrade API...")
@@ -174,25 +219,68 @@ def fetch_or_update_data(parquet_file: str, is_replay: bool = False) -> pl.DataF
     if is_replay:
         return df_market
 
-    latest_dt = df_market.select("date").max().item()
-    today = datetime.date.today()
+    cache_dates = sorted(df_market["date"].unique().to_list())
+    latest_dt = cache_dates[-1]
     
-    if today > latest_dt:
-        print(f"[DATA] Latest recorded session: {latest_dt}. Checking for new candles up to {today}...")
+    vn_tz = datetime.timezone(datetime.timedelta(hours=7))
+    now_vn = datetime.datetime.now(vn_tz)
+    today = now_vn.date()
+    
+    if today >= latest_dt:
+        overlap_idx = max(0, len(cache_dates) - 20)
+        fetch_start_dt = cache_dates[overlap_idx]
+        
         try:
             df_new = dp.fetch_vn_ohlcv(
-                start_date=latest_dt.isoformat(),
+                start_date=fetch_start_dt.isoformat(),
                 end_date=today.isoformat(),
                 save_parquet=None,
                 force_fallback=False
             )
+            
             if df_new is not None and len(df_new) > 0:
-                combined = pl.concat([df_market, df_new]).unique(subset=["symbol", "date"], keep="last").sort(["date", "symbol"])
-                combined.write_parquet(parquet_file)
-                print(f"[DATA] Appended {len(df_new)} new daily candles to {parquet_file}.")
-                return combined
+                # T3: Drop incomplete intraday bar of today if called before market close (15:05 ICT)
+                if now_vn.time() < datetime.time(15, 5):
+                    df_new = df_new.filter(pl.col("date") < today)
+                    
+                if len(df_new) == 0:
+                    return df_market
+                    
+                # B2/S2/T3: Check overlap across the 20 overlapping sessions
+                is_cache_consistent = check_cache_overlap_and_reconcile(
+                    df_cache=df_market,
+                    df_new=df_new,
+                    overlap_window=20,
+                    tolerance=1e-6
+                )
+                
+                if not is_cache_consistent:
+                    print(f"[DATA WARNING] Historical price adjustment (split/dividend) detected on overlap window! Refetching entire history...")
+                    earliest_dt = cache_dates[0]
+                    df_market = dp.fetch_vn_ohlcv(
+                        start_date=earliest_dt.isoformat(),
+                        end_date=today.isoformat(),
+                        save_parquet=parquet_file,
+                        force_fallback=False
+                    )
+                    # T8/B2: Invalidate calibration/raw price cache when new corporate actions occur
+                    if calibration_file and os.path.exists(calibration_file):
+                        try:
+                            os.remove(calibration_file)
+                            print(f"[DATA] Invalidated calibration cache: {calibration_file}")
+                        except Exception as ce:
+                            print(f"[DATA WARNING] Could not remove calibration cache: {ce}")
+                    print(f"[DATA] Full history successfully refreshed and saved to {parquet_file}.")
+                    return df_market
+                else:
+                    new_candles = df_new.filter(pl.col("date") > latest_dt)
+                    if len(new_candles) > 0:
+                        combined = pl.concat([df_market, new_candles]).sort(["date", "symbol"])
+                        combined.write_parquet(parquet_file)
+                        print(f"[DATA] Appended {len(new_candles)} new daily candles to {parquet_file}.")
+                        return combined
         except Exception as e:
-            print(f"[DATA WARNING] Could not fetch live API data ({e}). Continuing with cached storage.")
+            print(f"[DATA WARNING] Could not fetch live API data ({e}). Continuing with cached storage untouched.")
             
     return df_market
 
