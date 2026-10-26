@@ -237,7 +237,7 @@ def _calc_dynamic_slippage(
     return max(base_slippage, max(half_spread_floor, total_slip))
 
 
-@numba.njit(fastmath=True)
+@numba.njit(debug=True)
 def _simulate_vn_microstructure_core(
     raw_open: np.ndarray,
     raw_close: np.ndarray,
@@ -361,8 +361,10 @@ def _simulate_vn_microstructure_core(
         holdings_val_open = 0.0
         locked_corp_val_open = 0.0
         for i in range(N):
-            holdings_val_open += shares_held[i] * raw_open[t, i]
-            locked_corp_val_open += locked_corp_shares[i] * raw_open[t, i]
+            if shares_held[i] > 0.0:
+                holdings_val_open += shares_held[i] * raw_open[t, i]
+            if locked_corp_shares[i] > 0.0:
+                locked_corp_val_open += locked_corp_shares[i] * raw_open[t, i]
             
             # Liquidation grace check: stock excluded from PIT universe
             if not in_pit_universe[t, i]:
@@ -387,7 +389,7 @@ def _simulate_vn_microstructure_core(
             else:
                 target_val = target_weights[t, i] * port_val_open
                 price_i = raw_open[t, i]
-                if price_i > 0:
+                if np.isfinite(price_i) and price_i > 0.0 and np.isfinite(target_val):
                     target_sh = np.floor(target_val / (price_i * 100.0)) * 100.0
                 else:
                     target_sh = 0.0
@@ -441,6 +443,8 @@ def _simulate_vn_microstructure_core(
             if desired_sell > 0.0:
                 p_open = raw_open[t, i]
                 flr_p = floor[t, i]
+                if p_open <= 0.0 or not np.isfinite(p_open):
+                    continue
                 
                 avail_sell = max(0.0, shares_sellable[i] - trapped_sell_shares[i])
                 qty_sell = min(desired_sell, avail_sell)
@@ -486,7 +490,9 @@ def _simulate_vn_microstructure_core(
                 p_open = raw_open[t, i]
                 ceil_p = ceiling[t, i]
                 
-                # Check ceiling lock at ATO open
+                # Check valid positive open price and ceiling lock
+                if p_open <= 0.0 or not np.isfinite(p_open):
+                    continue
                 if p_open >= ceil_p - 1e-4:
                     continue  # Ceiling locked, cannot purchase
                     
@@ -538,7 +544,10 @@ def _simulate_vn_microstructure_core(
                             cum_adv_fees += adv_cost_t0
                     else:
                         max_budget = cash_avail + total_adv_capacity
-                        scaled_qty = np.floor(max_budget / (cost_per_share * 100.0)) * 100.0
+                        denom = cost_per_share * 100.0
+                        if denom <= 0.0 or not np.isfinite(denom):
+                            continue
+                        scaled_qty = np.floor(max_budget / denom) * 100.0
                         if scaled_qty <= 0.0:
                             continue
                             
@@ -580,8 +589,10 @@ def _simulate_vn_microstructure_core(
         holdings_val_close = 0.0
         locked_corp_val_close = 0.0
         for i in range(N):
-            holdings_val_close += shares_held[i] * raw_close[t, i]
-            locked_corp_val_close += locked_corp_shares[i] * raw_close[t, i]
+            if shares_held[i] > 0.0:
+                holdings_val_close += shares_held[i] * raw_close[t, i]
+            if locked_corp_shares[i] > 0.0:
+                locked_corp_val_close += locked_corp_shares[i] * raw_close[t, i]
             
         equity[t] = (
             cash_avail + pending_cash_t1 + pending_cash_t0
@@ -645,8 +656,85 @@ def simulate_naive(
 
 
 # ==============================================================================
-# 4. VIETNAM REALISTIC SIMULATOR WRAPPER
+# 4. VIETNAM REALISTIC SIMULATOR WRAPPER & INPUT SANITATION
 # ==============================================================================
+
+def sanitize_market_matrices(
+    raw_open: np.ndarray,
+    raw_close: np.ndarray,
+    ceiling: np.ndarray,
+    floor: np.ndarray,
+    adv20_shares: np.ndarray,
+    target_weights: np.ndarray,
+    in_pit_universe: Optional[np.ndarray] = None,
+    max_missing_sessions: int = 5,
+    halt_haircut: float = 0.0
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Sanitizes market input matrices before feeding into Numba simulator.
+    Adheres to B3, S4, T5, T13:
+    1. Replaces NaNs in raw_close via forward-fill; if raw_open is NaN, fills with prior raw_close.
+    2. Tracks consecutive missing/NaN sessions per asset:
+       - If missing <= max_missing_sessions (5): mask as untradable (target_weights=0, in_pit_universe=False).
+       - If missing > max_missing_sessions: asset transitions to 'suspended' state (A8).
+    3. Mark-to-market halt valuation (T13):
+       - If halt_haircut > 0 and asset is suspended, position valuation uses raw_close * (1 - halt_haircut)
+         starting from the observed halt session.
+    """
+    T, N = raw_close.shape
+    clean_open = np.asarray(raw_open, dtype=np.float64).copy()
+    clean_close = np.asarray(raw_close, dtype=np.float64).copy()
+    clean_ceil = np.asarray(ceiling, dtype=np.float64).copy()
+    clean_floor = np.asarray(floor, dtype=np.float64).copy()
+    clean_adv = np.asarray(adv20_shares, dtype=np.float64).copy()
+    clean_weights = np.asarray(target_weights, dtype=np.float64).copy()
+    
+    if in_pit_universe is None:
+        clean_pit = np.ones((T, N), dtype=np.bool_)
+    else:
+        clean_pit = np.asarray(in_pit_universe, dtype=np.bool_).copy()
+
+    for j in range(N):
+        consecutive_missing = 0
+        last_valid_close = np.nan
+        for t in range(T):
+            is_close_nan = np.isnan(clean_close[t, j])
+            is_open_nan = np.isnan(clean_open[t, j])
+            
+            if is_close_nan or is_open_nan:
+                consecutive_missing += 1
+                clean_pit[t, j] = False
+                clean_weights[t, j] = 0.0
+                
+                # Forward fill close if available
+                if not np.isnan(last_valid_close):
+                    fill_price = last_valid_close
+                    # T13: If suspended (> max_missing_sessions), apply haircut from observed halt session
+                    if consecutive_missing > max_missing_sessions and halt_haircut > 0.0:
+                        fill_price = last_valid_close * (1.0 - halt_haircut)
+                    clean_close[t, j] = fill_price
+                    clean_open[t, j] = fill_price
+                    clean_ceil[t, j] = fill_price * 1.07
+                    clean_floor[t, j] = fill_price * 0.93
+                else:
+                    clean_close[t, j] = 0.0
+                    clean_open[t, j] = 0.0
+                    clean_ceil[t, j] = 0.0
+                    clean_floor[t, j] = 0.0
+                    
+                clean_adv[t, j] = 0.0
+            else:
+                consecutive_missing = 0
+                last_valid_close = clean_close[t, j]
+                
+    # Normalize weights row-wise if positive sum
+    for t in range(T):
+        w_sum = np.sum(clean_weights[t, :])
+        if w_sum > 1.0:
+            clean_weights[t, :] /= w_sum
+            
+    return clean_open, clean_close, clean_ceil, clean_floor, clean_adv, clean_weights, clean_pit
+
 
 def simulate_vietnam(
     raw_open: np.ndarray,
@@ -670,7 +758,9 @@ def simulate_vietnam(
     corp_action_stock_list_t: Optional[np.ndarray] = None,
     dates: Optional[Any] = None,
     in_pit_universe: Optional[np.ndarray] = None,
-    daily_vol: Optional[np.ndarray] = None
+    daily_vol: Optional[np.ndarray] = None,
+    halt_haircut: float = 0.0,
+    sanitize_inputs: bool = True
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
@@ -686,6 +776,28 @@ def simulate_vietnam(
     floor = np.asarray(floor, dtype=np.float64)
     adv20_shares = np.asarray(adv20_shares, dtype=np.float64)
     target_weights = np.asarray(target_weights, dtype=np.float64).copy()
+    
+    if sanitize_inputs:
+        (
+            raw_open,
+            raw_close,
+            ceiling,
+            floor,
+            adv20_shares,
+            target_weights,
+            in_pit_universe
+        ) = sanitize_market_matrices(
+            raw_open=raw_open,
+            raw_close=raw_close,
+            ceiling=ceiling,
+            floor=floor,
+            adv20_shares=adv20_shares,
+            target_weights=target_weights,
+            in_pit_universe=in_pit_universe,
+            max_missing_sessions=5,
+            halt_haircut=halt_haircut
+        )
+        
     T, N = raw_open.shape
     
     # 1. Setup Calendar Days
@@ -799,6 +911,13 @@ def simulate_vietnam(
         in_pit_universe=in_pit_universe_arr,
         daily_vol=daily_vol_arr
     )
+    
+    if not np.all(np.isfinite(eq)):
+        nan_indices = np.where(~np.isfinite(eq))[0]
+        raise FloatingPointError(
+            f"Simulator Invariant B3 Violated: Equity curve contains non-finite values (NaN/Inf) "
+            f"at {len(nan_indices)} session(s), first detected at index {nan_indices[0]}."
+        )
     
     return {
         "equity": eq,
