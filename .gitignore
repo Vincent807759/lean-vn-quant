@@ -7,6 +7,7 @@ private_alphas/
 local_docs/
 AGENTS.md
 GEMINI.md
+danh_sach_alpha_chuan_bi_nop.md
 *.ipynb_checkpoints/
 
 .env
@@ -21,6 +22,8 @@ GEMINI.md
 *.csv
 data/
 fingraph/data/
+services/dashboard.html
+dashboard.html
 
 # ==============================================================================
 # PYTHON BYTECODE & CACHE

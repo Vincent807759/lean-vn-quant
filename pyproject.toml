@@ -11,7 +11,7 @@ authors = [
     { name = "Vincent Cao", email = "vincentcao706@gmail.com" }
 ]
 license = { text = "MIT" }
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 keywords = [
     "quantitative-finance",
     "vietnam-stock-market",
@@ -53,3 +53,7 @@ Repository = "https://github.com/Vincent807759/lean-vn-quant"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["engine*", "services*", "fingraph*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
