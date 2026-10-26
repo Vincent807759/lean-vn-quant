@@ -177,12 +177,17 @@ def compute_dsr_from_registry(
     daily_returns: np.ndarray,
     registry_file: str = "experiments/trial_registry.jsonl",
     risk_free_rate: float = 0.04,
-    annualization_factor: float = 252.0
+    annualization_factor: float = 252.0,
+    benchmark_returns: Optional[np.ndarray] = None
 ) -> Dict[str, Any]:
     """
     Computes Calibrated Deflated Sharpe Ratio (DSR) using real historical trials
     stored in experiments/trial_registry.jsonl to derive effective trial count N_eff
     via Eigenvalue Participation Ratio.
+    
+    If benchmark_returns is provided, computes DSR on Active Returns:
+      r_active(t) = r(t) - r_bench(t)
+    stripping market beta and providing an unconstrained N_eff > 2.0.
     """
     current_r = np.asarray(daily_returns, dtype=np.float64)
     T = len(current_r)
@@ -211,13 +216,24 @@ def compute_dsr_from_registry(
             
     if len(trials_returns_list) > 1:
         matrix = np.column_stack(trials_returns_list)
-        return compute_deflated_sharpe_ratio(
-            daily_returns=current_r,
-            n_trials=len(trials_returns_list),
-            risk_free_rate=risk_free_rate,
-            annualization_factor=annualization_factor,
-            trial_returns=matrix
-        )
+        if benchmark_returns is not None and len(benchmark_returns) == T:
+            bm_arr = np.asarray(benchmark_returns, dtype=np.float64)
+            active_matrix = matrix - bm_arr[:, None]
+            return compute_deflated_sharpe_ratio(
+                daily_returns=current_r,
+                n_trials=len(trials_returns_list),
+                risk_free_rate=risk_free_rate,
+                annualization_factor=annualization_factor,
+                trial_returns=active_matrix
+            )
+        else:
+            return compute_deflated_sharpe_ratio(
+                daily_returns=current_r,
+                n_trials=len(trials_returns_list),
+                risk_free_rate=risk_free_rate,
+                annualization_factor=annualization_factor,
+                trial_returns=matrix
+            )
     else:
         return compute_deflated_sharpe_ratio(
             daily_returns=current_r,

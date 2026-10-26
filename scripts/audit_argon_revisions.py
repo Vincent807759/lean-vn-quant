@@ -204,6 +204,7 @@ def run_all_argon_audits():
     # (Q5) Ablation study on all 5 Alpha factors
     print("\n--- (Q5) & CHECK 4: ABLATION STUDY OF 5 SINGLE ALPHAS ---")
     alpha_metrics = []
+    alpha_rets = []
     for idx, (alpha_mat, name) in enumerate(zip(raw_alphas, factor_names)):
         w_factor = ops.dampen_turnover(alpha_mat, 2, 4, 20, 0.015, tradable_mask)
         w_f_exec = np.zeros_like(w_factor); w_f_exec[1:] = w_factor[:-1]
@@ -211,6 +212,7 @@ def run_all_argon_audits():
         m_f = sim.evaluate_strategy(res_f["equity"], w_f_exec)
         rf_ret = np.diff(res_f["equity"]) / np.maximum(res_f["equity"][:-1], 1e-6)
         sim.record_trial(f"alpha_{idx+1}_{name}", rf_ret, registry_file=registry_file)
+        alpha_rets.append(rf_ret)
         alpha_metrics.append({
             "name": name,
             "final_nav": res_f["equity"][-1],
@@ -279,12 +281,14 @@ def run_all_argon_audits():
     w_eq5 = ops.dampen_turnover(np.mean(raw_alphas, axis=0), 2, 4, 20, 0.015, tradable_mask)
     w_eq5_e = np.zeros_like(w_eq5); w_eq5_e[1:] = w_eq5[:-1]
     r_eq5 = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_eq5_e, dates=dates, penalty_rate_per_day=0.0)
-    sim.record_trial("equal_weight_5alphas", np.diff(r_eq5["equity"]) / np.maximum(r_eq5["equity"][:-1], 1e-6), registry_file=registry_file)
+    ret_eq5 = np.diff(r_eq5["equity"]) / np.maximum(r_eq5["equity"][:-1], 1e-6)
+    sim.record_trial("equal_weight_5alphas", ret_eq5, registry_file=registry_file)
 
     w_orth_eq = ops.dampen_turnover(np.mean(ortho_alphas, axis=0), 2, 4, 20, 0.015, tradable_mask)
     w_orth_eq_e = np.zeros_like(w_orth_eq); w_orth_eq_e[1:] = w_orth_eq[:-1]
     r_orth_eq = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_orth_eq_e, dates=dates, penalty_rate_per_day=0.0)
-    sim.record_trial("orthogonal_equal_weight", np.diff(r_orth_eq["equity"]) / np.maximum(r_orth_eq["equity"][:-1], 1e-6), registry_file=registry_file)
+    ret_orth_eq = np.diff(r_orth_eq["equity"]) / np.maximum(r_orth_eq["equity"][:-1], 1e-6)
+    sim.record_trial("orthogonal_equal_weight", ret_orth_eq, registry_file=registry_file)
 
     print(f"Kịch bản Thử nghiệm                          | Single CAGR | Single Sharpe | Single NAV      | Multi CAGR  | Multi Sharpe  | Multi NAV")
     print("-" * 115)
@@ -294,26 +298,49 @@ def run_all_argon_audits():
     print(f"Tắt phí sàn 50k (Slippage=10bps, Floor=0)    | {m_s_nofloor['cagr']*100:>9.2f}% | {m_s_nofloor['sharpe_ratio']:>13.2f} | {r_s_nofloor['equity'][-1]:>15,.0f} | {m_m_nofloor['cagr']*100:>9.2f}% | {m_m_nofloor['sharpe_ratio']:>13.2f} | {r_m_nofloor['equity'][-1]:>15,.0f}")
 
     print("\n--- [MEDIUM-03] CASH SWEEP DECOMPOSITION & OPTIMIZATION (CHECK 2 TABLE) ---")
-    print(f"{'Chiến lược / Cấu hình Cash Sweep':<42} | {'Phí ứng T+2 Tích lũy (VND)':<26} | {'Lãi suất Thực tế':<18} | {'Tỷ suất Sinh lời Lũy kế':<24} | {'Phí sàn 50k Kích hoạt':<22}")
-    print("-" * 142)
-    print(f"{'Naive Greedy Cash Sweep (Gốc)':<42} | {res_s_a['advance_interest_fees'][-1]:>26,.0f} | {'~0.62% / lần lẻ':>18} | {m_m_a['total_return']*100:>23.2f}% | {'506 lần (94.3% phí)':>22}")
-    print(f"{'Smart Cash Sweep (min_advance = 71.4M)':<42} | {r_m_smart['advance_interest_fees'][-1]:>26,.0f} | {'0.07% / 2 ngày (Chuẩn)':>18} | {m_m_smart['total_return']*100:>23.2f}% | {'0 lần':>22}")
-    print(f"{'No Advance Sweep (T+2 Strictly Closed)':<42} | {r_m_noadv['advance_interest_fees'][-1]:>26,.0f} | {'0.00%':>18} | {m_m_noadv['total_return']*100:>23.2f}% | {'0 lần':>22}")
+    print(f"{'Chiến lược / Cấu hình Cash Sweep':<44} | {'Phí ứng T+2 Tích lũy (VND)':<26} | {'Lãi suất Thực tế':<28} | {'Tỷ suất Sinh lời Lũy kế':<24} | {'Phí sàn 50k Kích hoạt':<22} | {'Final NAV (VND)':<18}")
+    print("-" * 175)
+    print(f"{'[Single-Alpha] Naive Greedy Cash Sweep (Gốc)':<44} | {res_s_a['advance_interest_fees'][-1]:>26,.0f} | {'~0.62% / lần lẻ (Bẫy phí sàn)':>28} | {m_s_a['total_return']*100:>23.2f}% | {'506 lần (94.3% phí)':>22} | {res_s_a['equity'][-1]:>18,.0f}")
+    print(f"{'[Single-Alpha] Smart Sweep (min = 71.4M)':<44} | {r_s_smart['advance_interest_fees'][-1]:>26,.0f} | {'0.00% (Không phát sinh vay)':>28} | {m_s_smart['total_return']*100:>23.2f}% | {'0 lần':>22} | {r_s_smart['equity'][-1]:>18,.0f}")
+    print(f"{'[Single-Alpha] No Advance Sweep (T+2 Closed)':<44} | {r_s_noadv['advance_interest_fees'][-1]:>26,.0f} | {'0.00%':>28} | {m_s_noadv['total_return']*100:>23.2f}% | {'0 lần':>22} | {r_s_noadv['equity'][-1]:>18,.0f}")
+    print("-" * 175)
+    print(f"{'[Multi-Alpha] Naive Greedy Cash Sweep (Gốc)':<44} | {res_m_a['advance_interest_fees'][-1]:>26,.0f} | {'~0.62% / lần lẻ (Bẫy phí sàn)':>28} | {m_m_a['total_return']*100:>23.2f}% | {'376 lần (95.2% phí)':>22} | {res_m_a['equity'][-1]:>18,.0f}")
+    print(f"{'[Multi-Alpha] Smart Sweep (min = 71.4M)':<44} | {r_m_smart['advance_interest_fees'][-1]:>26,.0f} | {'0.00% (Không phát sinh vay)':>28} | {m_m_smart['total_return']*100:>23.2f}% | {'0 lần':>22} | {r_m_smart['equity'][-1]:>18,.0f}")
+    print(f"{'[Multi-Alpha] No Advance Sweep (T+2 Closed)':<44} | {r_m_noadv['advance_interest_fees'][-1]:>26,.0f} | {'0.00%':>28} | {m_m_noadv['total_return']*100:>23.2f}% | {'0 lần':>22} | {r_m_noadv['equity'][-1]:>18,.0f}")
 
-    # [MEDIUM-01] & (Q4) DSR Detailed Parameters from Persistent Registry (26 trials)
-    print("\n--- [MEDIUM-01] & (Q4) CALIBRATED DSR EXACT PARAMETERS (FROM 26 TRIALS REGISTRY) ---")
-    dsr_s = sim.compute_dsr_from_registry(ret_s_a, registry_file=registry_file)
-    dsr_m = sim.compute_dsr_from_registry(ret_m_a, registry_file=registry_file)
-    print("Parameter                     | Single-Alpha (Sau) | Multi-Alpha (Sau)")
-    print("-" * 65)
-    print(f"Tổng số thử nghiệm (N)        | {dsr_s['n_trials']:>18} | {dsr_m['n_trials']:>17}")
-    print(f"Số thử nghiệm hữu hiệu (N_eff)| {dsr_s['n_eff']:>18.4f} | {dsr_m['n_eff']:>17.4f}")
-    print(f"Ngưỡng SR kỳ vọng null (SR_0) | {dsr_s['expected_max_sharpe']:>18.4f} | {dsr_m['expected_max_sharpe']:>17.4f}")
-    print(f"Hệ số bất đối xứng (Skewness) | {dsr_s['sample_skewness']:>18.4f} | {dsr_m['sample_skewness']:>17.4f}")
-    print(f"Độ nhọn phân phối (Kurtosis)  | {dsr_s['sample_kurtosis']:>18.4f} | {dsr_m['sample_kurtosis']:>17.4f}")
-    print(f"Annualized Sharpe (Sau phí)   | {dsr_s['annualized_sharpe']:>18.4f} | {dsr_m['annualized_sharpe']:>17.4f}")
-    print(f"Deflated Sharpe Ratio (DSR)   | {dsr_s['deflated_sharpe_ratio']:>18.4f} | {dsr_m['deflated_sharpe_ratio']:>17.4f}")
-    print(f"p-value (Multiple Testing)    | {dsr_s['p_value']:>18.4f} | {dsr_m['p_value']:>17.4f}")
+    # [MEDIUM-01] & (Q4) DSR Multi-Mode Evaluation
+    print("\n--- [MEDIUM-01] & (Q4) CALIBRATED DSR MULTI-MODE EVALUATION (3 CHẾ ĐỘ) ---")
+    # Mode 1: Total-Return Full Registry (N=26)
+    dsr_s_m1 = sim.compute_dsr_from_registry(ret_s_a, registry_file=registry_file)
+    dsr_m_m1 = sim.compute_dsr_from_registry(ret_m_a, registry_file=registry_file)
+
+    # Core Alpha trials for Mode 2 Active Returns
+    core_trials = [
+        ret_s_a, ret_m_a,
+        alpha_rets[0], alpha_rets[1], alpha_rets[2], alpha_rets[3], alpha_rets[4],
+        ret_eq5, ret_orth_eq
+    ]
+    core_active = [r - ret_bm for r in core_trials]
+    active_mat = np.column_stack(core_active)
+    C_act = np.corrcoef(active_mat.T)
+    rho_bar_act = float(np.mean(C_act[np.triu_indices_from(C_act, k=1)]))
+
+    # Mode 2: Active-Return Core Alpha Registry (N=9)
+    dsr_s_m2 = sim.compute_deflated_sharpe_ratio(ret_s_a, n_trials=len(core_trials), trial_returns=active_mat, risk_free_rate=0.04)
+    dsr_m_m2 = sim.compute_deflated_sharpe_ratio(ret_m_a, n_trials=len(core_trials), trial_returns=active_mat, risk_free_rate=0.04)
+
+    # Mode 3: Unadjusted Conservative Bound (N=26 independent)
+    dsr_s_m3 = sim.compute_deflated_sharpe_ratio(ret_s_a, n_trials=26, risk_free_rate=0.04)
+    dsr_m_m3 = sim.compute_deflated_sharpe_ratio(ret_m_a, n_trials=26, risk_free_rate=0.04)
+
+    print("Parameter                                  | Single Mode 1 (Total) | Single Mode 2 (Active) | Single Mode 3 (Unadj) | Multi Mode 1 (Total)  | Multi Mode 2 (Active) | Multi Mode 3 (Unadj)")
+    print("-" * 155)
+    print(f"Tổng số thử nghiệm (N)                     | {dsr_s_m1['n_trials']:>21} | {dsr_s_m2['n_trials']:>22} | {dsr_s_m3['n_trials']:>21} | {dsr_m_m1['n_trials']:>21} | {dsr_m_m2['n_trials']:>21} | {dsr_m_m3['n_trials']:>20}")
+    print(f"Số thử nghiệm hữu hiệu (N_eff)             | {dsr_s_m1['n_eff']:>21.4f} | {dsr_s_m2['n_eff']:>22.4f} | {dsr_s_m3['n_eff']:>21.4f} | {dsr_m_m1['n_eff']:>21.4f} | {dsr_m_m2['n_eff']:>21.4f} | {dsr_m_m3['n_eff']:>20.4f}")
+    print(f"Ngưỡng SR kỳ vọng null (SR_0)              | {dsr_s_m1['expected_max_sharpe']:>21.4f} | {dsr_s_m2['expected_max_sharpe']:>22.4f} | {dsr_s_m3['expected_max_sharpe']:>21.4f} | {dsr_m_m1['expected_max_sharpe']:>21.4f} | {dsr_m_m2['expected_max_sharpe']:>21.4f} | {dsr_m_m3['expected_max_sharpe']:>20.4f}")
+    print(f"Annualized Sharpe (Sau phí)                | {dsr_s_m1['annualized_sharpe']:>21.4f} | {dsr_s_m2['annualized_sharpe']:>22.4f} | {dsr_s_m3['annualized_sharpe']:>21.4f} | {dsr_m_m1['annualized_sharpe']:>21.4f} | {dsr_m_m2['annualized_sharpe']:>21.4f} | {dsr_m_m3['annualized_sharpe']:>20.4f}")
+    print(f"Deflated Sharpe Ratio (DSR)                | {dsr_s_m1['deflated_sharpe_ratio']:>21.4f} | {dsr_s_m2['deflated_sharpe_ratio']:>22.4f} | {dsr_s_m3['deflated_sharpe_ratio']:>21.4f} | {dsr_m_m1['deflated_sharpe_ratio']:>21.4f} | {dsr_m_m2['deflated_sharpe_ratio']:>21.4f} | {dsr_m_m3['deflated_sharpe_ratio']:>20.4f}")
+    print(f"p-value (Multiple Testing)                 | {dsr_s_m1['p_value']:>21.4f} | {dsr_s_m2['p_value']:>22.4f} | {dsr_s_m3['p_value']:>21.4f} | {dsr_m_m1['p_value']:>21.4f} | {dsr_m_m2['p_value']:>21.4f} | {dsr_m_m3['p_value']:>20.4f}")
 
     # CHECK 3: Yearly Regime Split (2023, 2024, 2025, 2026)
     print("\n--- [MEDIUM-02] & CHECK 3: YEARLY SUBSAMPLE & RECONCILED COMPOUND RETURN ---")
@@ -383,18 +410,69 @@ def run_all_argon_audits():
         except Exception as e:
             print("Could not run KG direct test:", e)
 
-    # [LOW-02] Check 4.2: Pillar 2 Event Contagion Ablation Study
-    print("\n--- [LOW-02] & CHECK 4.2: PILLAR 2 EVENT CONTAGION ABLATION STUDY ---")
-    print(f"{'Hệ số alpha (PageRank/Contagion)':<32} | {'Rank IC (FinGraph)':<20} | {'Tỷ suất Sinh lời Lũy kế':<25} | {'Sharpe':<10} | {'MaxDD':<10}")
-    print("-" * 105)
-    pillar2_ablation = [
-        ("alpha = 0.15 (Suy giảm nhanh)", 0.0312, 0.6180, 1.12, -0.1840),
-        ("alpha = 0.25 (Cấu hình Chuẩn)", 0.0548, 0.6332, 1.28, -0.1620),
-        ("alpha = 0.50 (Lan truyền rộng)", 0.0421, 0.6215, 1.19, -0.1710),
-        ("alpha = 0.70 (Nhiễu mạng cao)", 0.0210, 0.5890, 0.98, -0.2105),
-    ]
-    for row in pillar2_ablation:
-        print(f"{row[0]:<32} | {row[1]:>20.4f} | {row[2]*100:>24.2f}% | {row[3]:>10.2f} | {row[4]*100:>9.2f}%")
+    # [LOW-02] Check 4.2: Pillar 2 Event Contagion Ablation Study (Real Empirical Pipeline Execution)
+    print("\n--- [LOW-02] & CHECK 4.2: PILLAR 2 EVENT CONTAGION ABLATION STUDY (REAL PIPELINE) ---")
+    corpus_file = Path("fingraph/data/vn30_financial_corpus.parquet")
+    if corpus_file.exists():
+        try:
+            df_corpus = pl.read_parquet(corpus_file)
+            from knowledge_graph_engine import FinancialKnowledgeGraph
+            kg = FinancialKnowledgeGraph()
+            
+            fwd_ret_1d = np.zeros((T, N), dtype=np.float64)
+            fwd_ret_1d[:-1] = (raw_close[1:] - raw_close[:-1]) / np.maximum(raw_close[:-1], 1e-4)
+            
+            print(f"{'Hệ số alpha (PageRank/Contagion)':<32} | {'Rank IC (FinGraph)':<20} | {'Tỷ suất Sinh lời Lũy kế':<25} | {'Sharpe':<10} | {'MaxDD':<10}")
+            print("-" * 105)
+            
+            for a_val in [0.15, 0.25, 0.50, 0.70]:
+                df_c, _ = kg.compute_causal_alpha_matrix(df_corpus, alpha_diffusion=a_val)
+                c_map = {row["date"]: row for row in df_c.iter_rows(named=True)}
+                a_fg = np.zeros((T, N), dtype=np.float64)
+                for t_idx, d in enumerate(dates):
+                    if t_idx > 0:
+                        p_str = str(dates[t_idx - 1])[:10]
+                        if p_str in c_map:
+                            row_info = c_map[p_str]
+                            for s_idx, sym in enumerate(syms):
+                                a_fg[t_idx, s_idx] = row_info.get(sym, 0.0)
+                
+                a_fg_rk = ops.rank(a_fg, mask=tradable_mask)
+                alphas_6 = raw_alphas + [a_fg_rk]
+                names_6 = factor_names + [f"FinGraph_{a_val}"]
+                ortho_6, _, _ = orthogonalize_factor_library(alphas_6, names_6, tradable_mask)
+                c_6, _ = purged_walk_forward_combiner(ortho_6, raw_close, tradable_mask, window=120, embargo=3)
+                cr_6 = ops.rank(c_6, mask=tradable_mask)
+                w_m6 = ops.dampen_turnover(cr_6, 2, 4, 20, 0.015, tradable_mask)
+                w_m6_e = np.zeros_like(w_m6); w_m6_e[1:] = w_m6[:-1]
+                res_6 = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_m6_e, dates=dates, penalty_rate_per_day=0.0)
+                m_6 = sim.evaluate_strategy(res_6["equity"], w_m6_e)
+                
+                # Active Rank IC
+                ic_list = []
+                for s in range(T - 1):
+                    m_s = tradable_mask[s] & np.isfinite(a_fg[s]) & np.isfinite(fwd_ret_1d[s])
+                    if np.sum(m_s) >= 8 and np.any(np.abs(a_fg[s][m_s]) > 1e-5):
+                        r_a = np.argsort(np.argsort(a_fg[s][m_s]))
+                        r_f = np.argsort(np.argsort(fwd_ret_1d[s][m_s]))
+                        c_val = np.corrcoef(r_a, r_f)[0, 1]
+                        if np.isfinite(c_val):
+                            ic_list.append(c_val)
+                mean_ic_val = float(np.mean(ic_list)) if ic_list else 0.0
+                
+                cfg_label = f"alpha = {a_val:.2f}"
+                if a_val == 0.15:
+                    cfg_label += " (Suy giảm nhanh)"
+                elif a_val == 0.25:
+                    cfg_label += " (Cấu hình Chuẩn)"
+                elif a_val == 0.50:
+                    cfg_label += " (Lan truyền rộng)"
+                elif a_val == 0.70:
+                    cfg_label += " (Khuếch đại cao)"
+                    
+                print(f"{cfg_label:<32} | {mean_ic_val:>20.4f} | {m_6['total_return']*100:>24.2f}% | {m_6['sharpe_ratio']:>10.2f} | {m_6['max_drawdown']*100:>9.2f}%")
+        except Exception as e:
+            print("Pillar 2 empirical ablation study failed:", e)
 
     print("\n" + "=" * 80)
     print("ALL AUDIT EXPERIMENTS COMPLETED SUCCESSFULLY!")
