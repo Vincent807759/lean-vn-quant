@@ -27,6 +27,7 @@ Operational Specifications:
 import sys
 import os
 import json
+import shutil
 import argparse
 import datetime
 from typing import Dict, List, Tuple, Any, Optional
@@ -108,22 +109,68 @@ def init_empty_state(initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[s
 
 
 def load_portfolio_state(state_file: str, initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[str, Any]:
-    """Loads portfolio state from JSON file, initializing new if absent."""
+    """
+    Loads portfolio state from JSON file.
+    B13 Invariant: If state file is corrupted, attempts recovery from .bak file.
+    If both fail, strictly raises RuntimeError to prevent catastrophic silent state reset.
+    """
+    bak_file = f"{state_file}.bak"
     if os.path.exists(state_file):
         try:
             with open(state_file, "r", encoding="utf-8") as f:
                 state = json.load(f)
                 return state
         except Exception as e:
-            print(f"[WARNING] Could not read {state_file} ({e}). Re-initializing empty state.")
+            print(f"[ERROR] Corrupted state file {state_file} ({e}). Attempting backup recovery from {bak_file}...")
+            if os.path.exists(bak_file):
+                try:
+                    with open(bak_file, "r", encoding="utf-8") as f_bak:
+                        state = json.load(f_bak)
+                        print(f"[RECOVERY] Successfully recovered portfolio state from {bak_file}")
+                        return state
+                except Exception as bak_err:
+                    raise RuntimeError(
+                        f"B13 FATAL: Both primary state file ({state_file}: {e}) and backup ({bak_file}: {bak_err}) "
+                        "are corrupted! Refusing to reset empty state automatically."
+                    )
+            else:
+                raise RuntimeError(
+                    f"B13 FATAL: Primary state file ({state_file}) is corrupted ({e}) and no backup file ({bak_file}) exists! "
+                    "Refusing to reset empty state automatically."
+                )
     return init_empty_state(initial_capital)
 
 
 def save_portfolio_state(state: Dict[str, Any], state_file: str) -> None:
-    """Saves portfolio state atomically into JSON file."""
-    os.makedirs(os.path.dirname(os.path.abspath(state_file)), exist_ok=True)
-    with open(state_file, "w", encoding="utf-8") as f:
+    """
+    Saves portfolio state atomically into JSON file with fsync and automatic backup (.bak).
+    B13 Protocol:
+    1. Backup existing state_file to state_file.bak
+    2. Write new payload into temporary file state_file.tmp
+    3. Flush and call os.fsync() to force hardware disk write
+    4. Atomic rename via os.replace(tmp, state_file)
+    """
+    state_dir = os.path.dirname(os.path.abspath(state_file))
+    os.makedirs(state_dir, exist_ok=True)
+    
+    bak_file = f"{state_file}.bak"
+    tmp_file = f"{state_file}.tmp"
+    
+    # 1. Backup current state
+    if os.path.exists(state_file):
+        try:
+            shutil.copy2(state_file, bak_file)
+        except Exception as e:
+            print(f"[WARNING] Failed to create backup state {bak_file}: {e}")
+            
+    # 2. Write to tmp file with fsync
+    with open(tmp_file, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+        
+    # 3. Atomic replacement
+    os.replace(tmp_file, state_file)
 
 
 def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:

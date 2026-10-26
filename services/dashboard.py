@@ -596,7 +596,7 @@ def serve_dashboard(port: int = 8050, html_file: str = DEFAULT_OUTPUT_HTML) -> N
     print("  Press Ctrl+C to terminate server.")
     print("=" * 70)
 
-    with socketserver.TCPServer(("", port), Handler) as httpd:
+    with socketserver.TCPServer(("127.0.0.1", port), Handler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

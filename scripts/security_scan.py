@@ -71,7 +71,7 @@ IGNORE_DIRS = {
 
 PLACEHOLDER_SUBSTRINGS = [
     "<your_", "your_", "example", "placeholder", "dummy", "test_token",
-    "env.example", "<workspace_path>", "987654321", "{chat_id}", "123456789"
+    "env.example", "<workspace_path>", "{chat_id}"
 ]
 
 
@@ -116,6 +116,31 @@ def get_target_files(root_dir: str) -> Tuple[List[str], bool]:
                 full_p = os.path.join(root_dir, rel_path.replace("/", os.sep))
                 if os.path.isfile(full_p):
                     files_to_scan.append(full_p)
+
+            # B15: Also include untracked and staged files via git status --porcelain
+            status_proc = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=root_dir,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if status_proc.returncode == 0 and status_proc.stdout.strip():
+                for line in status_proc.stdout.strip().splitlines():
+                    if len(line) >= 4:
+                        rel_p = line[3:].strip().strip('"')
+                        if " -> " in rel_p:
+                            rel_p = rel_p.split(" -> ")[1].strip().strip('"')
+                        full_p = os.path.join(root_dir, rel_p.replace("/", os.sep))
+                        if os.path.isfile(full_p) and full_p not in files_to_scan:
+                            if os.path.basename(full_p) != ".env":
+                                files_to_scan.append(full_p)
+
+            # B15: Directly scan .git/config for token/secret leakage in remote URLs
+            git_config = os.path.join(root_dir, ".git", "config")
+            if os.path.isfile(git_config) and git_config not in files_to_scan:
+                files_to_scan.append(git_config)
+
             if files_to_scan:
                 is_git_mode = True
                 return files_to_scan, is_git_mode
@@ -213,7 +238,7 @@ def run_security_scan(root_dir: str = ".") -> int:
                         matches = pattern.findall(line)
                         for match in matches:
                             snippet = match if isinstance(match, str) else line.strip()
-                            if is_placeholder(snippet) or is_placeholder(line):
+                            if is_placeholder(snippet):
                                 continue
                             violations.append({
                                 "file": rel_path,

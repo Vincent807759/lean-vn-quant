@@ -45,7 +45,7 @@ ENV_FILE_PATHS = [
 
 
 # ==============================================================================
-# 1. ENVIRONMENT VARIABLES & AUTO-DISCOVERY CHAT ID
+# 1. ENVIRONMENT VARIABLES & SECURITY FILTERING
 # ==============================================================================
 
 def load_env() -> Dict[str, str]:
@@ -68,53 +68,18 @@ def load_env() -> Dict[str, str]:
     return env
 
 
-def save_chat_id_to_env(chat_id: str) -> None:
-    """Persists discovered TELEGRAM_CHAT_ID into all matching .env files."""
-    for p in ENV_FILE_PATHS:
-        if os.path.exists(p):
-            try:
-                lines = []
-                found = False
-                with open(p, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.strip().startswith("TELEGRAM_CHAT_ID"):
-                            lines.append(f'TELEGRAM_CHAT_ID="{chat_id}"\n')
-                            found = True
-                        else:
-                            lines.append(line)
-                if not found:
-                    lines.append(f'TELEGRAM_CHAT_ID="{chat_id}"\n')
-                with open(p, "w", encoding="utf-8") as f:
-                    f.writelines(lines)
-                print(f"[ENV] Updated TELEGRAM_CHAT_ID={chat_id} in {p}")
-            except Exception as e:
-                print(f"[ENV WARNING] Could not write to {p}: {e}")
-
-
-def auto_discover_chat_id(token: str) -> Optional[str]:
-    """
-    Calls getUpdates to discover Telegram Chat ID from recent messages (e.g. /start).
-    """
-    url = f"https://api.telegram.org/bot{token}/getUpdates"
-    try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            results = data.get("result", [])
-            for u in reversed(results):
-                msg = u.get("message") or u.get("edited_message")
-                if msg and "chat" in msg:
-                    cid = str(msg["chat"]["id"])
-                    print(f"[AUTO-DISCOVERY] Detected Telegram Chat ID: {cid}")
-                    save_chat_id_to_env(cid)
-                    return cid
-    except Exception as e:
-        print(f"[AUTO-DISCOVERY ERROR] {e}")
-    return None
+def mask_token(text: str, token: Optional[str] = None) -> str:
+    """Masks bot tokens and sensitive patterns from logs and exception messages."""
+    if not text:
+        return ""
+    if token and len(token) > 6:
+        text = text.replace(token, f"{token[:4]}...***")
+    import re
+    return re.sub(r'bot\d+:[A-Za-z0-9_-]+', 'bot[MASKED_TOKEN]', text)
 
 
 def send_message(token: str, chat_id: str, text: str) -> bool:
-    """Sends HTML formatted message to Telegram chat."""
+    """Sends HTML formatted message to Telegram chat with masked error handling."""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -124,7 +89,9 @@ def send_message(token: str, chat_id: str, text: str) -> bool:
     try:
         resp = requests.post(url, json=payload, timeout=8)
         return resp.status_code == 200
-    except Exception:
+    except Exception as e:
+        safe_msg = mask_token(str(e), token)
+        print(f"[SEND ERROR] Failed to deliver message: {safe_msg}")
         return False
 
 
@@ -310,11 +277,23 @@ def handle_orders() -> str:
         return f"⚠️ Error reading orders: {e}"
 
 
+_last_sync_timestamp: float = 0.0
+SYNC_RATE_LIMIT_SECONDS: float = 60.0
+
+
 def handle_sync() -> str:
     """
     Handles /sync command: triggers daily_paper_trader.py
-    to ingest new market candles and settle T+2 ledger.
+    with rate-limiting (max 1 trigger per 60 seconds).
     """
+    global _last_sync_timestamp
+    now = time.time()
+    elapsed = now - _last_sync_timestamp
+    if elapsed < SYNC_RATE_LIMIT_SECONDS:
+        remaining = int(SYNC_RATE_LIMIT_SECONDS - elapsed)
+        return f"⏳ <b>RATE LIMIT EXCEEDED:</b> Please wait {remaining}s before triggering <b>/sync</b> again."
+        
+    _last_sync_timestamp = now
     python_exe = sys.executable
     script_path = os.path.join(BASE_DIR, "daily_paper_trader.py")
     if not os.path.exists(script_path):
@@ -362,20 +341,22 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
     
     env = load_env()
     token = env.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = env.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHAT_ID")
+    admin_chat_id = (
+        env.get("TELEGRAM_ADMIN_CHAT_ID")
+        or os.environ.get("TELEGRAM_ADMIN_CHAT_ID")
+        or env.get("TELEGRAM_CHAT_ID")
+        or os.environ.get("TELEGRAM_CHAT_ID")
+    )
     
     if not token:
         print("[FATAL ERROR] TELEGRAM_BOT_TOKEN not found in .env or environment!")
         sys.exit(1)
         
-    if not chat_id:
-        print("[INFO] TELEGRAM_CHAT_ID not configured. Running auto-discovery...")
-        chat_id = auto_discover_chat_id(token)
-        if not chat_id:
-            print("[INFO] Please open Telegram and send /start to your bot, then re-launch daemon.")
-            return
+    if not admin_chat_id:
+        print("[FATAL ERROR] TELEGRAM_ADMIN_CHAT_ID not configured! Auto-discovery is disabled for security.")
+        sys.exit(1)
 
-    print(f"-> Authorized Chat ID: {chat_id}")
+    print(f"-> Authorized Admin Chat ID: {admin_chat_id}")
     print(f"-> Bot daemon is listening for incoming commands (/status, /holdings, /orders, /sync)...")
     print("=" * 80 + "\n")
     
@@ -386,11 +367,11 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
             res = warmup_resp.json().get("result", [])
             if res:
                 last_update_id = res[-1]["update_id"]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARMUP WARNING] {mask_token(str(e), token)}")
 
     send_message(
-        token, chat_id,
+        token, admin_chat_id,
         "🟢 <b>LEAN VN-QUANT BOT ONLINE!</b>\nInteractive service active. Send <b>/status</b> or <b>/help</b> to manage portfolio."
     )
 
@@ -409,9 +390,9 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
                     sender_chat_id = str(msg["chat"]["id"])
                     text = msg.get("text", "").strip()
                     
-                    # Security filter: Only respond to authorized chat_id
-                    if sender_chat_id != str(chat_id):
-                        print(f"[REJECTED] Unauthorized command from chat_id {sender_chat_id}: {text}")
+                    # Strict Authorization Check
+                    if sender_chat_id != str(admin_chat_id):
+                        print(f"[SECURITY WARNING] Rejected command from unauthorized chat_id {sender_chat_id}: {text}")
                         continue
                         
                     if text.startswith("/"):
@@ -424,6 +405,7 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
             print("\n[SHUTDOWN] Telegram Bot Daemon stopped by user.")
             break
         except Exception as e:
+            print(f"[DAEMON ERROR] {mask_token(str(e), token)}")
             time.sleep(3)
 
 

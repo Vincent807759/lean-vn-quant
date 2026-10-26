@@ -9,7 +9,9 @@ import polars as pl
 from unittest.mock import patch
 from services.daily_paper_trader import (
     check_cache_overlap_and_reconcile,
-    fetch_or_update_data
+    fetch_or_update_data,
+    load_portfolio_state,
+    save_portfolio_state
 )
 
 def test_cache_overlap_consistent():
@@ -179,4 +181,42 @@ def test_b2_corporate_action_invalidates_calibration_and_reloads_history(tmp_pat
     # Parquet must have been refreshed with full reloaded history
     assert len(res) == 3
     assert res.filter(pl.col("date") == datetime.date(2026, 1, 2))["adj_close"][0] == 23940.0
+
+
+def test_b13_atomic_save_and_backup_recovery(tmp_path):
+    """
+    B13: Verify atomic save creates backup .bak and recovers successfully if main file corrupts.
+    """
+    state_file = str(tmp_path / "paper_portfolio_state.json")
+    state1 = {"real_nav": 105000000.0, "available_cash": 50000000.0}
+    save_portfolio_state(state1, state_file)
+
+    # Second save should create .bak containing state1
+    state2 = {"real_nav": 110000000.0, "available_cash": 60000000.0}
+    save_portfolio_state(state2, state_file)
+
+    assert os.path.exists(f"{state_file}.bak")
+
+    # Corrupt main file
+    with open(state_file, "w", encoding="utf-8") as f:
+        f.write("{invalid_json: true,")
+
+    # Loading should recover state1 from .bak rather than resetting to empty state
+    recovered = load_portfolio_state(state_file)
+    assert recovered["real_nav"] == 105000000.0
+
+
+def test_b13_corrupted_state_without_backup_raises_runtime_error(tmp_path):
+    """
+    B13: Verify that if state is corrupted and no backup exists, it raises RuntimeError
+    instead of silently resetting account to 100M VND.
+    """
+    state_file = str(tmp_path / "corrupted_state.json")
+    with open(state_file, "w", encoding="utf-8") as f:
+        f.write("corrupted garbage content")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        load_portfolio_state(state_file)
+    assert "B13 FATAL" in str(exc_info.value)
+
 
