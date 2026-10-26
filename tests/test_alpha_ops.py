@@ -138,3 +138,41 @@ def test_ridge_factor_projection_permutation_invariance():
     perm_diff = float(np.max(np.abs(ortho_p1 - ortho_p2)))
     assert perm_diff < 1e-10
     assert corr_p1 < 0.05
+
+
+def test_b7_orthogonalization_strict_causality_no_look_ahead():
+    """
+    B7: Cross-Sectional QR Orthogonalization must be strictly causal.
+    Perturbing future data at t > t0 must have ZERO impact on orthogonalized alpha at t <= t0.
+    """
+    np.random.seed(101)
+    T, N = 80, 15
+    t0 = 35
+
+    base_alpha = np.random.randn(T, N)
+    noise = np.random.randn(T, N)
+    candidate_alpha = 0.80 * base_alpha + 0.60 * noise
+
+    # Compute baseline orthogonalization
+    ortho_orig, _, _ = ops.check_and_orthogonalize(
+        new_alpha=candidate_alpha,
+        existing_alphas=[base_alpha],
+        threshold=0.30
+    )
+
+    # Perturb candidate and base alpha strictly at t > t0
+    cand_pert = candidate_alpha.copy()
+    base_pert = base_alpha.copy()
+    cand_pert[t0 + 1:, :] += 9999.0
+    base_pert[t0 + 1:, :] -= 5555.0
+
+    ortho_pert, _, _ = ops.check_and_orthogonalize(
+        new_alpha=cand_pert,
+        existing_alphas=[base_pert],
+        threshold=0.30
+    )
+
+    # Values at t <= t0 must be 100% IDENTICAL (max error = 0.0)
+    max_diff = float(np.max(np.abs(ortho_orig[:t0 + 1] - ortho_pert[:t0 + 1])))
+    assert max_diff == 0.0, f"B7 VIOLATION: Look-ahead leakage detected in orthogonalization, max_diff={max_diff}"
+

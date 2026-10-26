@@ -149,7 +149,8 @@ def orthogonalize_factor_library(
         ortho_k, corr_before, corr_after = ops.check_and_orthogonalize(
             new_alpha=alphas[k],
             existing_alphas=ortho_alphas,
-            threshold=threshold
+            threshold=threshold,
+            tradable_mask=tradable_mask
         )
         ranked_ortho = ops.rank(ortho_k, mask=tradable_mask)
         ortho_alphas.append(ranked_ortho)
@@ -193,23 +194,32 @@ def purged_walk_forward_combiner(
     composite_alpha = np.zeros((T, N), dtype=np.float64)
     factor_weights_history = np.zeros((T, K), dtype=np.float64)
 
+    # Precalculate daily rank IC per factor session to eliminate redundant loop overhead
+    all_daily_ics = np.zeros((K, T), dtype=np.float64)
+    has_ic = np.zeros((K, T), dtype=bool)
+    for k in range(K):
+        for s in range(T - 1):
+            mask_s = tradable_mask[s] & np.isfinite(ortho_alphas[k][s]) & np.isfinite(fwd_ret[s])
+            if np.sum(mask_s) >= 8:
+                r_a = np.argsort(np.argsort(ortho_alphas[k][s][mask_s]))
+                r_f = np.argsort(np.argsort(fwd_ret[s][mask_s]))
+                if len(r_a) > 2 and np.std(r_a) > 0 and np.std(r_f) > 0:
+                    corr_val = np.corrcoef(r_a, r_f)[0, 1]
+                    if np.isfinite(corr_val):
+                        all_daily_ics[k, s] = corr_val
+                        has_ic[k, s] = True
+
     for t in range(window + embargo, T):
         train_end = t - embargo
         train_start = max(0, train_end - window)
         
         ics = []
         for k in range(K):
-            daily_ics = []
-            for s in range(train_start, train_end):
-                mask_s = tradable_mask[s] & np.isfinite(ortho_alphas[k][s]) & np.isfinite(fwd_ret[s])
-                if np.sum(mask_s) >= 8:
-                    r_a = np.argsort(np.argsort(ortho_alphas[k][s][mask_s]))
-                    r_f = np.argsort(np.argsort(fwd_ret[s][mask_s]))
-                    if len(r_a) > 2 and np.std(r_a) > 0 and np.std(r_f) > 0:
-                        corr_val = np.corrcoef(r_a, r_f)[0, 1]
-                        if np.isfinite(corr_val):
-                            daily_ics.append(corr_val)
-            ics.append(float(np.mean(daily_ics)) if daily_ics else 0.0)
+            valid_slice = has_ic[k, train_start:train_end]
+            if np.any(valid_slice):
+                ics.append(float(np.mean(all_daily_ics[k, train_start:train_end][valid_slice])))
+            else:
+                ics.append(0.0)
             
         pos_ics = [max(0.0, ic) for ic in ics]
         sum_ic = sum(pos_ics)
@@ -299,14 +309,24 @@ def run_comparative_experiment(parquet_path: str = DEFAULT_PARQUET) -> Dict[str,
     )
 
     # 5. Realistic Vietnam Microstructure Simulator
-    res_single = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_single)
-    res_multi = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_multi)
+    # B6 Fix: Enforce strictly causal execution by lagging target weights 1 session.
+    # Signal computed from close of session t is executed at ATO open of session t+1.
+    w_single_exec = np.zeros_like(w_single)
+    w_single_exec[1:] = w_single[:-1]
+    w_single_exec[0] = 0.0
 
-    naive_single = sim.simulate_naive(raw_close, w_single)
-    naive_multi = sim.simulate_naive(raw_close, w_multi)
+    w_multi_exec = np.zeros_like(w_multi)
+    w_multi_exec[1:] = w_multi[:-1]
+    w_multi_exec[0] = 0.0
 
-    m_single = sim.evaluate_strategy(res_single["equity"], w_single, naive_single)
-    m_multi = sim.evaluate_strategy(res_multi["equity"], w_multi, naive_multi)
+    res_single = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_single_exec)
+    res_multi = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_multi_exec)
+
+    naive_single = sim.simulate_naive(raw_close, w_single_exec)
+    naive_multi = sim.simulate_naive(raw_close, w_multi_exec)
+
+    m_single = sim.evaluate_strategy(res_single["equity"], w_single_exec, naive_single)
+    m_multi = sim.evaluate_strategy(res_multi["equity"], w_multi_exec, naive_multi)
 
     # 6. Benchmark Comparison Table
     print("\n" + "=" * 90)

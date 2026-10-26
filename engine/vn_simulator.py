@@ -16,6 +16,8 @@ Features:
 """
 
 from typing import Dict, Any, Optional, Tuple, Union, List
+import os
+import json
 import datetime
 import numpy as np
 import bottleneck as bn
@@ -144,6 +146,78 @@ def compute_deflated_sharpe_ratio(
     }
 
 
+def record_trial(
+    trial_name: str,
+    daily_returns: np.ndarray,
+    metadata: Optional[Dict[str, Any]] = None,
+    registry_file: str = "experiments/trial_registry.jsonl"
+) -> Dict[str, Any]:
+    """
+    Appends a quantitative backtest trial to the persistent JSONL trial registry.
+    """
+    os.makedirs(os.path.dirname(os.path.abspath(registry_file)), exist_ok=True)
+    r_arr = np.asarray(daily_returns, dtype=np.float64)
+    entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "trial_name": trial_name,
+        "n_bars": len(r_arr),
+        "mean_daily_return": float(np.mean(r_arr)),
+        "vol_annualized": float(np.std(r_arr, ddof=1) * np.sqrt(252.0)) if len(r_arr) > 1 else 0.0,
+        "metadata": metadata or {},
+        "returns": [float(x) for x in r_arr]
+    }
+    with open(registry_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return entry
+
+
+def compute_dsr_from_registry(
+    daily_returns: np.ndarray,
+    registry_file: str = "experiments/trial_registry.jsonl",
+    risk_free_rate: float = 0.04,
+    annualization_factor: float = 252.0
+) -> Dict[str, Any]:
+    """
+    Computes Calibrated Deflated Sharpe Ratio (DSR) using real historical trials
+    stored in experiments/trial_registry.jsonl to derive effective trial count N_eff
+    via Eigenvalue Participation Ratio.
+    """
+    current_r = np.asarray(daily_returns, dtype=np.float64)
+    T = len(current_r)
+    
+    trials_returns_list = [current_r]
+    if os.path.exists(registry_file):
+        try:
+            with open(registry_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    ret_seq = data.get("returns")
+                    if ret_seq and len(ret_seq) == T:
+                        trials_returns_list.append(np.asarray(ret_seq, dtype=np.float64))
+        except Exception:
+            pass
+            
+    if len(trials_returns_list) > 1:
+        matrix = np.column_stack(trials_returns_list)
+        return compute_deflated_sharpe_ratio(
+            daily_returns=current_r,
+            n_trials=len(trials_returns_list),
+            risk_free_rate=risk_free_rate,
+            annualization_factor=annualization_factor,
+            trial_returns=matrix
+        )
+    else:
+        return compute_deflated_sharpe_ratio(
+            daily_returns=current_r,
+            n_trials=1,
+            risk_free_rate=risk_free_rate,
+            annualization_factor=annualization_factor
+        )
+
+
 # ==============================================================================
 # 1. PRICE LIMITS AND TICK SIZES
 # ==============================================================================
@@ -259,18 +333,21 @@ def _simulate_vn_microstructure_core(
     corp_stock_ratio: np.ndarray,
     corp_stock_list_t: np.ndarray,
     in_pit_universe: np.ndarray,
-    daily_vol: np.ndarray
+    daily_vol: np.ndarray,
+    penalty_rate_per_day: float,
+    is_t3_regime: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     High-performance Numba engine simulating Vietnam microstructure:
-    - T+2.5 settlement for stocks and sales proceeds
+    - Dynamic T+3 (pre-2022-08-29) vs T+2.5 (post-2022-08-29) settlement
     - Independent accounting of Brokerage Fees (Buy/Sell 0.15%) and Transfer Tax (Sell 0.10%)
     - Dynamic advance cash borrowing interest based on calendar days with 50,000 VND floor fee
     - Dual corporate actions ledger: dividend_cash_receivable and locked_corp_action_shares
-    - Priority queue for floor-trapped sell orders with -7%/session penalty slippage upon exit
+    - Priority queue for floor-trapped sell orders with parameterized adverse penalty upon exit
     - Realized daily turnover directly computed from executed transaction volume
     - Point-in-Time constituent masking with liquidation_grace_mask (orderly exit <= 5 sessions)
     - 3-tier order book market impact model with 12 bps half-spread floor
+    - Causal liquidity & volatility lagging (t-1) for sizing and slippage
     """
     T, N = raw_open.shape
     equity = np.zeros(T, dtype=np.float64)
@@ -289,6 +366,7 @@ def _simulate_vn_microstructure_core(
     
     shares_held = np.zeros(N, dtype=np.float64)
     shares_sellable = np.zeros(N, dtype=np.float64)
+    buy_t2 = np.zeros(N, dtype=np.float64)
     buy_t1 = np.zeros(N, dtype=np.float64)
     buy_t0 = np.zeros(N, dtype=np.float64)
     
@@ -306,13 +384,23 @@ def _simulate_vn_microstructure_core(
     cum_adv_fees = 0.0
     
     for t in range(T):
+        t_lag = max(0, t - 1)
         # ----------------------------------------------------------------------
         # A. SETTLEMENT UPDATES & CORPORATE ACTIONS (At Open of day t)
         # ----------------------------------------------------------------------
-        # 1. Stocks bought at t-2 unlock into sellable today
-        shares_sellable += buy_t1
-        buy_t1 = buy_t0.copy()
-        buy_t0[:] = 0.0
+        # 1. Stocks settlement: T+3 ATO (before 2022-08-29) vs T+2.5 (from 2022-08-29 onwards)
+        if is_t3_regime[t]:
+            # T+3 regime: 3-step queue (buy_t2 -> buy_t1 -> buy_t0), unlocks at ATO morning of T+3
+            shares_sellable += buy_t2
+            buy_t2 = buy_t1.copy()
+            buy_t1 = buy_t0.copy()
+            buy_t0[:] = 0.0
+        else:
+            # T+2.5 regime: shares bought at T settle into available at T+2
+            shares_sellable += buy_t2 + buy_t1
+            buy_t2[:] = 0.0
+            buy_t1 = buy_t0.copy()
+            buy_t0[:] = 0.0
         
         # 2. Cash from sales at t-2 settles into available cash today
         cash_avail += pending_cash_t1
@@ -409,11 +497,11 @@ def _simulate_vn_microstructure_core(
                 if p_open <= flr_p + 1e-4:
                     trapped_days[i] += 1
                 else:
-                    # Liquidity returned! Execute with adverse penalty slippage (-7%/day trapped)
+                    # Liquidity returned! Execute with parameterized adverse penalty slippage
                     q_trap = trapped_sell_shares[i]
-                    penalty_rate = min(0.40, 0.07 * float(trapped_days[i]))
-                    vol_i = daily_vol[t, i]
-                    adv_i = adv20_shares[t, i]
+                    penalty_rate = min(0.40, penalty_rate_per_day * float(trapped_days[i]))
+                    vol_i = daily_vol[t_lag, i]
+                    adv_i = adv20_shares[t_lag, i]
                     dyn_slip = _calc_dynamic_slippage(q_trap, adv_i, vol_i, base_slippage=slippage)
                     exec_price = p_open * (1.0 - dyn_slip - penalty_rate)
                     gross_val = q_trap * exec_price
@@ -452,7 +540,7 @@ def _simulate_vn_microstructure_core(
                 
                 # Expand participation limit to 10% ADV if grace period reached to ensure complete exit
                 eff_max_adv = max_adv_participation if liquidation_grace_counter[i] < 5 else max(max_adv_participation, 0.10)
-                adv_limit = np.floor((adv20_shares[t, i] * eff_max_adv) / 100.0) * 100.0
+                adv_limit = np.floor((adv20_shares[t_lag, i] * eff_max_adv) / 100.0) * 100.0
                 qty_sell = min(qty_sell, adv_limit)
                 
                 if qty_sell > 0.0:
@@ -464,8 +552,8 @@ def _simulate_vn_microstructure_core(
                         shares_held[i] -= qty_sell
                         shares_sellable[i] -= qty_sell
                         
-                        vol_i = daily_vol[t, i]
-                        adv_i = adv20_shares[t, i]
+                        vol_i = daily_vol[t_lag, i]
+                        adv_i = adv20_shares[t_lag, i]
                         dyn_slip = _calc_dynamic_slippage(qty_sell, adv_i, vol_i, base_slippage=slippage)
                         exec_price = p_open * (1.0 - dyn_slip)
                         gross_val = qty_sell * exec_price
@@ -497,15 +585,15 @@ def _simulate_vn_microstructure_core(
                     continue  # Ceiling locked, cannot purchase
                     
                 desired_buy = delta_shares[i]
-                adv_limit = np.floor((adv20_shares[t, i] * max_adv_participation) / 100.0) * 100.0
+                adv_limit = np.floor((adv20_shares[t_lag, i] * max_adv_participation) / 100.0) * 100.0
                 qty_buy = min(desired_buy, adv_limit)
                 qty_buy = np.floor(qty_buy / 100.0) * 100.0
                 
                 if qty_buy <= 0.0:
                     continue
                     
-                vol_i = daily_vol[t, i]
-                adv_i = adv20_shares[t, i]
+                vol_i = daily_vol[t_lag, i]
+                adv_i = adv20_shares[t_lag, i]
                 dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
                 exec_price = p_open * (1.0 + dyn_slip)
                 cost_per_share = exec_price * (1.0 + broker_fee)
@@ -552,8 +640,8 @@ def _simulate_vn_microstructure_core(
                             continue
                             
                         qty_buy = scaled_qty
-                        vol_i = daily_vol[t, i]
-                        adv_i = adv20_shares[t, i]
+                        vol_i = daily_vol[t_lag, i]
+                        adv_i = adv20_shares[t_lag, i]
                         dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
                         exec_price = p_open * (1.0 + dyn_slip)
                         cost_per_share = exec_price * (1.0 + broker_fee)
@@ -760,10 +848,14 @@ def simulate_vietnam(
     in_pit_universe: Optional[np.ndarray] = None,
     daily_vol: Optional[np.ndarray] = None,
     halt_haircut: float = 0.0,
-    sanitize_inputs: bool = True
+    sanitize_inputs: bool = True,
+    split_date: Optional[Union[str, datetime.date]] = "2022-08-29",
+    penalty_rate_per_day: float = 0.0
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
+    - Split T+3 / T+2.5 settlement (split_date: default '2022-08-29')
+    - Parameterized floor trapped penalty (penalty_rate_per_day: default 0.0)
     - Independent tax & fee accounting
     - Calendar day advance loan financing (min 50k floor)
     - Corporate actions dual ledger
@@ -877,6 +969,19 @@ def simulate_vietnam(
         daily_vol_arr[np.isnan(daily_vol_arr) | (daily_vol_arr <= 1e-4)] = 0.015
     else:
         daily_vol_arr = np.asarray(daily_vol, dtype=np.float64)
+
+    # 4. Setup T+3 (pre-split) vs T+2.5 (post-split) settlement regimes
+    is_t3_regime = np.zeros(T, dtype=np.bool_)
+    if dates is not None and split_date is not None and len(dates) == T:
+        split_dt = datetime.date.fromisoformat(split_date) if isinstance(split_date, str) else split_date
+        for t in range(T):
+            d_t = dates[t]
+            if isinstance(d_t, str):
+                d_t = datetime.date.fromisoformat(d_t)
+            elif hasattr(d_t, "date"):
+                d_t = d_t.date()
+            if d_t < split_dt:
+                is_t3_regime[t] = True
         
     (
         eq,
@@ -909,7 +1014,9 @@ def simulate_vietnam(
         corp_stock_ratio=corp_stock_ratio,
         corp_stock_list_t=corp_stock_list_t,
         in_pit_universe=in_pit_universe_arr,
-        daily_vol=daily_vol_arr
+        daily_vol=daily_vol_arr,
+        penalty_rate_per_day=penalty_rate_per_day,
+        is_t3_regime=is_t3_regime
     )
     
     if not np.all(np.isfinite(eq)):

@@ -342,102 +342,143 @@ def ts_corr(x: np.ndarray, y: np.ndarray, d: int) -> np.ndarray:
 def check_and_orthogonalize(
     new_alpha: np.ndarray,
     existing_alphas: Union[np.ndarray, List[np.ndarray]],
-    threshold: float = 0.50
+    threshold: float = 0.50,
+    tradable_mask: Optional[np.ndarray] = None
 ) -> Tuple[np.ndarray, float, float]:
     """
     Calculates Pearson correlation between new_alpha and existing_alphas.
     If max(|correlation|) >= threshold, performs Gram-Schmidt orthogonalization
-    to project new_alpha onto the orthogonal complement of existing alphas,
+    independently on each cross-sectional slice t = 0..T-1 (preserving causality),
     driving self-correlation strictly below threshold.
     
     Parameters:
     -----------
-    new_alpha : np.ndarray, 1D (T,) or 2D (T, N)
+    new_alpha : np.ndarray, 1D (N,) or 2D (T, N)
     existing_alphas : List[np.ndarray] or 2D/3D array
     threshold : float, default 0.50
+    tradable_mask : Optional[np.ndarray], shape matches new_alpha
     
     Returns:
     --------
     Tuple[np.ndarray, float, float]
         (orthogonalized_alpha, max_corr_before, max_corr_after)
     """
-    orig_shape = new_alpha.shape
-    v = np.asarray(new_alpha, dtype=np.float64).ravel()
+    arr_new = np.asarray(new_alpha, dtype=np.float64)
+    orig_shape = arr_new.shape
+    is_1d = (arr_new.ndim == 1)
     
-    # Standardize list of existing alphas
+    if is_1d:
+        v_2d = arr_new.reshape(1, -1)
+        mask_2d = None if tradable_mask is None else np.asarray(tradable_mask, dtype=bool).reshape(1, -1)
+    else:
+        v_2d = arr_new
+        mask_2d = None if tradable_mask is None else np.asarray(tradable_mask, dtype=bool)
+        
+    T, N = v_2d.shape
+    
+    # Standardize list of existing alphas to list of (T, N) arrays
+    existing_list = []
     if isinstance(existing_alphas, np.ndarray):
         if existing_alphas.ndim == 1:
-            existing_list = [existing_alphas.ravel()]
-        elif existing_alphas.ndim == 2 and existing_alphas.shape == orig_shape:
-            existing_list = [existing_alphas.ravel()]
+            existing_list = [existing_alphas.reshape(1, -1) if is_1d else existing_alphas.reshape(T, N)]
         elif existing_alphas.ndim == 2:
-            existing_list = [existing_alphas[k].ravel() for k in range(existing_alphas.shape[0])]
+            if existing_alphas.shape == (T, N):
+                existing_list = [existing_alphas]
+            elif is_1d and existing_alphas.shape[1] == N:
+                existing_list = [existing_alphas[k:k+1, :] for k in range(existing_alphas.shape[0])]
+            else:
+                existing_list = [existing_alphas]
         elif existing_alphas.ndim == 3:
-            existing_list = [existing_alphas[k].ravel() for k in range(existing_alphas.shape[0])]
+            existing_list = [existing_alphas[k] for k in range(existing_alphas.shape[0])]
         else:
-            existing_list = [existing_alphas.ravel()]
+            existing_list = [existing_alphas.reshape(T, N)]
     else:
-        existing_list = [np.asarray(ea, dtype=np.float64).ravel() for ea in existing_alphas]
-        
+        for ea in existing_alphas:
+            ea_arr = np.asarray(ea, dtype=np.float64)
+            if ea_arr.ndim == 1 and is_1d:
+                existing_list.append(ea_arr.reshape(1, -1))
+            elif ea_arr.shape == (T, N):
+                existing_list.append(ea_arr)
+            else:
+                existing_list.append(ea_arr.reshape(T, N))
+                
     if len(existing_list) == 0:
         return new_alpha.copy(), 0.0, 0.0
         
-    # Stack existing alphas into matrix E of shape (M, K)
-    E = np.column_stack(existing_list)
-    
-    # Calculate correlations before
-    valid_mask = np.isfinite(v)
-    for k in range(E.shape[1]):
-        valid_mask = valid_mask & np.isfinite(E[:, k])
-        
-    if np.sum(valid_mask) < 2:
-        return new_alpha.copy(), 0.0, 0.0
-        
-    v_clean = v[valid_mask]
-    E_clean = E[valid_mask, :]
-    
+    # Compute max correlation before across valid elements
     corrs_before = []
-    std_v = np.std(v_clean)
-    for k in range(E_clean.shape[1]):
-        std_ek = np.std(E_clean[:, k])
-        if std_v > 1e-12 and std_ek > 1e-12:
-            r = np.corrcoef(v_clean, E_clean[:, k])[0, 1]
-            corrs_before.append(abs(r))
+    for ea in existing_list:
+        valid_pair = np.isfinite(v_2d) & np.isfinite(ea)
+        if mask_2d is not None:
+            valid_pair = valid_pair & mask_2d
+        if np.sum(valid_pair) >= 2:
+            v_vals = v_2d[valid_pair]
+            ea_vals = ea[valid_pair]
+            if np.std(v_vals) > 1e-12 and np.std(ea_vals) > 1e-12:
+                r = np.corrcoef(v_vals, ea_vals)[0, 1]
+                corrs_before.append(abs(r) if np.isfinite(r) else 0.0)
+            else:
+                corrs_before.append(0.0)
         else:
             corrs_before.append(0.0)
             
     max_corr_before = float(np.max(corrs_before)) if corrs_before else 0.0
-    
     if max_corr_before < threshold:
         return new_alpha.copy(), max_corr_before, max_corr_before
+
+    # Cross-Sectional QR Orthogonalization per session t (Strictly Causal)
+    out_2d = v_2d.copy()
+    K = len(existing_list)
+    
+    for t in range(T):
+        valid_t = np.isfinite(v_2d[t])
+        if mask_2d is not None:
+            valid_t = valid_t & mask_2d[t]
+        for k in range(K):
+            valid_t = valid_t & np.isfinite(existing_list[k][t])
+            
+        n_valid = int(np.sum(valid_t))
+        if n_valid <= K:
+            continue
+            
+        v_t = v_2d[t, valid_t]
+        v_dm = v_t - np.mean(v_t)
         
-    # Cross-Sectional Ridge-Regularized Factor Projection (Order-Invariant)
-    # Centers vectors and projects candidate onto subspace spanned by benchmark factors
-    E_dm = E_clean - np.mean(E_clean, axis=0)
-    v_dm = v_clean - np.mean(v_clean)
-    
-    # Solve via SVD/lstsq with Tikhonov regularization for strict order-invariance
-    beta, _, _, _ = np.linalg.lstsq(E_dm, v_dm, rcond=1e-10)
-    v_proj = E_dm @ beta
-    v_ortho_clean = v_dm - v_proj
-    
+        E_t = np.column_stack([existing_list[k][t, valid_t] for k in range(K)])
+        E_dm = E_t - np.mean(E_t, axis=0)
+        
+        var_e = np.var(E_dm, axis=0)
+        valid_cols = var_e > 1e-12
+        if not np.any(valid_cols) or np.var(v_dm) <= 1e-12:
+            continue
+            
+        E_active = E_dm[:, valid_cols]
+        beta, _, _, _ = np.linalg.lstsq(E_active, v_dm, rcond=1e-10)
+        v_proj = E_active @ beta
+        v_ortho = v_dm - v_proj
+        out_2d[t, valid_t] = v_ortho
+
     # Re-check correlation after orthogonalization
     corrs_after = []
-    std_vo = np.std(v_ortho_clean)
-    for k in range(E_clean.shape[1]):
-        std_ek = np.std(E_clean[:, k])
-        if std_vo > 1e-12 and std_ek > 1e-12:
-            r = np.corrcoef(v_ortho_clean, E_clean[:, k])[0, 1]
-            corrs_after.append(abs(r))
+    for ea in existing_list:
+        valid_pair = np.isfinite(out_2d) & np.isfinite(ea)
+        if mask_2d is not None:
+            valid_pair = valid_pair & mask_2d
+        if np.sum(valid_pair) >= 2:
+            vo_vals = out_2d[valid_pair]
+            ea_vals = ea[valid_pair]
+            if np.std(vo_vals) > 1e-12 and np.std(ea_vals) > 1e-12:
+                r = np.corrcoef(vo_vals, ea_vals)[0, 1]
+                corrs_after.append(abs(r) if np.isfinite(r) else 0.0)
+            else:
+                corrs_after.append(0.0)
         else:
             corrs_after.append(0.0)
             
     max_corr_after = float(np.max(corrs_after)) if corrs_after else 0.0
     
-    # Reconstruct output array matching orig_shape
-    out_flat = v.copy()
-    out_flat[valid_mask] = v_ortho_clean
-    return out_flat.reshape(orig_shape), max_corr_before, max_corr_after
+    out_res = out_2d.reshape(orig_shape)
+    return out_res, max_corr_before, max_corr_after
 
 
 def ridge_factor_projection(
@@ -819,20 +860,16 @@ def compute_hose_market_impact(
         p_levels = np.asarray(lob_prices[:3], dtype=np.float64)
         q_vis = float(np.sum(v_levels))
         
-        # 1. Best bid-ask spread component
-        s_t = 2.0 * abs(p_levels[0] - p_mid)
-        spread_component = s_t / (2.0 * p_mid)
-        
-        # 2. Depth sweep across visible 3 levels
+        # 1. Depth sweep across visible 3 levels (directly includes half-spread from Level 0)
         cum_q = 0.0
         sweep_cost = 0.0
         for l in range(3):
             q_l = min(v_levels[l], max(0.0, q_shares - cum_q))
             sweep_cost += q_l * abs(p_levels[l] - p_mid)
             cum_q += v_levels[l]
-        depth_component = sweep_cost / (q_shares * p_mid)
+        lob_component = sweep_cost / (q_shares * p_mid)
         
-        # 3. Latent tail impact for Q > Q_vis
+        # 2. Latent tail impact for Q > Q_vis
         tail_component = 0.0
         if q_shares > q_vis:
             q_tail = q_shares - q_vis
@@ -840,7 +877,7 @@ def compute_hose_market_impact(
             perm_impact = gamma_perm * sigma * (q_shares / adv20)
             tail_component = temp_impact + perm_impact
             
-        total_is = spread_component + depth_component + tail_component
+        total_is = lob_component + tail_component
     else:
         # OHLCV-only fallback mode: half-spread floor 12 bps + square-root impact
         temp_impact = eta * sigma * ((q_shares / adv20) ** delta)
