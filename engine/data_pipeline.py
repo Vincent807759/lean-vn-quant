@@ -214,7 +214,8 @@ def generate_fallback_data(
                 "adj_close": float(adj_close),
                 "volume": float(vol),
                 "adv": float(adv),
-                "is_listed": is_listed
+                "is_listed": is_listed,
+                "data_source": "synthetic"
             })
             
     df = pl.DataFrame(records).sort(["date", "symbol"])
@@ -257,6 +258,11 @@ def fetch_vn_ohlcv(
             parent_dir = os.path.dirname(save_parquet)
             if parent_dir:
                 os.makedirs(parent_dir, exist_ok=True)
+            norm_path = os.path.normpath(save_parquet).replace("\\", "/")
+            if not ("tests/tmp/" in norm_path or norm_path.startswith("tests/tmp")):
+                raise PermissionError(
+                    f"S1 Invariant Violated: Synthetic data can only be written to tests/tmp/, rejected path: '{save_parquet}'"
+                )
             df.write_parquet(save_parquet)
         return df
         
@@ -267,6 +273,7 @@ def fetch_vn_ohlcv(
     
     records = []
     success_count = 0
+    successful_symbols = set()
     
     for symbol in symbols:
         url = f"https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?symbol={symbol}&resolution=1D&from={from_ts}&to={to_ts}"
@@ -312,25 +319,57 @@ def fetch_vn_ohlcv(
                             "adj_close": c_val,
                             "volume": v_val,
                             "adv": adv_val,
-                            "is_listed": True
+                            "is_listed": True,
+                            "data_source": "entrade"
                         })
                     success_count += 1
+                    successful_symbols.add(symbol)
         except Exception:
-            pass  # Will fall back if needed
+            pass
             
-    # If fetching failed for all or majority of symbols, use Fallback Generator
+    # S1 Invariant: NEVER silently overwrite with synthetic data on network/API failure
     if success_count < len(symbols) * 0.5 or len(records) == 0:
-        df = generate_fallback_data(symbols, start_date, end_date)
+        raise RuntimeError(
+            f"Failed to fetch market data from Entrade API. "
+            f"Success count: {success_count}/{len(symbols)}, records: {len(records)}. "
+            f"Network error or upstream outage."
+        )
     else:
         df = pl.DataFrame(records).sort(["date", "symbol"])
+        if success_count < len(symbols):
+            failed_symbols = [s for s in symbols if s not in successful_symbols]
+            print(f"[DATA_PIPELINE WARNING] {len(failed_symbols)} symbols failed to fetch: {failed_symbols}")
         
     if save_parquet:
         parent_dir = os.path.dirname(save_parquet)
         if parent_dir:
             os.makedirs(parent_dir, exist_ok=True)
+        if "data_source" in df.columns and (df["data_source"] == "synthetic").any():
+            norm_path = os.path.normpath(save_parquet).replace("\\", "/")
+            if not ("tests/tmp/" in norm_path or norm_path.startswith("tests/tmp")):
+                raise PermissionError(
+                    f"S1 Invariant Violated: Synthetic data can only be written to tests/tmp/, rejected path: '{save_parquet}'"
+                )
         df.write_parquet(save_parquet)
         
     return df
+
+
+def validate_real_data_source(df: pl.DataFrame) -> None:
+    """
+    S1 Invariant: Enforces that real backtests and live/paper trading engines
+    only ingest genuine Entrade data, rejecting synthetic or corrupted fallback datasets.
+    """
+    if "data_source" not in df.columns:
+        raise ValueError("Dataset missing 'data_source' column; cannot verify provenance.")
+    
+    non_entrade = df.filter(pl.col("data_source") != "entrade")
+    if len(non_entrade) > 0:
+        sources = df["data_source"].unique().to_list()
+        raise ValueError(
+            f"S1 Invariant Violated: Real backtest cannot read non-entrade data. "
+            f"Detected disallowed data source(s): {sources}"
+        )
 
 
 def query_parquet_duckdb(parquet_path: str, sql_query: str) -> pl.DataFrame:
