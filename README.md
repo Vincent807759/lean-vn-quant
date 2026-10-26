@@ -12,8 +12,8 @@
 
 ## 1. Overview & Architecture
 
-Standard quantitative backtesting frameworks (Backtrader, Zipline, VectorBT) assume continuous frictionless execution, instantaneous $T+0$ settlement, and infinite liquidity. When deployed on emerging markets such as the **Ho Chi Minh Stock Exchange (HOSE)**, quantitative strategies frequently break down due to unique market microstructural frictions:
-- **Strict $T+2.5$ Settlement Cycles:** Equities purchased on day $t$ remain locked across $T+1$ and $T+2$ cycles before becoming tradable in the afternoon session of $T+2$. Morning ATO selling before settlement is legally restricted.
+Standard quantitative backtesting frameworks (Backtrader, Zipline, VectorBT) assume continuous frictionless execution, instantaneous T+0 settlement, and infinite liquidity. When deployed on emerging markets such as the **Ho Chi Minh Stock Exchange (HOSE)**, quantitative strategies frequently break down due to unique market microstructural frictions:
+- **Strict T+2.5 Settlement Cycles:** Equities purchased on day $t$ remain locked across T+1 and T+2 cycles before becoming tradable in the afternoon session of T+2. Morning ATO selling before settlement is legally restricted.
 - **Asymmetric Transaction Frictions:** Independent accounting for brokerage commission (0.15% on both buy and sell legs), personal income transfer tax on gross sales (0.10%), half-spread and market impact slippage (≥ 12 bps), and dynamic calendar-day advance borrowing interest (0.035%/day with a 50,000 VND minimum floor fee).
 - **Exchange Price Limits & Floor Locks:** Strict daily price limits (±7%) with zero-bid floor-locked liquidation penalties and zero-ask ceiling-locked execution blocks.
 - **Round-Lot Discretization:** Compulsory round-lot execution (100 shares), producing uninvested cash drag.
@@ -53,21 +53,22 @@ flowchart TD
 
 ## 2. Microstructure Specifications
 
-### 2.1. HOSE $T+2.5$ Dual Settlement State Machine
+### 2.1. HOSE T+2.5 Dual Settlement State Machine
 The core ledger state machine (`engine/vn_simulator.py`) maintains explicit separation between settled tradable assets and pending receivables:
 - **Cash Accounts:** `available_cash`, `receivable_cash_t1`, `receivable_cash_t2`, `dividend_cash_receivable`.
 - **Share Accounts:** `sellable_qty`, `locked_t1`, `locked_t2`, `locked_corp_action_shares`.
-- **Calendar-Day Advance Borrowing:** When purchasing power requires pre-settlement funds, interest is charged over calendar days (e.g., Thursday buy borrows over 4 calendar days through Monday settlement; Friday buy borrows over 3-4 calendar days):
 
-  $$
-  \text{Fee}_{\text{adv}} = \max\left(50{,}000\text{ VND}, \; V_{\text{borrowed}} \times 0.035\% \times \text{cal\_days}\right)
-  $$
+**Calendar-Day Advance Borrowing:** When purchasing power requires pre-settlement funds, interest is charged over calendar days (e.g., Thursday buy borrows over 4 calendar days through Monday settlement; Friday buy borrows over 3-4 calendar days):
 
-- **Corporate Action Ex-Date Preservation:** Stock dividend and cash dividend rights are credited to escrow receivable registers on Ex-Date ($t_{\text{ex}}$) rather than market payout date ($t_{\text{pay}}$), ensuring zero artificial NAV drop:
+$$
+\text{Fee}_{\text{adv}} = \max\left(50{,}000\text{ VND}, \; V_{\text{borrowed}} \times 0.035\% \times \text{cal\_days}\right)
+$$
 
-  $$
-  \Delta \text{NAV}(t_{\text{ex}}) \equiv 0.0000\%
-  $$
+**Corporate Action Ex-Date Preservation:** Stock dividend and cash dividend rights are credited to escrow receivable registers on Ex-Date ($t_{\text{ex}}$) rather than market payout date ($t_{\text{pay}}$), ensuring zero artificial NAV drop:
+
+$$
+\Delta \text{NAV}(t_{\text{ex}}) \equiv 0.0000\%
+$$
 
 ### 2.2. Vectorized Point-in-Time Universe Masking
 To prevent Survivorship Bias and Look-Ahead Bias, historical constituents are filtered via Polars Lazy API:
@@ -85,7 +86,7 @@ IS(Q) = \frac{S_t}{2 P_{\text{mid}}} + \text{SweepCost}_{\text{LOB}} + \mathbb{I
 $$
 
 - Half-spread floor: 12 bps (0.0012).
-- Intraday order slicing rule: If order $Q > 0.5\% \times \text{ADV}_{20}$, execution is automatically partitioned into **25% ATO** (09:00 - 09:15), **55% TWAP** (09:30 - 14:15), and **20% ATC** (14:30 - 14:45), capped at $3\% \times \text{ADV}_{20}$.
+- Intraday order slicing rule: If order $Q > 0.5\% \times \text{ADV}\_{20}$, execution is automatically partitioned into **25% ATO** (09:00 - 09:15), **55% TWAP** (09:30 - 14:15), and **20% ATC** (14:30 - 14:45), capped at $3\% \times \text{ADV}\_{20}$.
 
 ### 2.4. Permutation-Invariant Factor Orthogonalization
 Standard Gram-Schmidt QR decomposition suffers from column-order dependence. Lean VN-Quant implements **Ridge Factor Projection**:
@@ -125,7 +126,7 @@ lean-vn-quant/
 ### Dynamic Loading Mechanism
 Both [`run_verification.py`](run_verification.py) and [`services/daily_paper_trader.py`](services/daily_paper_trader.py) query the local environment dynamically:
 1. **Local Deployment with `private_alphas/`:** Automatically imports your custom alpha functions and generates live trading allocations.
-2. **Open-Source / CI/CD (No `private_alphas/`):** Automatically falls back to `_default_textbook_placeholder_signal` (SMA-40/50 Breakout Z-Score), allowing the entire 8-stage verification test suite to run and pass with $100\%$ determinism.
+2. **Open-Source / CI/CD (No `private_alphas/`):** Automatically falls back to `_default_textbook_placeholder_signal` (SMA-40/50 Breakout Z-Score), allowing the entire 8-stage verification test suite to run and pass with 100% determinism.
 
 ---
 
@@ -168,8 +169,8 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 | **Annualized Volatility** | **19.49%** | **18.73%** | 17.28% | 19.61% | 18.74% | Realized strategy annualized volatility is well-controlled under 20%. |
 | **Maximum Drawdown (MaxDD)** | **18.10%** | **19.87%** | 17.78% | 17.78% | 20.64% | Multi-Alpha MaxDD improved from 20.64% down to 19.87% post-fix. |
 | **Daily Turnover (4 decimals)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Strictly bound by rank hysteresis dampener `max_turnover_target = 0.015`. |
-| **Cumulative IS (% Capital)** | **+22.30%** | **+21.52%** | N/A | -11.36% | +22.82% | $(\text{NAV}_{\text{Naive}} - \text{NAV}_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 21.5%–22.3% of initial capital. |
-| **Annualized IS (%/yr)** | **+3.48%/yr** | **+3.82%/yr** | N/A | -1.68%/yr | +4.12%/yr | $\text{CAGR}_{\text{Naive}} - \text{CAGR}_{\text{Real}}$: Market frictions impose an annual drag of 3.48%–3.82%/year. |
+| **Cumulative IS (% Capital)** | **+22.30%** | **+21.52%** | N/A | -11.36% | +22.82% | $(\text{NAV}\_{\text{Naive}} - \text{NAV}\_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 21.5%–22.3% of initial capital. |
+| **Annualized IS (%/yr)** | **+3.48%/yr** | **+3.82%/yr** | N/A | -1.68%/yr | +4.12%/yr | $\text{CAGR}\_{\text{Naive}} - \text{CAGR}\_{\text{Real}}$: Market frictions impose an annual drag of 3.48%–3.82%/year. |
 | **Total Fees & Transfer Taxes** | **82.7M VND** | **79.4M VND** | 30.0M VND | 89.3M VND | 79.0M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
 | **Advance Borrowing Interest** | **26.8M VND** | **19.8M VND** | 0.3M VND | 32.1M VND | 19.1M VND | 94.3% of advance borrowing costs stem from the 50,000 VND floor fee on small lots. |
 
@@ -190,14 +191,14 @@ By configuring `min_advance_notional = 71,428,571 VND`, the engine completely by
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Naive Greedy Sweep (Baseline)** | 26,800,000 | ~0.62% / order (Floor penalty) | +95.52% | 506 times (94.3% fee) | 1,955,217,553 |
 | **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+97.78% (+2.26%)** | **0 times** | **1,977,783,568** |
-| **No Advance Sweep ($T+2$ Closed)** | 0 | 0.00% | +97.78% (+2.26%) | 0 times | 1,977,783,568 |
+| **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +97.78% (+2.26%) | 0 times | 1,977,783,568 |
 
 #### Multi-Alpha Cash Sweep Comparison:
 | Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Naive Greedy Sweep (Baseline)** | 19,750,000 | ~0.62% / order (Floor penalty) | +63.32% | 376 times (95.2% fee) | 1,633,197,940 |
 | **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+66.66% (+3.34%)** | **0 times** | **1,666,613,212** |
-| **No Advance Sweep ($T+2$ Closed)** | 0 | 0.00% | +66.66% (+3.34%) | 0 times | 1,666,613,212 |
+| **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +66.66% (+3.34%) | 0 times | 1,666,613,212 |
 
 ---
 
@@ -247,7 +248,7 @@ The scanner enforces strict pre-commit checks:
    ```bash
    python services/daily_paper_trader.py --mode eod
    ```
-   Reconciles ATC closing prices, marks portfolio to market, advances the $T+2.5$ settlement ledger (with idempotency lock `last_ledger_advance_date`), and stages pending orders for tomorrow morning.
+   Reconciles ATC closing prices, marks portfolio to market, advances the T+2.5 settlement ledger (with idempotency lock `last_ledger_advance_date`), and stages pending orders for tomorrow morning.
 
 2. **Pre-Open Staging (08:15 ICT, 45 mins before ATO):**
    ```bash
