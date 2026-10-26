@@ -119,11 +119,13 @@ def compute_deflated_sharpe_ratio(
     euler_mascheroni = 0.5772156649
     
     if n_eff > 1.0001:
-        z1 = stats.norm.ppf(1.0 - 1.0 / n_eff)
-        z2 = stats.norm.ppf(1.0 - 1.0 / (n_eff * np.e))
+        p1 = max(0.5, 1.0 - 1.0 / n_eff)
+        p2 = max(0.5, 1.0 - 1.0 / (n_eff * np.e))
+        z1 = stats.norm.ppf(p1)
+        z2 = stats.norm.ppf(p2)
         sigma_trials = np.sqrt(max(var_sr, 1e-6))
         # Expected max annualized Sharpe ratio under the null hypothesis of selection bias
-        expected_max_ann_sr = float(sigma_trials * ((1.0 - euler_mascheroni) * z1 + euler_mascheroni * z2))
+        expected_max_ann_sr = max(0.0, float(sigma_trials * ((1.0 - euler_mascheroni) * z1 + euler_mascheroni * z2)))
     else:
         expected_max_ann_sr = 0.0
         
@@ -185,7 +187,7 @@ def compute_dsr_from_registry(
     current_r = np.asarray(daily_returns, dtype=np.float64)
     T = len(current_r)
     
-    trials_returns_list = [current_r]
+    trials_returns_list = []
     if os.path.exists(registry_file):
         try:
             with open(registry_file, "r", encoding="utf-8") as f:
@@ -199,6 +201,13 @@ def compute_dsr_from_registry(
                         trials_returns_list.append(np.asarray(ret_seq, dtype=np.float64))
         except Exception:
             pass
+            
+    if not trials_returns_list:
+        trials_returns_list = [current_r]
+    else:
+        is_present = any(np.allclose(current_r, tr, atol=1e-8) for tr in trials_returns_list)
+        if not is_present:
+            trials_returns_list.append(current_r)
             
     if len(trials_returns_list) > 1:
         matrix = np.column_stack(trials_returns_list)
@@ -335,7 +344,8 @@ def _simulate_vn_microstructure_core(
     in_pit_universe: np.ndarray,
     daily_vol: np.ndarray,
     penalty_rate_per_day: float,
-    is_t3_regime: np.ndarray
+    is_t3_regime: np.ndarray,
+    min_advance_notional: float = 0.0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     High-performance Numba engine simulating Vietnam microstructure:
@@ -609,6 +619,27 @@ def _simulate_vn_microstructure_core(
                     daily_turnover_traded += qty_buy * p_open
                 else:
                     shortfall = total_needed - cash_avail
+                    if min_advance_notional > 0.0 and shortfall < min_advance_notional:
+                        denom = cost_per_share * 100.0
+                        if denom > 0.0 and np.isfinite(denom):
+                            scaled_qty = np.floor(cash_avail / denom) * 100.0
+                            if scaled_qty > 0.0:
+                                qty_buy = scaled_qty
+                                vol_i = daily_vol[t_lag, i]
+                                adv_i = adv20_shares[t_lag, i]
+                                dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
+                                exec_price = p_open * (1.0 + dyn_slip)
+                                cost_per_share = exec_price * (1.0 + broker_fee)
+                                actual_needed = qty_buy * cost_per_share
+                                if actual_needed <= cash_avail:
+                                    cash_avail -= actual_needed
+                                    b_fee = qty_buy * exec_price * broker_fee
+                                    cum_broker_fees += b_fee
+                                    daily_turnover_traded += qty_buy * p_open
+                                    shares_held[i] += qty_buy
+                                    buy_t0[i] += qty_buy
+                        continue
+                        
                     cap_t1 = _calc_borrow_cap(pending_cash_t1, advance_fee_rate, days_t1, min_advance_fee)
                     cap_t0 = _calc_borrow_cap(pending_cash_t0, advance_fee_rate, days_t0, min_advance_fee)
                     total_adv_capacity = cap_t1 + cap_t0
@@ -654,6 +685,8 @@ def _simulate_vn_microstructure_core(
                             cash_avail -= actual_needed
                         else:
                             shortfall = actual_needed - cash_avail
+                            if min_advance_notional > 0.0 and shortfall < min_advance_notional:
+                                continue
                             cash_avail = 0.0
                             
                             take_t1 = min(shortfall, cap_t1)
@@ -850,7 +883,8 @@ def simulate_vietnam(
     halt_haircut: float = 0.0,
     sanitize_inputs: bool = True,
     split_date: Optional[Union[str, datetime.date]] = "2022-08-29",
-    penalty_rate_per_day: float = 0.0
+    penalty_rate_per_day: float = 0.0,
+    min_advance_notional: float = 0.0
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
@@ -1016,7 +1050,8 @@ def simulate_vietnam(
         in_pit_universe=in_pit_universe_arr,
         daily_vol=daily_vol_arr,
         penalty_rate_per_day=penalty_rate_per_day,
-        is_t3_regime=is_t3_regime
+        is_t3_regime=is_t3_regime,
+        min_advance_notional=min_advance_notional
     )
     
     if not np.all(np.isfinite(eq)):
