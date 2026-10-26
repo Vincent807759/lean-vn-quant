@@ -792,12 +792,20 @@ def apply_pit_universe_mask(
     mem_ticker_col = "ticker" if "ticker" in mem_schema_names else "symbol"
     
     # 1. Causal 20-day ADV with 1-session lag (enforcing minimum 15-20 sessions stability)
+    # Polars 2.0+ uses min_samples instead of min_periods
+    try:
+        adv_rolling = (
+            (pl.col(raw_close_col).cast(pl.Float64) * pl.col("volume").cast(pl.Float64))
+            .rolling_mean(window_size=20, min_samples=min_samples)
+        )
+    except TypeError:
+        adv_rolling = (
+            (pl.col(raw_close_col).cast(pl.Float64) * pl.col("volume").cast(pl.Float64))
+            .rolling_mean(window_size=20, min_periods=min_samples)
+        )
+
     base_lf = lf_ohlcv.sort([ticker_col, "date"]).with_columns(
-        (pl.col(raw_close_col).cast(pl.Float64) * pl.col("volume").cast(pl.Float64))
-        .rolling_mean(window_size=20, min_samples=min_samples)
-        .shift(1)
-        .over(ticker_col)
-        .alias("adv_20d_lag1")
+        adv_rolling.shift(1).over(ticker_col).alias("adv_20d_lag1")
     )
     
     # 2. Point-in-Time join with membership schedule
