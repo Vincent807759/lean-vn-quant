@@ -126,7 +126,81 @@ python run_verification.py
 
 ---
 
-## 5. Security & Pre-Commit Protection
+## 5. Quantitative Verification & Empirical Results (947 VN30 Sessions: 2023–2026)
+
+All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23) via `scripts/compare_backtest_b6_b11.py` and `scripts/audit_argon_revisions.py`.
+
+### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
+
+| Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 B&H) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Final Real NAV (VND)** | **1,955,217,553** | **1,633,197,940** | 1,611,194,562 | 2,280,883,849 | 1,584,236,865 | Initial capital 1.0B VND. Both strategies outperform benchmark after all realistic frictions. |
+| **Final Naive NAV (VND)** | **2,178,173,194** | **1,848,372,768** | N/A | 2,167,275,320 | 1,812,437,072 | Theoretical frictionless T+0 baseline (zero fees, zero taxes, zero slippage). |
+| **Cumulative Return** | **+95.52%** | **+63.32%** | +61.12% | +128.09% | +58.42% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, and 3-tier LOB sweep impact. |
+| **Realized CAGR (%/yr)** | **19.53%** | **13.94%** | 13.53% | 24.54% | 13.02% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR increased from 13.02% to 13.94%. |
+| **Theoretical Naive CAGR** | **23.02%** | **17.76%** | N/A | 22.85% | 17.15% | Theoretical compound annual growth rate without microstructural penalties. |
+| **Annualized Sharpe (Newey-West)** | **0.81 (±0.53)** | **0.58 (±0.53)** | 0.59 (±0.54) | 1.01 (±0.54) | 0.53 (±0.53) | Newey-West HAC standard error indicates confidence intervals of ~ ±0.53. |
+| **Sortino Ratio** | **1.04** | **0.72** | 0.70 | 1.30 | 0.67 | Downside risk-adjusted return ratio. |
+| **Annualized Volatility** | **19.49%** | **18.73%** | 17.28% | 19.61% | 18.74% | Realized strategy annualized volatility is well-controlled under 20%. |
+| **Maximum Drawdown (MaxDD)** | **18.10%** | **19.87%** | 17.78% | 17.78% | 20.64% | Multi-Alpha MaxDD improved from 20.64% down to 19.87% post-fix. |
+| **Daily Turnover (4 decimals)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Strictly bound by rank hysteresis dampener `max_turnover_target = 0.015`. |
+| **Cumulative IS (% Capital)** | **+22.30%** | **+21.52%** | N/A | -11.36% | +22.82% | $(\text{NAV}_{\text{Naive}} - \text{NAV}_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 21.5%–22.3% of initial capital. |
+| **Annualized IS (%/yr)** | **+3.48%/yr** | **+3.82%/yr** | N/A | -1.68%/yr | +4.12%/yr | $\text{CAGR}_{\text{Naive}} - \text{CAGR}_{\text{Real}}$: Market frictions impose an annual drag of 3.48%–3.82%/year. |
+| **Total Fees & Transfer Taxes** | **82.7M VND** | **79.4M VND** | 30.0M VND | 89.3M VND | 79.0M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
+| **Advance Borrowing Interest** | **26.8M VND** | **19.8M VND** | 0.3M VND | 32.1M VND | 19.1M VND | 94.3% of advance borrowing costs stem from the 50,000 VND floor fee on small lots. |
+
+---
+
+### 5.2. Smart Cash Sweep Optimization
+
+Vietnam securities brokerages enforce a compulsory minimum advance borrowing fee of **50,000 VND per advance transaction**, regardless of loan notional. Small residual cash sweep orders incur an effective annualized borrowing rate exceeding $100\%$:
+
+$$\text{Break-Even Advance Notional} = \frac{50,000\text{ VND}}{0.00035 \times 2\text{ days}} = 71,428,571\text{ VND}$$
+
+By configuring `min_advance_notional = 71,428,571 VND`, the engine completely bypasses the sub-optimal borrowing trap on odd/fractional amounts:
+
+#### Single-Alpha Cash Sweep Comparison:
+| Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Naive Greedy Sweep (Baseline)** | 26,800,000 | ~0.62% / order (Floor penalty) | +95.52% | 506 times (94.3% fee) | 1,955,217,553 |
+| **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+97.78% (+2.26%)** | **0 times** | **1,977,783,568** |
+| **No Advance Sweep ($T+2$ Closed)** | 0 | 0.00% | +97.78% (+2.26%) | 0 times | 1,977,783,568 |
+
+#### Multi-Alpha Cash Sweep Comparison:
+| Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Naive Greedy Sweep (Baseline)** | 19,750,000 | ~0.62% / order (Floor penalty) | +63.32% | 376 times (95.2% fee) | 1,633,197,940 |
+| **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+66.66% (+3.34%)** | **0 times** | **1,666,613,212** |
+| **No Advance Sweep ($T+2$ Closed)** | 0 | 0.00% | +66.66% (+3.34%) | 0 times | 1,666,613,212 |
+
+---
+
+### 5.3. 3-Mode Deflated Sharpe Ratio (DSR) Analysis (Bailey & López de Prado, 2014)
+
+To mitigate data mining selection bias across multiple trial evaluations, Lean VN-Quant logs all exploration runs to `experiments/trial_registry.jsonl` and evaluates the strategy under three rigorous DSR formulations:
+
+| Evaluation Mode | Description | $N$ | $N_{\text{eff}}$ | Avg Cross-Corr $\bar{\rho}$ | Null Threshold $\text{SR}_0$ | Single DSR ($p$-value) | Multi DSR ($p$-value) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Mode 1: Total-Return Registry** | Full registry correlation matrix ($C_{26 \times 26}$). Reflects market beta co-movement. | 26 | **1.1194** | 0.9387 | 0.0436 | **0.9282** ($p=0.0718$) | **0.8472** ($p=0.1528$) |
+| **Mode 2: Active-Return Core Alphas** | Active returns over VN30 benchmark ($r_{\text{active}} = r - r_{\text{bm}}$) across 9 core alphas. Purges market beta. | 9 | **3.5194** | 0.2793 | 0.6584 | **0.6132** ($p=0.3868$) | **0.4388** ($p=0.5612$) |
+| **Mode 3: Unadjusted Conservative Bound** | Orthogonal independent assumption ($\mathbf{I}_{26}$). Extreme upper bound on multiple-testing penalty. | 26 | **26.0000** | 0.0000 | 1.0536 | **0.3200** ($p=0.6800$) | **0.1825** ($p=0.8175$) |
+
+---
+
+### 5.4. Pillar 2 (VN-FinGraph Knowledge Graph) Ablation Study (6-Factor Blend)
+
+By coupling unstructured financial news/event contagion matrices from Trụ cột 2 (`vn-fingraph`) into the Trụ cột 1 quantitative execution engine via Parquet bridge, we evaluate the impact of Graph Laplacian risk diffusion $\alpha \in \{0.15, 0.25, 0.50, 0.70\}$:
+
+| Laplacian Propagation $\alpha$ | Rank IC (1-Day Forward) | Cumulative Return (6-Factor) | CAGR (%/yr) | Annualized Sharpe | Max Drawdown | Architectural Assessment |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **$\alpha = 0.15$** (Fast decay) | -0.0158 | +63.14% | 13.91% | 0.58 | 19.97% | Narrow diffusion; shocks contained at epicenter. Performs on par with 5-factor baseline (+63.32%). |
+| **$\alpha = 0.25$** (Standard configuration) | -0.0137 | **+65.81%** | **14.40%** | **0.60** | **19.99%** | **Optimal balance: Adds +2.49% return over 5-factor baseline, Sharpe improves from 0.58 to 0.60.** |
+| **$\alpha = 0.50$** (Broad network diffusion) | -0.0121 | +69.57% | 15.09% | 0.63 | 18.77% | Broad transmission; lifts CAGR to 15.09% while dampening MaxDD to 18.77%. |
+| **$\alpha = 0.70$** (High amplification) | -0.0086 | +83.00% | 17.45% | 0.73 | 18.76% | High amplification; lifts Sharpe to 0.73 but introduces cross-network systemic sensitivity. |
+
+---
+
+## 6. Security & Pre-Commit Protection
 
 Run the zero-leak security auditor:
 ```bash
@@ -140,7 +214,7 @@ The scanner enforces strict pre-commit checks:
 
 ---
 
-## 6. Daily Operations
+## 7. Daily Operations
 
 ### Production Schedule:
 1. **End-of-Day Reconciliation (15:15 ICT, Post-ATC):**
@@ -162,7 +236,7 @@ The scanner enforces strict pre-commit checks:
 
 ---
 
-## 7. Project Structure
+## 8. Project Structure
 
 ```
 lean-vn-quant/
@@ -196,6 +270,6 @@ lean-vn-quant/
 
 ---
 
-## 8. License
+## 9. License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
