@@ -768,12 +768,27 @@ def apply_pit_universe_mask(
     lf_ohlcv = ohlcv_df.lazy() if is_eager else ohlcv_df
     lf_mem = membership_df.lazy() if isinstance(membership_df, pl.DataFrame) else membership_df
     
-    schema_names = lf_ohlcv.collect_schema().names()
+    if isinstance(ohlcv_df, pl.DataFrame):
+        schema_names = list(ohlcv_df.columns)
+    elif hasattr(lf_ohlcv, "collect_schema"):
+        schema_names = lf_ohlcv.collect_schema().names()
+    elif hasattr(lf_ohlcv, "columns"):
+        schema_names = list(lf_ohlcv.columns)
+    else:
+        schema_names = []
+
     ticker_col = "ticker" if "ticker" in schema_names else "symbol"
     close_col = "close" if "close" in schema_names else "raw_close"
     raw_close_col = "raw_close" if "raw_close" in schema_names else close_col
     
-    mem_schema_names = lf_mem.collect_schema().names()
+    if isinstance(membership_df, pl.DataFrame):
+        mem_schema_names = list(membership_df.columns)
+    elif hasattr(lf_mem, "collect_schema"):
+        mem_schema_names = lf_mem.collect_schema().names()
+    elif hasattr(lf_mem, "columns"):
+        mem_schema_names = list(lf_mem.columns)
+    else:
+        mem_schema_names = []
     mem_ticker_col = "ticker" if "ticker" in mem_schema_names else "symbol"
     
     # 1. Causal 20-day ADV with 1-session lag (enforcing minimum 15-20 sessions stability)
