@@ -14,11 +14,11 @@
 
 Standard quantitative backtesting frameworks (Backtrader, Zipline, VectorBT) assume continuous frictionless execution, instantaneous $T+0$ settlement, and infinite liquidity. When deployed on emerging markets such as the **Ho Chi Minh Stock Exchange (HOSE)**, quantitative strategies frequently break down due to unique market microstructural frictions:
 - **Strict $T+2.5$ Settlement Cycles:** Equities purchased on day $t$ remain locked across $T+1$ and $T+2$ cycles before becoming tradable in the afternoon session of $T+2$. Morning ATO selling before settlement is legally restricted.
-- **Asymmetric Transaction Frictions:** Independent accounting for brokerage commission ($0.15\%$ on both buy and sell legs), personal income transfer tax on gross sales ($0.10\%$), half-spread and market impact slippage ($\ge 12\text{ bps}$), and dynamic calendar-day advance borrowing interest ($0.035\%/\text{day}$ with a $50,000\text{ VND}$ minimum floor fee).
-- **Exchange Price Limits & Floor Locks:** Strict daily price limits ($\pm 7\%$) with zero-bid floor-locked liquidation penalties and zero-ask ceiling-locked execution blocks.
-- **Round-Lot Discretization:** Compulsory round-lot execution ($100$ shares), producing uninvested cash drag.
+- **Asymmetric Transaction Frictions:** Independent accounting for brokerage commission (0.15% on both buy and sell legs), personal income transfer tax on gross sales (0.10%), half-spread and market impact slippage (≥ 12 bps), and dynamic calendar-day advance borrowing interest (0.035%/day with a 50,000 VND minimum floor fee).
+- **Exchange Price Limits & Floor Locks:** Strict daily price limits (±7%) with zero-bid floor-locked liquidation penalties and zero-ask ceiling-locked execution blocks.
+- **Round-Lot Discretization:** Compulsory round-lot execution (100 shares), producing uninvested cash drag.
 
-**Lean VN-Quant** is an open-source, high-performance quantitative simulation and execution engine engineered in Python, Numba C-speed JIT, and Polars. It enforces strict temporal causality ($0\%$ look-ahead bias), provides permutation-invariant factor orthogonalization via **Ridge Factor Projection** and **Löwdin Symmetric Orthogonalization**, models non-linear market impact via a **3-Tier LOB Sweep Model**, and executes dynamic risk mitigation via a **Regime-Switching VN30F1M Futures Beta Hedge**.
+**Lean VN-Quant** is an open-source, high-performance quantitative simulation and execution engine engineered in Python, Numba C-speed JIT, and Polars. It enforces strict temporal causality (0% look-ahead bias), provides permutation-invariant factor orthogonalization via **Ridge Factor Projection** and **Löwdin Symmetric Orthogonalization**, models non-linear market impact via a **3-Tier LOB Sweep Model**, and executes dynamic risk mitigation via a **Regime-Switching VN30F1M Futures Beta Hedge**.
 
 ```mermaid
 flowchart TD
@@ -58,9 +58,16 @@ The core ledger state machine (`engine/vn_simulator.py`) maintains explicit sepa
 - **Cash Accounts:** `available_cash`, `receivable_cash_t1`, `receivable_cash_t2`, `dividend_cash_receivable`.
 - **Share Accounts:** `sellable_qty`, `locked_t1`, `locked_t2`, `locked_corp_action_shares`.
 - **Calendar-Day Advance Borrowing:** When purchasing power requires pre-settlement funds, interest is charged over calendar days (e.g., Thursday buy borrows over 4 calendar days through Monday settlement; Friday buy borrows over 3-4 calendar days):
-  $$\text{Fee}_{\text{adv}} = \max\left(50,000\text{ VND}, \; V_{\text{borrowed}} \times 0.035\% \times \text{cal\_days}\right)$$
+
+  $$
+  \text{Fee}_{\text{adv}} = \max\left(50{,}000\text{ VND}, \; V_{\text{borrowed}} \times 0.035\% \times \text{cal\_days}\right)
+  $$
+
 - **Corporate Action Ex-Date Preservation:** Stock dividend and cash dividend rights are credited to escrow receivable registers on Ex-Date ($t_{\text{ex}}$) rather than market payout date ($t_{\text{pay}}$), ensuring zero artificial NAV drop:
-  $$\Delta \text{NAV}(t_{\text{ex}}) \equiv 0.0000\%$$
+
+  $$
+  \Delta \text{NAV}(t_{\text{ex}}) \equiv 0.0000\%
+  $$
 
 ### 2.2. Vectorized Point-in-Time Universe Masking
 To prevent Survivorship Bias and Look-Ahead Bias, historical constituents are filtered via Polars Lazy API:
@@ -72,15 +79,32 @@ Setting `min_samples=15` guarantees newly listed or transferred stocks cannot by
 
 ### 2.3. 3-Tier Order Book Sweep & Intraday Slicing
 Large institutional orders incur realistic non-linear market impact:
-$$IS(Q) = \frac{S_t}{2 P_{\text{mid}}} + \text{SweepCost}_{\text{LOB}} + \mathbb{I}(Q > Q_{\text{vis}}) \left[ \eta \cdot \sigma_{\text{daily}} \left(\frac{Q - Q_{\text{vis}}}{\text{ADV}_{20}}\right)^\delta + \gamma_{\text{perm}} \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right) \right]$$
-- Half-spread floor: $12\text{ bps} = 0.0012$.
-- Intraday order slicing rule: If order $Q > 0.5\% \text{ ADV}_{20}$, execution is automatically partitioned into **25% ATO** (09:00 - 09:15), **55% TWAP** (09:30 - 14:15), and **20% ATC** (14:30 - 14:45), capped at $3\% \text{ ADV}_{20}$.
+
+$$
+IS(Q) = \frac{S_t}{2 P_{\text{mid}}} + \text{SweepCost}_{\text{LOB}} + \mathbb{I}(Q > Q_{\text{vis}}) \left[ \eta \cdot \sigma_{\text{daily}} \left(\frac{Q - Q_{\text{vis}}}{\text{ADV}_{20}}\right)^\delta + \gamma_{\text{perm}} \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right) \right]
+$$
+
+- Half-spread floor: 12 bps (0.0012).
+- Intraday order slicing rule: If order $Q > 0.5\% \times \text{ADV}_{20}$, execution is automatically partitioned into **25% ATO** (09:00 - 09:15), **55% TWAP** (09:30 - 14:15), and **20% ATC** (14:30 - 14:45), capped at $3\% \times \text{ADV}_{20}$.
 
 ### 2.4. Permutation-Invariant Factor Orthogonalization
 Standard Gram-Schmidt QR decomposition suffers from column-order dependence. Lean VN-Quant implements **Ridge Factor Projection**:
-$$\alpha_{\text{ortho}}(t) = \left[ I_N - X_t (X_t^T W_t X_t + \gamma I_K)^{-1} X_t^T W_t \right] \tilde{S}(t)$$
-with shrinkage parameter $\gamma = \gamma_{\text{shrink}} \times \frac{\text{trace}(X_t^T W_t X_t)}{K}$. This achieves mathematical permutation invariance ($\Delta = 4.44 \times 10^{-16}$) while crushing cross-factor correlation from $> 0.85$ down to $< 0.05$. For multi-alpha blending, **Löwdin Symmetric Orthogonalization** is applied:
-$$F_{\text{Löwdin}}(t) = F_t (F_t^T W_t F_t)^{-1/2}$$
+
+$$
+\alpha_{\text{ortho}}(t) = \left[ I_N - X_t (X_t^T W_t X_t + \gamma I_K)^{-1} X_t^T W_t \right] \tilde{S}(t)
+$$
+
+with shrinkage parameter:
+
+$$
+\gamma = \gamma_{\text{shrink}} \times \frac{\text{trace}(X_t^T W_t X_t)}{K}
+$$
+
+This achieves mathematical permutation invariance ($\Delta = 4.44 \times 10^{-16}$) while crushing cross-factor correlation from $> 0.85$ down to $< 0.05$. For multi-alpha blending, **Löwdin Symmetric Orthogonalization** is applied:
+
+$$
+F_{\text{Löwdin}}(t) = F_t (F_t^T W_t F_t)^{-1/2}
+$$
 
 ---
 
@@ -118,11 +142,11 @@ python run_verification.py
 | **TEST 1** | 0% Look-Ahead Bias | All 11 operators & PIT join pass perturbation invariance ($\Delta = 0.0$). |
 | **TEST 2** | Ridge Factor Projection | Permutation invariance confirmed ($\Delta = 4.44 \times 10^{-16}$), Correlation $< 0.05$. |
 | **TEST 3** | Turnover Dampener | Suppresses raw daily turnover from $> 45\%/\text{day}$ to $\le 5.0\%/\text{day}$. |
-| **TEST 4** | Full Backtest Engine | Physically consistent shortfall ($0\% \le IS \le 5\%$), Automated kill-switch SAFE. |
+| **TEST 4** | Full Backtest Engine | Physically consistent shortfall (0% ≤ IS ≤ 5%), Automated kill-switch SAFE. |
 | **TEST 5** | Phase 1 Microstructure | Buy fee (0.15%), sell fee+tax (0.25%), calendar-day 50k floor, Ex-Date NAV delta 0.0%. |
-| **TEST 6** | Phase 2 PIT & Impact | `min_samples=15` blocks unseasoned IPOs, 3-tier LOB sweep ($\ge 12\text{ bps}$), 25/55/20 slicing. |
-| **TEST 7** | Hawkes/OU & VDW | Continuous exponential decay ($\tau=5\text{d}, 42\text{d}$), Van der Waerden normal score. |
-| **TEST 8** | Dynamic Hedge & DSR | Dynamic VN30F1M switch, margin cap $\le 18\%$, calibrated Deflated Sharpe Ratio. |
+| **TEST 6** | Phase 2 PIT & Impact | `min_samples=15` blocks unseasoned IPOs, 3-tier LOB sweep (≥ 12 bps), 25/55/20 slicing. |
+| **TEST 7** | Hawkes/OU & VDW | Continuous exponential decay ($\tau = 5\text{d}, 42\text{d}$), Van der Waerden normal score. |
+| **TEST 8** | Dynamic Hedge & DSR | Dynamic VN30F1M switch, margin cap ≤ 18%, calibrated Deflated Sharpe Ratio. |
 
 ---
 
@@ -153,9 +177,11 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 
 ### 5.2. Smart Cash Sweep Optimization
 
-Vietnam securities brokerages enforce a compulsory minimum advance borrowing fee of **50,000 VND per advance transaction**, regardless of loan notional. Small residual cash sweep orders incur an effective annualized borrowing rate exceeding $100\%$:
+Vietnam securities brokerages enforce a compulsory minimum advance borrowing fee of **50,000 VND per advance transaction**, regardless of loan notional. Small residual cash sweep orders incur an effective annualized borrowing rate exceeding 100%:
 
-$$\text{Break-Even Advance Notional} = \frac{50,000\text{ VND}}{0.00035 \times 2\text{ days}} = 71,428,571\text{ VND}$$
+$$
+\text{Break-Even Advance Notional} = \frac{50{,}000\text{ VND}}{0.00035 \times 2\text{ days}} = 71{,}428{,}571\text{ VND}
+$$
 
 By configuring `min_advance_notional = 71,428,571 VND`, the engine completely bypasses the sub-optimal borrowing trap on odd/fractional amounts:
 
