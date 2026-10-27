@@ -53,9 +53,15 @@ if BASE_DIR not in sys.path:
 try:
     from engine import alpha_ops as ops
     from engine import data_pipeline as dp
+    from services.telegram_bot_service import mask_token
 except ImportError:
     import alpha_ops as ops
     import data_pipeline as dp
+    try:
+        from telegram_bot_service import mask_token
+    except ImportError:
+        def mask_token(text: str, token: Optional[str] = None) -> str:
+            return text
 
 # ==============================================================================
 # CONFIGURATION CONSTANTS
@@ -1010,10 +1016,12 @@ def send_telegram_alert(report_text: str) -> bool:
             print("[TELEGRAM] Daily report successfully dispatched to smartphone via Telegram Bot.")
             return True
         else:
-            print(f"[TELEGRAM ERROR] HTTP {resp.status_code}: {resp.text}")
+            safe_text = mask_token(resp.text, token)
+            print(f"[TELEGRAM ERROR] HTTP {resp.status_code}: {safe_text}")
             return False
     except Exception as e:
-        print(f"[TELEGRAM CONNECTION ERROR] {e}")
+        safe_err = mask_token(str(e), token)
+        print(f"[TELEGRAM CONNECTION ERROR] {safe_err}")
         return False
 
 
