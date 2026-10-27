@@ -4,7 +4,12 @@ Kiểm toán độc lập phân phối nhiễu của tỷ số k(t) = (1 + r_adj
 1. Tính phân phối thực tế của |k(t) - 1| trên toàn bộ lịch sử 10 mã lớn:
    HPG, VCB, SSI, FPT, VNM, MWG, VIC, VHM, MSN, BMP.
 2. Xác định các phân vị nhiễu: Median, P75, P90, P95, P99, Max.
-3. Đo biên an toàn nhiễu max/p99 vs cổ tức nhỏ nhất (30 bps); nếu < 10 bps đề xuất tra cứu sự kiện ngoài.
+3. Đo biên an toàn nhiễu (safety margin) theo Max và theo P99 so với mức tham chiếu 30 bps:
+   - Lưu ý phương pháp luận: Mức 30 bps là giả định kỹ thuật của người thực thi (executor assumption),
+     KHÔNG phải số liệu cổ tức tối thiểu chính thức từ văn bản pháp luật hay thống kê công bố thông tin độc lập.
+   - Ngưỡng đệm an toàn 10 bps là ngưỡng kỹ thuật tự đặt (arbitrary engineering heuristic), không có cơ sở pháp lý.
+   - Báo cáo cả biên an toàn theo Max (30 - Max) và theo P99 (30 - P99); nếu biên Max < 10 bps,
+     ghi nhận cảnh báo rủi ro nhầm lẫn giữa nhiễu làm tròn và sự kiện quyền, đề xuất đối soát danh mục sự kiện ngoài.
 4. Xác nhận bước giá chuẩn của VCB theo quy chế HOSE (100đ).
 5. Phân tích nguồn dữ liệu bắt buộc cho Corporate Actions Ledger.
 Lưu JSON gốc vào scripts/audit/results/t26_noise_audit.json kèm SHA-256 hash.

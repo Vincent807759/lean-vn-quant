@@ -8,6 +8,10 @@ Kiểm toán độc lập toàn bộ lịch sử BMP giữa Entrade và CafeF (2
 - Lưu ý phương pháp luận (Điều chỉnh A2): Mức cổ tức ước lượng (ví dụ 2,800 VND ngày 14/05/2018 và 5,000 VND ngày 19/05/2023)
   được suy ra từ hệ số điều chỉnh của CafeF, phản ánh tỷ suất ngầm định của nhà cung cấp, không phải số liệu nghị quyết
   chính thức độc lập từ VSDC/HOSE. Không kết luận nguồn nào đúng hơn.
+- Lưu ý cấu trúc toán học: Các trường diff_cafef_vs_vendor_implied_bps và vendor_implied_econ_return_pct
+  gần như bằng 0 theo cấu trúc định nghĩa (do cổ tức ước lượng div_est được suy ra trực tiếp từ chính hệ số
+  điều chỉnh của CafeF), tạo ra sự trùng khớp mang tính vòng tròn (tautology), do đó hoàn toàn không thể
+  được sử dụng để so sánh hay kết luận nguồn nào đúng hơn.
 - Giải thích chi tiết sự kiện ngày 20/11/2023 (0.4513% vs 0.4522%).
 Lưu JSON gốc vào scripts/audit/results/t24_bmp_audit.json và in kèm SHA-256 hash.
 """
