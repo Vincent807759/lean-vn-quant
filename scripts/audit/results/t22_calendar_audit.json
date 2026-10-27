@@ -1,6 +1,187 @@
 {
-  "generated_at": "2026-10-26T15:17:33.244678+07:00",
+  "generated_at": "2026-10-27T12:20:59.322937+07:00",
+  "methodology_note": "Truy vấn CafeF sử dụng StartDate=d và EndDate=d+1 (định dạng MM/DD/YYYY) rồi lọc chính xác theo trường Ngay == d (định dạng DD/MM/YYYY). Giả thuyết thành phần giờ '15:00:00' trong CSDL CafeF chỉ là suy luận thực nghiệm.",
   "dates_audited": {
+    "2026-10-21": {
+      "cafef_vnindex": {
+        "Symbol": "VNINDEX",
+        "Ngay": "21/10/2026",
+        "GiaDieuChinh": 1738.67,
+        "GiaDongCua": 1738.67,
+        "ThayDoi": "+46,70 (+2,76%)",
+        "KhoiLuongKhopLenh": 880778700,
+        "GiaTriKhopLenh": 17125.7,
+        "KLThoaThuan": 86761428,
+        "GtThoaThuan": 2280.49,
+        "GiaMoCua": 1696.77,
+        "GiaCaoNhat": 1738.91,
+        "GiaThapNhat": 1695.95
+      },
+      "cafef_hpg": {
+        "Symbol": "HPG",
+        "Ngay": "21/10/2026",
+        "GiaDieuChinh": 21.15,
+        "GiaDongCua": 21.15,
+        "ThayDoi": "+0,05 (+0,24%)",
+        "KhoiLuongKhopLenh": 26155300,
+        "GiaTriKhopLenh": 555.38,
+        "KLThoaThuan": 198000,
+        "GtThoaThuan": 4.36,
+        "GiaMoCua": 21.1,
+        "GiaCaoNhat": 21.45,
+        "GiaThapNhat": 20.95
+      },
+      "cafef_vcb": {
+        "Symbol": "VCB",
+        "Ngay": "21/10/2026",
+        "GiaDieuChinh": 56.4,
+        "GiaDongCua": 56.4,
+        "ThayDoi": "+0,60 (+1,08%)",
+        "KhoiLuongKhopLenh": 5480600,
+        "GiaTriKhopLenh": 307.62,
+        "KLThoaThuan": 982000,
+        "GtThoaThuan": 58.17,
+        "GiaMoCua": 55.8,
+        "GiaCaoNhat": 56.5,
+        "GiaThapNhat": 55.8
+      },
+      "entrade_hpg": {
+        "t": 1792548000,
+        "o": 21.1,
+        "h": 21.45,
+        "l": 20.95,
+        "c": 21.15,
+        "v": 26155300
+      },
+      "entrade_vnindex": {
+        "t": 1792548000,
+        "o": 1696.77,
+        "h": 1738.91,
+        "l": 1695.95,
+        "c": 1738.67,
+        "v": 895803904
+      }
+    },
+    "2026-10-22": {
+      "cafef_vnindex": {
+        "Symbol": "VNINDEX",
+        "Ngay": "22/10/2026",
+        "GiaDieuChinh": 1760.63,
+        "GiaDongCua": 1760.63,
+        "ThayDoi": "+21,96 (+1,26%)",
+        "KhoiLuongKhopLenh": 630473400,
+        "GiaTriKhopLenh": 13351.14,
+        "KLThoaThuan": 77863715,
+        "GtThoaThuan": 1602.36,
+        "GiaMoCua": 1746.15,
+        "GiaCaoNhat": 1763.55,
+        "GiaThapNhat": 1746.15
+      },
+      "cafef_hpg": {
+        "Symbol": "HPG",
+        "Ngay": "22/10/2026",
+        "GiaDieuChinh": 21.25,
+        "GiaDongCua": 21.25,
+        "ThayDoi": "+0,10 (+0,47%)",
+        "KhoiLuongKhopLenh": 14551200,
+        "GiaTriKhopLenh": 309.44,
+        "KLThoaThuan": 0,
+        "GtThoaThuan": 0,
+        "GiaMoCua": 21.2,
+        "GiaCaoNhat": 21.5,
+        "GiaThapNhat": 21.15
+      },
+      "cafef_vcb": {
+        "Symbol": "VCB",
+        "Ngay": "22/10/2026",
+        "GiaDieuChinh": 56.3,
+        "GiaDongCua": 56.3,
+        "ThayDoi": "-0,10 (-0,18%)",
+        "KhoiLuongKhopLenh": 3290100,
+        "GiaTriKhopLenh": 186.05,
+        "KLThoaThuan": 2154000,
+        "GtThoaThuan": 128.11,
+        "GiaMoCua": 56.7,
+        "GiaCaoNhat": 57.2,
+        "GiaThapNhat": 56.2
+      },
+      "entrade_hpg": {
+        "t": 1792634400,
+        "o": 21.2,
+        "h": 21.5,
+        "l": 21.15,
+        "c": 21.25,
+        "v": 14551200
+      },
+      "entrade_vnindex": {
+        "t": 1792634400,
+        "o": 1746.15,
+        "h": 1763.55,
+        "l": 1746.15,
+        "c": 1760.63,
+        "v": 649816896
+      }
+    },
+    "2026-10-23": {
+      "cafef_vnindex": {
+        "Symbol": "VNINDEX",
+        "Ngay": "23/10/2026",
+        "GiaDieuChinh": 1774.15,
+        "GiaDongCua": 1774.15,
+        "ThayDoi": "+13,52 (+0,77%)",
+        "KhoiLuongKhopLenh": 706853600,
+        "GiaTriKhopLenh": 14163.56,
+        "KLThoaThuan": 122838350,
+        "GtThoaThuan": 2207.36,
+        "GiaMoCua": 1757.6,
+        "GiaCaoNhat": 1775.19,
+        "GiaThapNhat": 1750.83
+      },
+      "cafef_hpg": {
+        "Symbol": "HPG",
+        "Ngay": "23/10/2026",
+        "GiaDieuChinh": 20.95,
+        "GiaDongCua": 20.95,
+        "ThayDoi": "-0,30 (-1,41%)",
+        "KhoiLuongKhopLenh": 12949000,
+        "GiaTriKhopLenh": 272.45,
+        "KLThoaThuan": 2923700,
+        "GtThoaThuan": 61.12,
+        "GiaMoCua": 21.2,
+        "GiaCaoNhat": 21.25,
+        "GiaThapNhat": 20.95
+      },
+      "cafef_vcb": {
+        "Symbol": "VCB",
+        "Ngay": "23/10/2026",
+        "GiaDieuChinh": 56.8,
+        "GiaDongCua": 56.8,
+        "ThayDoi": "+0,50 (+0,89%)",
+        "KhoiLuongKhopLenh": 3278900,
+        "GiaTriKhopLenh": 185.33,
+        "KLThoaThuan": 82000,
+        "GtThoaThuan": 4.66,
+        "GiaMoCua": 56.3,
+        "GiaCaoNhat": 57,
+        "GiaThapNhat": 56.2
+      },
+      "entrade_hpg": {
+        "t": 1792720800,
+        "o": 21.2,
+        "h": 21.25,
+        "l": 20.95,
+        "c": 20.95,
+        "v": 12949000
+      },
+      "entrade_vnindex": {
+        "t": 1792720800,
+        "o": 1757.6,
+        "h": 1775.19,
+        "l": 1750.83,
+        "c": 1774.15,
+        "v": 763825728
+      }
+    },
     "2019-12-31": {
       "cafef_vnindex": {
         "Symbol": "VNINDEX",
@@ -16,8 +197,34 @@
         "GiaCaoNhat": 965.71,
         "GiaThapNhat": 958.22
       },
-      "cafef_hpg": null,
-      "cafef_vcb": null,
+      "cafef_hpg": {
+        "Symbol": "HPG",
+        "Ngay": "31/12/2019",
+        "GiaDieuChinh": 7.23,
+        "GiaDongCua": 23.5,
+        "ThayDoi": "-0,15 (-0,63%)",
+        "KhoiLuongKhopLenh": 2876730,
+        "GiaTriKhopLenh": 67.61,
+        "KLThoaThuan": 396500,
+        "GtThoaThuan": 8.87,
+        "GiaMoCua": 23.65,
+        "GiaCaoNhat": 23.7,
+        "GiaThapNhat": 23.35
+      },
+      "cafef_vcb": {
+        "Symbol": "VCB",
+        "Ngay": "31/12/2019",
+        "GiaDieuChinh": 38.62,
+        "GiaDongCua": 90.2,
+        "ThayDoi": "-0,80 (-0,88%)",
+        "KhoiLuongKhopLenh": 230770,
+        "GiaTriKhopLenh": 20.88,
+        "KLThoaThuan": 20000,
+        "GtThoaThuan": 1.7,
+        "GiaMoCua": 90.6,
+        "GiaCaoNhat": 91.1,
+        "GiaThapNhat": 90.1
+      },
       "entrade_hpg": {
         "t": 1577750400,
         "o": 7.28,
@@ -51,7 +258,20 @@
         "GiaThapNhat": 794.54
       },
       "cafef_hpg": null,
-      "cafef_vcb": null,
+      "cafef_vcb": {
+        "Symbol": "VCB",
+        "Ngay": "11/03/2020",
+        "GiaDieuChinh": 32.97,
+        "GiaDongCua": 77,
+        "ThayDoi": "-2,90 (-3,63%)",
+        "KhoiLuongKhopLenh": 1806190,
+        "GiaTriKhopLenh": 138.27,
+        "KLThoaThuan": 190370,
+        "GtThoaThuan": 14.97,
+        "GiaMoCua": 80.4,
+        "GiaCaoNhat": 80.4,
+        "GiaThapNhat": 74.4
+      },
       "entrade_hpg": {
         "t": 1583884800,
         "o": 6.68,
@@ -84,8 +304,34 @@
         "GiaCaoNhat": 1105.33,
         "GiaThapNhat": 1096.27
       },
-      "cafef_hpg": null,
-      "cafef_vcb": null,
+      "cafef_hpg": {
+        "Symbol": "HPG",
+        "Ngay": "31/12/2020",
+        "GiaDieuChinh": 15.6,
+        "GiaDongCua": 41.45,
+        "ThayDoi": "+0,55 (+1,34%)",
+        "KhoiLuongKhopLenh": 11867640,
+        "GiaTriKhopLenh": 490.54,
+        "KLThoaThuan": 270000,
+        "GtThoaThuan": 11.81,
+        "GiaMoCua": 40.9,
+        "GiaCaoNhat": 41.75,
+        "GiaThapNhat": 40.7
+      },
+      "cafef_vcb": {
+        "Symbol": "VCB",
+        "Ngay": "31/12/2020",
+        "GiaDieuChinh": 42.26,
+        "GiaDongCua": 97.9,
+        "ThayDoi": "0 (0,00%)",
+        "KhoiLuongKhopLenh": 367140,
+        "GiaTriKhopLenh": 36.04,
+        "KLThoaThuan": 0,
+        "GtThoaThuan": 0,
+        "GiaMoCua": 97.9,
+        "GiaCaoNhat": 99,
+        "GiaThapNhat": 97
+      },
       "entrade_hpg": {
         "t": 1609372800,
         "o": 15.37,
@@ -118,8 +364,34 @@
         "GiaCaoNhat": 1499.07,
         "GiaThapNhat": 1485.97
       },
-      "cafef_hpg": null,
-      "cafef_vcb": null,
+      "cafef_hpg": {
+        "Symbol": "HPG",
+        "Ngay": "31/12/2021",
+        "GiaDieuChinh": 23.75,
+        "GiaDongCua": 46.4,
+        "ThayDoi": "+0,70 (+1,53%)",
+        "KhoiLuongKhopLenh": 13781200,
+        "GiaTriKhopLenh": 636.4,
+        "KLThoaThuan": 1352050,
+        "GtThoaThuan": 61.74,
+        "GiaMoCua": 46,
+        "GiaCaoNhat": 46.65,
+        "GiaThapNhat": 45.85
+      },
+      "cafef_vcb": {
+        "Symbol": "VCB",
+        "Ngay": "31/12/2021",
+        "GiaDieuChinh": 43.94,
+        "GiaDongCua": 78.8,
+        "ThayDoi": "+0,40 (+0,51%)",
+        "KhoiLuongKhopLenh": 422000,
+        "GiaTriKhopLenh": 33.29,
+        "KLThoaThuan": 0,
+        "GtThoaThuan": 0,
+        "GiaMoCua": 79,
+        "GiaCaoNhat": 79.2,
+        "GiaThapNhat": 78.4
+      },
       "entrade_hpg": {
         "t": 1640916000,
         "o": 23.55,

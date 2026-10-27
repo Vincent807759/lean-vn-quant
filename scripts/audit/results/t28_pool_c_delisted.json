@@ -1,5 +1,7 @@
 {
-  "generated_at": "2026-10-26T15:38:01.478765+07:00",
+  "generated_at": "2026-10-27T12:27:04.629256+07:00",
+  "data_source_verification": "nguồn chưa xác minh",
+  "note": "Danh sách 83 mã tổng hợp từ các bản tin thị trường (nguồn chưa xác minh độc lập từng văn bản quyết định hủy niêm yết). Cần kiểm chứng lại bằng văn bản chính thức của HOSE/HNX trước khi đưa vào sản xuất.",
   "legal_basis": "Nghị định 155/2020/NĐ-CP (Điều 120), Thông tư 120/2020/TT-BTC, Quy chế niêm yết HOSE & HNX",
   "total_tickers": 83,
   "pool_c_records": [

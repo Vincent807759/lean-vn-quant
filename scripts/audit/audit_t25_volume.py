@@ -13,6 +13,7 @@ Lưu JSON gốc vào scripts/audit/results/t25_volume_audit.json kèm SHA-256 ha
 import os
 import sys
 import json
+import time
 import hashlib
 import datetime
 import requests
@@ -60,6 +61,7 @@ for ticker in TICKERS:
             while True:
                 url_cf = f"https://cafef.vn/du-lieu/Ajax/PageNew/DataHistory/PriceHistory.ashx?ExchangeType=hose&Symbol={ticker}&StartDate={m_start}/{year}&EndDate={m_end}/{year}&PageIndex={page}&PageSize=100"
                 resp = s.get(url_cf, timeout=15).json()
+                time.sleep(0.3)
                 items = resp.get("Data", {}).get("Data", [])
                 if not items:
                     break
@@ -137,11 +139,13 @@ full_output = {
     "details_sample": raw_details
 }
 
-with open(OUT_JSON, "w", encoding="utf-8") as f:
+with open(OUT_JSON, "w", encoding="utf-8", newline="\n") as f:
     json.dump(full_output, f, ensure_ascii=False, indent=2)
+    f.write("\n")
 
 with open(OUT_JSON, "rb") as f:
-    sha256 = hashlib.sha256(f.read()).hexdigest()
+    raw_bytes = f.read()
+    sha256 = hashlib.sha256(raw_bytes).hexdigest()
 
 print(f"\n-> Ghi thành công tệp: {OUT_JSON}")
 print(f"-> SHA-256: {sha256}")

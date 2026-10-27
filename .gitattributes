@@ -1,0 +1,2 @@
+scripts/audit/results/*.json text eol=lf
+scripts/audit/results/SHA256SUMS text eol=lf

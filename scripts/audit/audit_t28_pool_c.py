@@ -1,7 +1,10 @@
 """
 scripts/audit/audit_t28_pool_c.py
-Danh sách toàn diện 83 mã cổ phiếu bị hủy niêm yết / đình chỉ giao dịch bắt buộc trên HOSE và HNX (2018 - 2026).
-Nguồn: Công bố thông tin chính thức của HOSE (hsx.vn) và HNX (hnx.vn) theo Nghị định 155/2020/NĐ-CP.
+Danh sách 83 mã cổ phiếu bị hủy niêm yết / đình chỉ giao dịch bắt buộc trên HOSE và HNX (2018 - 2026).
+Lưu ý phương pháp luận (Điều chỉnh B4):
+- Danh sách 83 mã dưới đây được tổng hợp từ các bản tin thị trường với tình trạng "nguồn chưa xác minh".
+- Cần đối chiếu với văn bản quyết định hủy niêm yết chính thức từ cổng thông tin HOSE (hsx.vn) / HNX (hnx.vn)
+  trước khi đưa vào sản xuất Giai đoạn 4.
 Lưu vào scripts/audit/results/t28_pool_c_delisted.json kèm SHA-256 hash.
 """
 import os
@@ -22,7 +25,7 @@ OUT_JSON = os.path.join(RESULTS_DIR, "t28_pool_c_delisted.json")
 
 VN_TZ = datetime.timezone(datetime.timedelta(hours=7))
 
-# Danh sách 83 mã hủy niêm yết bắt buộc giai đoạn 2018 - 2026 với nguồn văn bản chính thức
+# Danh sách 83 mã hủy niêm yết bắt buộc giai đoạn 2018 - 2026 (nguồn chưa xác minh)
 POOL_C_LIST = [
     # Nhóm FLC & liên quan
     {"symbol": "ROS", "exchange": "HOSE", "delist_date": "2022-09-05", "halt_date": "2022-08-12", "reason": "Vi phạm nghiêm trọng nghĩa vụ công bố thông tin", "decision_ref": "QĐ 579/QĐ-SGDHCM (25/08/2022)"},
@@ -116,16 +119,20 @@ POOL_C_LIST = [
 
 audit_pool_c = {
     "generated_at": datetime.datetime.now(VN_TZ).isoformat(),
+    "data_source_verification": "nguồn chưa xác minh",
+    "note": "Danh sách 83 mã tổng hợp từ các bản tin thị trường (nguồn chưa xác minh độc lập từng văn bản quyết định hủy niêm yết). Cần kiểm chứng lại bằng văn bản chính thức của HOSE/HNX trước khi đưa vào sản xuất.",
     "legal_basis": "Nghị định 155/2020/NĐ-CP (Điều 120), Thông tư 120/2020/TT-BTC, Quy chế niêm yết HOSE & HNX",
     "total_tickers": len(POOL_C_LIST),
     "pool_c_records": POOL_C_LIST
 }
 
-with open(OUT_JSON, "w", encoding="utf-8") as f:
+with open(OUT_JSON, "w", encoding="utf-8", newline="\n") as f:
     json.dump(audit_pool_c, f, ensure_ascii=False, indent=2)
+    f.write("\n")
 
 with open(OUT_JSON, "rb") as f:
-    sha256 = hashlib.sha256(f.read()).hexdigest()
+    raw_bytes = f.read()
+    sha256 = hashlib.sha256(raw_bytes).hexdigest()
 
 print(f"-> Ghi thành công tệp: {OUT_JSON}")
 print(f"-> Tổng số mã trong Pool C: {len(POOL_C_LIST)}")
