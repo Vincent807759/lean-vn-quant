@@ -74,7 +74,7 @@ def test_phase2_pit_constituent_masking_and_perturbation():
 
 def test_phase2_orderly_liquidation():
     """Subtest 6.2: Orderly Liquidation Mechanism & Grace Counter."""
-    T_liq, N_liq = 6, 1
+    T_liq, N_liq = 7, 1
     ro_liq = np.full((T_liq, N_liq), 50000.0)
     rc_liq = np.full((T_liq, N_liq), 50000.0)
     ceil_liq = np.full((T_liq, N_liq), 53500.0)
@@ -82,7 +82,7 @@ def test_phase2_orderly_liquidation():
     adv_liq = np.full((T_liq, N_liq), 1000000.0)
     w_liq = np.ones((T_liq, N_liq), dtype=np.float64)
     pit_liq = np.ones((T_liq, N_liq), dtype=bool)
-    pit_liq[2:, 0] = False  # Excluded starting at t=2
+    pit_liq[3:, 0] = False  # Excluded starting at t=3 (bought at t=1, settles at t=3)
 
     res_liq = sim.simulate_vietnam(
         raw_open=ro_liq,
@@ -95,7 +95,8 @@ def test_phase2_orderly_liquidation():
         in_pit_universe=pit_liq
     )
     assert res_liq["sell_tax"][1] == 0.0, "No sell at t=1"
-    assert res_liq["sell_tax"][2] > 0.0, "Excluded stock must be liquidated starting at t=2"
+    assert res_liq["sell_tax"][2] == 0.0, "No sell at t=2 (shares locked in settlement)"
+    assert res_liq["sell_tax"][3] > 0.0, "Excluded stock must be liquidated starting at t=3"
     assert res_liq["equity"][-1] > 0.98e9, "Cash from liquidated stock must be preserved"
 
 
@@ -228,4 +229,5 @@ def test_fingraph_bridge_import_hermetic():
     with pytest.raises(ImportError) as excinfo:
         bridge.VNQuantBridge()
     assert "FinGraph cần fin_corpus_pipeline và knowledge_graph_engine, chưa công khai; xem README" in str(excinfo.value)
+
 

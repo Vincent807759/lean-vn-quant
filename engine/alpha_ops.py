@@ -486,105 +486,169 @@ def ridge_factor_projection(
     benchmark_factors: Union[List[np.ndarray], np.ndarray],
     adv_weights: Optional[np.ndarray] = None,
     gamma_shrink: float = 1e-8,
-    threshold: float = 0.25
+    threshold: float = 0.25,
+    mask: Optional[np.ndarray] = None
 ) -> Tuple[np.ndarray, float, float]:
     """
-    Cross-Sectional Ridge-Regularized Factor Projection (Tikhonov Regularization):
-    alpha_ortho = [I_N - X_t * (X_t^T * W_t * X_t + gamma * I_K)^(-1) * X_t^T * W_t] * alpha_target
+    Causal Cross-Sectional Ridge-Regularized Factor Projection (Tikhonov Regularization):
+    alpha_ortho(t) = [I_N - X_t * (X_t^T * W_t * X_t + gamma * I_K)^(-1) * X_t^T * W_t] * alpha_target(t)
     
-    Key Features:
+    Zero Look-Ahead Guarantee:
+    - Slice-by-slice across time t in [0, T-1]. Data at t > t0 has 0.0 impact on alpha_ortho at t <= t0.
     - Order-invariant: Invariant to any permutation of benchmark factor columns.
     - Liquidity-weighting: W_t = diag(sqrt(ADV_20)) prioritizes independence in liquid names.
     - Numerical stability: Adaptive ridge shrinkage prevents condition number explosion.
     """
     v = np.asarray(alpha_target, dtype=np.float64)
     orig_shape = v.shape
-    v_flat = v.ravel()
-    
-    if isinstance(benchmark_factors, (list, tuple)):
-        bf_list = [np.asarray(bf, dtype=np.float64).ravel() for bf in benchmark_factors]
-    elif isinstance(benchmark_factors, np.ndarray):
-        if benchmark_factors.ndim == 2 and benchmark_factors.shape == orig_shape:
-            bf_list = [benchmark_factors.ravel()]
-        elif benchmark_factors.ndim == 2:
-            bf_list = [benchmark_factors[:, k].ravel() for k in range(benchmark_factors.shape[1])]
-        elif benchmark_factors.ndim == 3:
-            bf_list = [benchmark_factors[k].ravel() for k in range(benchmark_factors.shape[0])]
-        else:
-            bf_list = [benchmark_factors.ravel()]
+    if v.ndim == 1:
+        v_2d = v.reshape(1, -1)
     else:
-        bf_list = [np.asarray(benchmark_factors, dtype=np.float64).ravel()]
-        
-    if len(bf_list) == 0:
+        v_2d = v.copy()
+    T, N = v_2d.shape
+
+    # Normalize benchmark factors to a list of 2D arrays (T, N)
+    if isinstance(benchmark_factors, (list, tuple)):
+        raw_bfs = list(benchmark_factors)
+    elif isinstance(benchmark_factors, np.ndarray):
+        if benchmark_factors.ndim == 1:
+            raw_bfs = [benchmark_factors]
+        elif benchmark_factors.ndim == 2:
+            if benchmark_factors.shape == orig_shape:
+                raw_bfs = [benchmark_factors]
+            else:
+                raw_bfs = [benchmark_factors[:, k] for k in range(benchmark_factors.shape[1])]
+        elif benchmark_factors.ndim == 3:
+            raw_bfs = [benchmark_factors[k] for k in range(benchmark_factors.shape[0])]
+        else:
+            raw_bfs = [benchmark_factors]
+    else:
+        raw_bfs = [np.asarray(benchmark_factors, dtype=np.float64)]
+
+    bf_2d_list: List[np.ndarray] = []
+    for bf in raw_bfs:
+        bf_arr = np.asarray(bf, dtype=np.float64)
+        if bf_arr.ndim == 1:
+            bf_2d_list.append(bf_arr.reshape(1, -1))
+        else:
+            bf_2d_list.append(bf_arr)
+
+    K = len(bf_2d_list)
+    if K == 0:
         return v.copy(), 0.0, 0.0
-        
-    X = np.column_stack(bf_list)
-    valid_mask = np.isfinite(v_flat)
-    for k in range(X.shape[1]):
-        valid_mask = valid_mask & np.isfinite(X[:, k])
-        
-    if np.sum(valid_mask) < 2:
-        return v.copy(), 0.0, 0.0
-        
-    v_clean = v_flat[valid_mask]
-    X_clean = X[valid_mask, :]
-    
+
+    w_2d = None
+    if adv_weights is not None:
+        w_arr = np.asarray(adv_weights, dtype=np.float64)
+        w_2d = w_arr.reshape(1, -1) if w_arr.ndim == 1 else w_arr
+
+    m_2d = None
+    if mask is not None:
+        m_arr = np.asarray(mask, dtype=bool)
+        m_2d = m_arr.reshape(1, -1) if m_arr.ndim == 1 else m_arr
+
+    # Compute correlation before across all valid pairs for reporting
     corrs_before = []
-    std_v = np.std(v_clean)
-    for k in range(X_clean.shape[1]):
-        std_xk = np.std(X_clean[:, k])
-        if std_v > 1e-12 and std_xk > 1e-12:
-            r = np.corrcoef(v_clean, X_clean[:, k])[0, 1]
-            corrs_before.append(abs(r))
+    for bf_arr in bf_2d_list:
+        valid_pair = np.isfinite(v_2d) & np.isfinite(bf_arr)
+        if m_2d is not None:
+            valid_pair = valid_pair & m_2d
+        if np.sum(valid_pair) >= 2:
+            v_vals = v_2d[valid_pair]
+            bf_vals = bf_arr[valid_pair]
+            if np.std(v_vals) > 1e-12 and np.std(bf_vals) > 1e-12:
+                r = np.corrcoef(v_vals, bf_vals)[0, 1]
+                corrs_before.append(abs(r) if np.isfinite(r) else 0.0)
+            else:
+                corrs_before.append(0.0)
         else:
             corrs_before.append(0.0)
     max_corr_before = float(np.max(corrs_before)) if corrs_before else 0.0
-    
-    if max_corr_before < threshold:
-        return v.copy(), max_corr_before, max_corr_before
-        
-    X_dm = X_clean - np.mean(X_clean, axis=0)
-    v_dm = v_clean - np.mean(v_clean)
-    K = X_dm.shape[1]
-    
-    if adv_weights is not None:
-        w_flat = np.asarray(adv_weights, dtype=np.float64).ravel()[valid_mask]
-        w_clean = np.sqrt(np.maximum(w_flat, 1.0))
-        W_diag = w_clean / np.maximum(np.mean(w_clean), 1e-4)
-        X_w = X_dm * W_diag[:, np.newaxis]
-        Xt_W_X = X_dm.T @ X_w
-        Xt_W_v = X_dm.T @ (v_dm * W_diag)
-    else:
-        Xt_W_X = X_dm.T @ X_dm
-        Xt_W_v = X_dm.T @ v_dm
-        
-    tr = np.trace(Xt_W_X)
-    gamma = max(1e-10, gamma_shrink * tr / max(K, 1))
-    reg_matrix = Xt_W_X + gamma * np.eye(K, dtype=np.float64)
-    
-    try:
-        beta = np.linalg.solve(reg_matrix, Xt_W_v)
-        v_proj = X_dm @ beta
-    except np.linalg.LinAlgError:
-        v_proj, _, _, _ = np.linalg.lstsq(reg_matrix, Xt_W_v, rcond=None)
-        v_proj = X_dm @ v_proj
-        
-    v_ortho_clean = v_dm - v_proj
-    
+
+    out_2d = v_2d.copy()
+
+    # Causal slice-by-slice projection across time t in [0, T-1]
+    for t in range(T):
+        valid_t = np.isfinite(v_2d[t])
+        if m_2d is not None:
+            valid_t = valid_t & m_2d[t]
+        for k in range(K):
+            valid_t = valid_t & np.isfinite(bf_2d_list[k][t])
+        if w_2d is not None:
+            valid_t = valid_t & np.isfinite(w_2d[t])
+
+        n_valid = int(np.sum(valid_t))
+        if n_valid <= K or n_valid < 2:
+            continue
+
+        v_t = v_2d[t, valid_t]
+        X_t = np.column_stack([bf_2d_list[k][t, valid_t] for k in range(K)])
+
+        std_v_t = np.std(v_t)
+        if std_v_t <= 1e-12:
+            continue
+
+        # Check cross-sectional correlation at day t
+        corrs_t = []
+        for k in range(K):
+            std_xk = np.std(X_t[:, k])
+            if std_xk > 1e-12:
+                r_k = np.corrcoef(v_t, X_t[:, k])[0, 1]
+                corrs_t.append(abs(r_k) if np.isfinite(r_k) else 0.0)
+            else:
+                corrs_t.append(0.0)
+        max_corr_t = max(corrs_t) if corrs_t else 0.0
+
+        if threshold > 0.0 and max_corr_t < threshold:
+            continue
+
+        X_dm = X_t - np.mean(X_t, axis=0)
+        v_dm = v_t - np.mean(v_t)
+
+        if w_2d is not None:
+            w_raw = np.maximum(w_2d[t, valid_t], 1.0)
+            w_sqrt = np.sqrt(w_raw)
+            W_diag = w_sqrt / np.maximum(np.mean(w_sqrt), 1e-4)
+            X_w = X_dm * W_diag[:, np.newaxis]
+            Xt_W_X = X_dm.T @ X_w
+            Xt_W_v = X_dm.T @ (v_dm * W_diag)
+        else:
+            Xt_W_X = X_dm.T @ X_dm
+            Xt_W_v = X_dm.T @ v_dm
+
+        tr = np.trace(Xt_W_X)
+        gamma = max(1e-10, gamma_shrink * tr / max(K, 1))
+        reg_matrix = Xt_W_X + gamma * np.eye(K, dtype=np.float64)
+
+        try:
+            beta = np.linalg.solve(reg_matrix, Xt_W_v)
+            v_proj = X_dm @ beta
+        except np.linalg.LinAlgError:
+            beta, _, _, _ = np.linalg.lstsq(reg_matrix, Xt_W_v, rcond=None)
+            v_proj = X_dm @ beta
+
+        v_ortho = v_dm - v_proj
+        out_2d[t, valid_t] = v_ortho
+
+    # Re-check correlation after orthogonalization
     corrs_after = []
-    std_vo = np.std(v_ortho_clean)
-    for k in range(X_clean.shape[1]):
-        std_xk = np.std(X_clean[:, k])
-        if std_vo > 1e-12 and std_xk > 1e-12:
-            r = np.corrcoef(v_ortho_clean, X_clean[:, k])[0, 1]
-            corrs_after.append(abs(r))
+    for bf_arr in bf_2d_list:
+        valid_pair = np.isfinite(out_2d) & np.isfinite(bf_arr)
+        if m_2d is not None:
+            valid_pair = valid_pair & m_2d
+        if np.sum(valid_pair) >= 2:
+            vo_vals = out_2d[valid_pair]
+            bf_vals = bf_arr[valid_pair]
+            if np.std(vo_vals) > 1e-12 and np.std(bf_vals) > 1e-12:
+                r = np.corrcoef(vo_vals, bf_vals)[0, 1]
+                corrs_after.append(abs(r) if np.isfinite(r) else 0.0)
+            else:
+                corrs_after.append(0.0)
         else:
             corrs_after.append(0.0)
     max_corr_after = float(np.max(corrs_after)) if corrs_after else 0.0
-    
-    out_flat = v_flat.copy()
-    out_flat[valid_mask] = v_ortho_clean
-    return out_flat.reshape(orig_shape), max_corr_before, max_corr_after
+
+    return out_2d.reshape(orig_shape), max_corr_before, max_corr_after
 
 
 def lowdin_symmetric_orthogonalization(
@@ -592,45 +656,63 @@ def lowdin_symmetric_orthogonalization(
     adv_weights: Optional[np.ndarray] = None
 ) -> List[np.ndarray]:
     """
-    Symmetric Löwdin Orthogonalization for multiple graph alpha factors:
-    F_lowdin = F * (F^T * W * F)^(-1/2)
-    Treats all factors symmetrically without any sequential order bias.
+    Causal Cross-Sectional Symmetric Löwdin Orthogonalization:
+    F_lowdin(t) = F_t * (F_t^T * W_t * F_t)^(-1/2)
+    
+    Zero Look-Ahead Guarantee:
+    - Slice-by-slice across time t in [0, T-1]. Data at t > t0 has 0.0 impact on factors at t <= t0.
+    - Treats all factors symmetrically without any sequential order bias.
     """
     K = len(factors)
     if K <= 1:
         return [f.copy() for f in factors]
-        
+
     orig_shape = factors[0].shape
-    F_stacked = np.column_stack([np.asarray(f, dtype=np.float64).ravel() for f in factors])
-    valid_mask = np.all(np.isfinite(F_stacked), axis=1)
-    
-    if np.sum(valid_mask) < K:
-        return [f.copy() for f in factors]
-        
-    F_clean = F_stacked[valid_mask, :]
-    F_dm = F_clean - np.mean(F_clean, axis=0)
-    
+    factors_2d = []
+    for f in factors:
+        f_arr = np.asarray(f, dtype=np.float64)
+        factors_2d.append(f_arr.reshape(1, -1) if f_arr.ndim == 1 else f_arr.copy())
+    T, N = factors_2d[0].shape
+
+    w_2d = None
     if adv_weights is not None:
-        w_flat = np.asarray(adv_weights, dtype=np.float64).ravel()[valid_mask]
-        w_clean = np.sqrt(np.maximum(w_flat, 1.0))
-        W_diag = w_clean / np.maximum(np.mean(w_clean), 1e-4)
-        S = F_dm.T @ (F_dm * W_diag[:, np.newaxis])
-    else:
-        S = F_dm.T @ F_dm
-        
-    eigvals, eigvecs = np.linalg.eigh(S)
-    eigvals_clipped = np.maximum(eigvals, 1e-10)
-    S_inv_sqrt = eigvecs @ np.diag(1.0 / np.sqrt(eigvals_clipped)) @ eigvecs.T
-    
-    F_ortho_clean = F_dm @ S_inv_sqrt
-    
-    out_factors = []
-    for k in range(K):
-        out_k = F_stacked[:, k].copy()
-        out_k[valid_mask] = F_ortho_clean[:, k]
-        out_factors.append(out_k.reshape(orig_shape))
-        
-    return out_factors
+        w_arr = np.asarray(adv_weights, dtype=np.float64)
+        w_2d = w_arr.reshape(1, -1) if w_arr.ndim == 1 else w_arr
+
+    out_factors_2d = [f.copy() for f in factors_2d]
+
+    for t in range(T):
+        valid_t = np.ones(N, dtype=bool)
+        for k in range(K):
+            valid_t = valid_t & np.isfinite(factors_2d[k][t])
+        if w_2d is not None:
+            valid_t = valid_t & np.isfinite(w_2d[t])
+
+        n_valid = int(np.sum(valid_t))
+        if n_valid < K or n_valid < 2:
+            continue
+
+        F_clean = np.column_stack([factors_2d[k][t, valid_t] for k in range(K)])
+        F_dm = F_clean - np.mean(F_clean, axis=0)
+
+        if w_2d is not None:
+            w_raw = np.maximum(w_2d[t, valid_t], 1.0)
+            w_sqrt = np.sqrt(w_raw)
+            W_diag = w_sqrt / np.maximum(np.mean(w_sqrt), 1e-4)
+            S = F_dm.T @ (F_dm * W_diag[:, np.newaxis])
+        else:
+            S = F_dm.T @ F_dm
+
+        eigvals, eigvecs = np.linalg.eigh(S)
+        eigvals_clipped = np.maximum(eigvals, 1e-10)
+        S_inv_sqrt = eigvecs @ np.diag(1.0 / np.sqrt(eigvals_clipped)) @ eigvecs.T
+
+        F_ortho_clean = F_dm @ S_inv_sqrt
+
+        for k in range(K):
+            out_factors_2d[k][t, valid_t] = F_ortho_clean[:, k]
+
+    return [out_f.reshape(orig_shape) for out_f in out_factors_2d]
 
 
 # ==============================================================================

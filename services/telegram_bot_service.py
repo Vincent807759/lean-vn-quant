@@ -72,10 +72,27 @@ def mask_token(text: str, token: Optional[str] = None) -> str:
     """Masks bot tokens and sensitive patterns from logs and exception messages."""
     if not text:
         return ""
+    import re
+    # First mask any bot token pattern bot<digits>:<secret>
+    text = re.sub(r'bot\d+:[A-Za-z0-9_-]+', 'bot[MASKED_TOKEN]', text)
     if token and len(token) > 6:
         text = text.replace(token, f"{token[:4]}...***")
+    return text
+
+
+def sanitize_error_message(text: str, token: Optional[str] = None) -> str:
+    """
+    Masks bot tokens and strips local OS file paths (Windows & Unix) from error output (H3).
+    """
+    if not text:
+        return ""
     import re
-    return re.sub(r'bot\d+:[A-Za-z0-9_-]+', 'bot[MASKED_TOKEN]', text)
+    cleaned = mask_token(text, token=token)
+    # Mask Windows drive paths (e.g., C:\Users\... or C:/Users/...)
+    cleaned = re.sub(r'[A-Za-z]:[\\/][^\s:<>"\']+', '[PATH]', cleaned)
+    # Mask Unix absolute paths (e.g., /home/... or /var/...)
+    cleaned = re.sub(r'(?:/[a-zA-Z0-9_\.\-]+){2,}', '[PATH]', cleaned)
+    return cleaned
 
 
 def send_message(token: str, chat_id: str, text: str) -> bool:
@@ -305,9 +322,11 @@ def handle_sync() -> str:
         if proc.returncode == 0:
             return "⚡ <b>SYNCHRONIZATION COMPLETED!</b>\nMarket data updated and T+2.5 ledger settled.\nFull report dispatched via Telegram."
         else:
-            return f"⚠️ <b>SYNC ERROR:</b>\n{proc.stderr[:400]}"
+            clean_err = sanitize_error_message(proc.stderr[:400], token=BOT_TOKEN)
+            return f"⚠️ <b>SYNC ERROR:</b>\n{clean_err}"
     except Exception as e:
-        return f"⚠️ Sync execution error: {e}"
+        clean_err = sanitize_error_message(str(e), token=BOT_TOKEN)
+        return f"⚠️ Sync execution error: {clean_err}"
 
 
 def process_command(cmd: str) -> str:

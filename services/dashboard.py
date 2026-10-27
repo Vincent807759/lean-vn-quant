@@ -86,10 +86,27 @@ def generate_html_content(data: Dict[str, Any]) -> str:
     tot_rec = rec_t1 + rec_t2
 
     holdings = state.get("holdings", {})
+    
+    # Mark-to-Market synchronization (M2): Value holdings at latest market price
+    prev_close_map = data.get("prev_close_map")
+    if prev_close_map is None:
+        parquet_file = os.path.join(DEFAULT_DATA_DIR, "vn30_production.parquet")
+        if os.path.exists(parquet_file):
+            try:
+                df_p = pl.read_parquet(parquet_file)
+                latest_date = df_p["date"].max()
+                df_latest = df_p.filter(pl.col("date") == latest_date)
+                prev_close_map = {row["symbol"]: float(row["raw_close"]) for row in df_latest.iter_rows(named=True)}
+            except Exception:
+                prev_close_map = {}
+        else:
+            prev_close_map = {}
+
     stock_value = 0.0
     for sym, h in holdings.items():
         tot_s = h.get("sellable_qty", 0) + h.get("locked_t1", 0) + h.get("locked_t2", 0)
-        stock_value += (tot_s * h.get("avg_cost", 0.0))
+        mkt_price = prev_close_map.get(sym, h.get("avg_cost", 0.0))
+        stock_value += (tot_s * mkt_price)
 
     stock_pct = (stock_value / real_nav * 100.0) if real_nav > 0 else 0.0
     avail_cash_pct = (avail_cash / real_nav * 100.0) if real_nav > 0 else 0.0
@@ -104,13 +121,61 @@ def generate_html_content(data: Dict[str, Any]) -> str:
     real_nav_list = [r["real_nav"] for r in history] if history else [real_nav]
     naive_nav_list = [r.get("naive_nav", r["real_nav"]) for r in history] if history else [state.get("naive_nav", real_nav)]
 
+    # Benchmark: Only show if genuine historical benchmark series is available (M1)
+    has_real_benchmark = False
     bm_list = []
     if history:
-        for i, r in enumerate(history):
-            bm_nav = init_cap * (1.0 + (i * 0.0012))
-            bm_list.append(round(bm_nav, 2))
+        for r in history:
+            if "benchmark" in r and r["benchmark"] is not None and str(r["benchmark"]) != "":
+                try:
+                    bm_list.append(float(r["benchmark"]))
+                    has_real_benchmark = True
+                except (ValueError, TypeError):
+                    pass
+            elif "vn30_index" in r and r["vn30_index"] is not None:
+                try:
+                    bm_list.append(float(r["vn30_index"]))
+                    has_real_benchmark = True
+                except (ValueError, TypeError):
+                    pass
+
+    if not has_real_benchmark or len(bm_list) != len(dates_list):
+        bm_list = []
+        has_real_benchmark = False
+        bm_note = ' <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);">(Chưa có dữ liệu benchmark thực tế)</span>'
     else:
-        bm_list = [init_cap]
+        bm_note = ""
+
+    chart_datasets = [
+        {
+            "label": "Real NAV (Realistic T+2.5 & Costs)",
+            "data": real_nav_list,
+            "borderColor": "#10b981",
+            "backgroundColor": "rgba(16, 185, 129, 0.08)",
+            "fill": True,
+            "tension": 0.2,
+            "borderWidth": 2.5
+        },
+        {
+            "label": "Naive T+0 Benchmark (Frictionless)",
+            "data": naive_nav_list,
+            "borderColor": "#3b82f6",
+            "borderDash": [5, 5],
+            "fill": False,
+            "tension": 0.2,
+            "borderWidth": 2
+        }
+    ]
+    if has_real_benchmark:
+        chart_datasets.append({
+            "label": "VN30 Market Proxy",
+            "data": bm_list,
+            "borderColor": "#94a3b8",
+            "borderDash": [2, 2],
+            "fill": False,
+            "tension": 0.1,
+            "borderWidth": 1.5
+        })
 
     holdings_rows = []
     for sym, h in sorted(holdings.items()):
@@ -119,7 +184,8 @@ def generate_html_content(data: Dict[str, Any]) -> str:
         t2 = h.get("locked_t2", 0)
         tot_shares = sellable + t1 + t2
         avg_cost = h.get("avg_cost", 0.0)
-        cur_val = tot_shares * avg_cost
+        mkt_p = prev_close_map.get(sym, avg_cost)
+        cur_val = tot_shares * mkt_p
         weight = (cur_val / real_nav * 100.0) if real_nav > 0 else 0.0
 
         badge_class = "badge-success" if sellable > 0 else "badge-warning"
@@ -417,7 +483,7 @@ def generate_html_content(data: Dict[str, Any]) -> str:
     <!-- CHARTS SECTION -->
     <div class="charts-grid">
         <div class="chart-card">
-            <h2>📈 Cumulative Equity Curve (Real NAV vs Naive T+0 vs Benchmark)</h2>
+            <h2>📈 Cumulative Equity Curve (Real NAV vs Naive T+0 vs Benchmark){bm_note}</h2>
             <div class="chart-container">
                 <canvas id="equityChart"></canvas>
             </div>
@@ -493,35 +559,7 @@ def generate_html_content(data: Dict[str, Any]) -> str:
             type: 'line',
             data: {{
                 labels: {json.dumps(dates_list)},
-                datasets: [
-                    {{
-                        label: 'Real NAV (Realistic T+2.5 & Costs)',
-                        data: {json.dumps(real_nav_list)},
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                        fill: true,
-                        tension: 0.2,
-                        borderWidth: 2.5
-                    }},
-                    {{
-                        label: 'Naive T+0 Benchmark (Frictionless)',
-                        data: {json.dumps(naive_nav_list)},
-                        borderColor: '#3b82f6',
-                        borderDash: [5, 5],
-                        fill: false,
-                        tension: 0.2,
-                        borderWidth: 2
-                    }},
-                    {{
-                        label: 'VN30 Market Proxy',
-                        data: {json.dumps(bm_list)},
-                        borderColor: '#94a3b8',
-                        borderDash: [2, 2],
-                        fill: false,
-                        tension: 0.1,
-                        borderWidth: 1.5
-                    }}
-                ]
+                datasets: {json.dumps(chart_datasets)}
             }},
             options: {{
                 responsive: true,

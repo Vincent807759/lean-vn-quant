@@ -13,10 +13,14 @@ Strict constraints:
 from typing import List, Optional, Tuple, Dict, Any
 import os
 import datetime
+import logging
+import warnings
 import requests
 import numpy as np
 import polars as pl
 import duckdb
+
+logger = logging.getLogger("DataPipeline")
 
 # Standard VN30 constituents
 VN30_SYMBOLS = [
@@ -227,7 +231,8 @@ def fetch_vn_ohlcv(
     start_date: str = "2023-01-01",
     end_date: str = "2026-10-24",
     save_parquet: Optional[str] = "vn30_ohlcv.parquet",
-    force_fallback: bool = False
+    force_fallback: bool = False,
+    universe_membership_path: Optional[str] = None
 ) -> pl.DataFrame:
     """
     Fetches daily OHLCV data using pure requests calling the Entrade public REST API.
@@ -243,11 +248,14 @@ def fetch_vn_ohlcv(
         Path to save columnar Parquet file.
     force_fallback : bool
         If True, directly generates fallback data without hitting network.
+    universe_membership_path : Optional[str]
+        Optional path to Point-in-Time constituent CSV/Parquet (addressing Survivorship Bias H4).
         
     Returns:
     --------
     pl.DataFrame
-        DataFrame with dual prices (adj_close and raw OHLCV), price bands, and listing status.
+        DataFrame with dual prices (adj_close and raw OHLCV), price bands, listing status,
+        and explicit price_basis='entrade_adjusted' metadata.
     """
     if symbols is None:
         symbols = VN30_SYMBOLS.copy()
@@ -293,7 +301,7 @@ def fetch_vn_ohlcv(
                     last_c = None
                     for i in range(len(t_arr)):
                         # Entrade returns prices in thousands of VND
-                        d = datetime.date.fromtimestamp(t_arr[i])
+                        d = datetime.datetime.fromtimestamp(t_arr[i], tz=datetime.timezone(datetime.timedelta(hours=7))).date()
                         c_val = float(c_arr[i]) * 1000.0
                         o_val = float(o_arr[i]) * 1000.0
                         h_val = float(h_arr[i]) * 1000.0
@@ -320,12 +328,13 @@ def fetch_vn_ohlcv(
                             "volume": v_val,
                             "adv": adv_val,
                             "is_listed": True,
-                            "data_source": "entrade"
+                            "data_source": "entrade",
+                            "price_basis": "entrade_adjusted"
                         })
                     success_count += 1
                     successful_symbols.add(symbol)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"Lỗi tải dữ liệu cho mã {symbol}: {exc}")
             
     # S1 Invariant: NEVER silently overwrite with synthetic data on network/API failure
     if success_count < len(symbols) * 0.5 or len(records) == 0:
@@ -375,13 +384,15 @@ def validate_real_data_source(df: pl.DataFrame) -> None:
 def query_parquet_duckdb(parquet_path: str, sql_query: str) -> pl.DataFrame:
     """
     Executes a high-speed SQL query on the Parquet file using DuckDB,
+    registering the parquet relation safely to prevent SQL injection (H2),
     returning a Polars DataFrame.
     """
-    # Replace table placeholder with the parquet path
-    query = sql_query.replace("ohlcv_table", f"'{parquet_path}'")
     con = duckdb.connect(database=":memory:")
-    res_df = con.query(query).pl()
-    con.close()
+    try:
+        con.register("ohlcv_table", con.read_parquet(str(parquet_path)))
+        res_df = con.query(sql_query).pl()
+    finally:
+        con.close()
     return res_df
 
 
@@ -449,18 +460,20 @@ def align_pit_fundamentals(
     fin_prepared = (
         fin
         .rename({"effective_date": "date"})
-        .sort(["symbol", "date"])
+        .sort("date")
     )
     
-    trading_prepared = trading_df.sort(["symbol", "date"])
+    trading_prepared = trading_df.sort("date")
     
-    # Execute backward join_asof per symbol
-    joined_df = trading_prepared.join_asof(
-        fin_prepared,
-        on="date",
-        by="symbol",
-        strategy="backward"
-    ).sort(["date", "symbol"])
+    # Execute backward join_asof per symbol with warning filter
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*Sortedness of columns cannot be checked.*")
+        joined_df = trading_prepared.join_asof(
+            fin_prepared,
+            on="date",
+            by="symbol",
+            strategy="backward"
+        ).sort(["date", "symbol"])
     
     return joined_df
 

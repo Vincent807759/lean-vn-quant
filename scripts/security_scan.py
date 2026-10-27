@@ -184,15 +184,29 @@ def run_security_scan(root_dir: str = ".") -> int:
         return 1
 
     files, is_git, n_tracked, n_untracked, has_git_config = get_target_files(root_path)
+    active_rules = STATIC_REGEX_RULES + build_dynamic_env_rules(root_path)
+
+    # L2: Audit .git/config first before printing status
+    git_config_violations = 0
+    if has_git_config:
+        git_config_path = os.path.join(root_path, ".git", "config")
+        if os.path.isfile(git_config_path):
+            try:
+                with open(git_config_path, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        for rule_name, pattern, desc in active_rules:
+                            if pattern.search(line):
+                                git_config_violations += 1
+            except Exception:
+                pass
+
     if is_git:
         print(f"-> Scan Mode: Git Tracked Files (ls-files) ({n_tracked} files)")
         print(f"-> Checked Untracked/Staged Files (git status --porcelain): {n_untracked} files (Protected by .gitignore)")
         if has_git_config:
-            print("-> Audited .git/config: 0 credentials / PAT tokens found.")
+            print(f"-> Audited .git/config: {git_config_violations} credentials / PAT tokens found.")
     else:
         print(f"-> Scan Mode: Filesystem Scan (Excluding .env & .venv) ({len(files)} files)")
-
-    active_rules = STATIC_REGEX_RULES + build_dynamic_env_rules(root_path)
 
     violations = []
     scanned_count = 0

@@ -49,16 +49,19 @@ def test_simulation_microstructure_costs_positive():
     Subtest 5.1 & 5.2: Independent Brokerage Fee (0.15%), Sell Tax (0.10%),
     and Calendar-Day Advance Interest with 50k floor fee.
     """
-    T, N = 5, 2
+    T, N = 6, 2
     raw_open = np.full((T, N), 50000.0)
     raw_close = np.full((T, N), 50000.0)
     ceiling = np.full((T, N), 53500.0)
     floor = np.full((T, N), 46500.0)
     adv20_shares = np.full((T, N), 1000000.0)
 
+    # Day 0: Baseline 100% cash, zero trades (C2 Invariant)
+    # Day 1-2: Buy & hold asset 0
+    # Day 3: Sell asset 0 (settled at T+2)
     target_weights = np.zeros((T, N), dtype=np.float64)
-    target_weights[0:2, 0] = 0.50  # Buy day 0-1
-    target_weights[2:, 0] = 0.0    # Sell day 2
+    target_weights[1:3, 0] = 0.50  # Buy day 1-2
+    target_weights[3:, 0] = 0.0    # Sell day 3
 
     res = sim.simulate_vietnam(
         raw_open=raw_open,
@@ -76,25 +79,39 @@ def test_simulation_microstructure_costs_positive():
     b_fees = res["broker_fees"]
     s_tax = res["sell_tax"]
 
-    # Day 0: Buy only -> broker fee > 0, sell tax == 0
-    assert b_fees[0] > 0.0
+    # Day 0: No trades executed (strict 0 look-ahead)
+    assert b_fees[0] == 0.0
     assert s_tax[0] == 0.0
 
-    # Day 2: Sell -> sell fee / sell tax = 0.15 / 0.10 = 1.50
-    sell_fee_val = b_fees[2] - b_fees[1]
-    sell_tax_val = s_tax[2]
+    # Day 1: Buy only -> broker fee > 0, sell tax == 0
+    assert b_fees[1] > 0.0
+    assert s_tax[1] == 0.0
+
+    # Day 3: Sell -> sell fee / sell tax = 0.15 / 0.10 = 1.50
+    sell_fee_val = b_fees[3] - b_fees[2]
+    sell_tax_val = s_tax[3]
     ratio_sell = sell_fee_val / max(sell_tax_val, 1e-6)
     assert abs(ratio_sell - 1.50) < 1e-2
 
-    # Advance interest floor check
-    small_borrow = 5000000.0
-    c_days = 4.0
-    charged_small = max(50000.0, small_borrow * 0.00035 * c_days)
-    assert charged_small == 50000.0
-
-    large_borrow = 100000000.0
-    charged_large = max(50000.0, large_borrow * 0.00035 * c_days)
-    assert charged_large == 140000.0
+    # Advance interest floor check on actual simulator output (asserting res["advance_fees"])
+    target_weights_adv = np.zeros((T, N), dtype=np.float64)
+    target_weights_adv[1:3, 0] = 1.0  # Buy 1B of asset 0
+    target_weights_adv[3:, 1] = 1.0   # Sell asset 0, buy 1B of asset 1 using pending sales cash
+    res_adv = sim.simulate_vietnam(
+        raw_open=raw_open,
+        raw_close=raw_close,
+        ceiling=ceiling,
+        floor=floor,
+        adv20_shares=adv20_shares,
+        target_weights=target_weights_adv,
+        initial_cash=1.0e9,
+        broker_fee=0.0015,
+        slippage=0.0,
+        sell_tax=0.0010,
+        advance_fee_rate=0.00035,
+        min_advance_fee=50000.0
+    )
+    assert res_adv["advance_fees"][-1] >= 50000.0, f"Expected advance fee >= 50k, got {res_adv['advance_fees'][-1]}"
 
 
 def test_microstructure_floor_trapped_queue():
@@ -102,23 +119,23 @@ def test_microstructure_floor_trapped_queue():
     Subtest 5.4: Floor-Trapped Order Priority Queue.
     Verifies that sell orders cannot execute during floor locks and execute when unlocked.
     """
-    T, N = 6, 1
+    T, N = 7, 1
     raw_open = np.full((T, N), 50000.0)
     raw_close = np.full((T, N), 50000.0)
     ceiling = np.full((T, N), 53500.0)
     floor = np.full((T, N), 46500.0)
     adv_shares = np.full((T, N), 10000000.0)
 
-    # Days 2, 3: locked at floor
-    raw_open[2, 0] = 46500.0
+    # Days 3, 4: locked at floor
     raw_open[3, 0] = 46500.0
-    # Days 4, 5: unlocked
-    raw_open[4, 0] = 48000.0
+    raw_open[4, 0] = 46500.0
+    # Days 5, 6: unlocked
     raw_open[5, 0] = 48000.0
+    raw_open[6, 0] = 48000.0
 
     w_flr = np.zeros((T, N), dtype=np.float64)
-    w_flr[0:2, 0] = 1.0  # Buy at t=0
-    w_flr[2:, 0] = 0.0   # Attempt sell at t=2 (floor), t=3 (floor), t=4 (unlocked)
+    w_flr[1:3, 0] = 1.0  # Buy at t=1, settles at t=3
+    w_flr[3:, 0] = 0.0   # Attempt sell at t=3 (floor), t=4 (floor), t=5 (unlocked)
 
     res = sim.simulate_vietnam(
         raw_open=raw_open,
@@ -134,9 +151,10 @@ def test_microstructure_floor_trapped_queue():
     )
 
     assert res["sell_tax"][1] == 0.0  # No sell yet
-    assert res["sell_tax"][2] == 0.0  # Cannot sell at floor lock t=2
+    assert res["sell_tax"][2] == 0.0  # Holding
     assert res["sell_tax"][3] == 0.0  # Cannot sell at floor lock t=3
-    assert res["sell_tax"][4] > 0.0   # Sell executed at t=4 when unlocked
+    assert res["sell_tax"][4] == 0.0  # Cannot sell at floor lock t=4
+    assert res["sell_tax"][5] > 0.0   # Sell executed at t=5 when unlocked
 
 
 def test_corporate_action_nav_preservation():

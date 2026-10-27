@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import datetime
+import argparse
 from pathlib import Path
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -48,9 +49,12 @@ def run_all_argon_audits():
     T, N = raw_close.shape
     years = T / 252.0
 
-    # Registry initialization for 26 trials
+    # Registry initialization for trials (L3: preserve history unless explicitly --reset)
     registry_file = "experiments/trial_registry.jsonl"
-    if os.path.exists(registry_file):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--reset", action="store_true", help="Reset trial registry")
+    args, _ = parser.parse_known_args()
+    if args.reset and os.path.exists(registry_file):
         try:
             os.remove(registry_file)
         except Exception:

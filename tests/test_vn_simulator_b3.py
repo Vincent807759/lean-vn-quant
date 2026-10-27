@@ -97,3 +97,49 @@ def test_s4_and_t13_halt_haircut_applied_starting_from_halt_session():
     assert np.isclose(c_close[19, 1], discounted_price)
     assert c_pit[11, 1] == False
     assert c_w[11, 1] == 0.0
+
+
+def test_c2_initial_session_t0_invariance():
+    """
+    C2 Invariant Test:
+    At session t=0, the portfolio holds 100% cash and executes 0 orders.
+    Altering daily_vol[0, :] or adv20_shares[0, :] must have ZERO impact on state at t=0.
+    """
+    raw_open, raw_close, ceiling, floor, adv20, target_weights = create_synthetic_sim_data(T=10, N=3)
+
+    # Baseline simulation
+    res_base = simulate_vietnam(
+        raw_open=raw_open,
+        raw_close=raw_close,
+        ceiling=ceiling,
+        floor=floor,
+        adv20_shares=adv20,
+        target_weights=target_weights,
+        initial_cash=1.0e9
+    )
+
+    # Assert session t=0 holds 100% cash and 0 fees/turnover
+    assert res_base["cash_history"][0] == 1.0e9
+    assert res_base["equity"][0] == 1.0e9
+    assert res_base["trading_fees"][0] == 0.0
+    assert res_base["realized_daily_turnover"][0] == 0.0
+
+    # Perturb session t=0 volume and ADV by 100x
+    adv20_pert = adv20.copy()
+    adv20_pert[0, :] *= 100.0
+
+    res_pert = simulate_vietnam(
+        raw_open=raw_open,
+        raw_close=raw_close,
+        ceiling=ceiling,
+        floor=floor,
+        adv20_shares=adv20_pert,
+        target_weights=target_weights,
+        initial_cash=1.0e9
+    )
+
+    # Session t=0 state must be 100% identical
+    assert res_pert["cash_history"][0] == res_base["cash_history"][0]
+    assert res_pert["equity"][0] == res_base["equity"][0]
+    assert res_pert["trading_fees"][0] == res_base["trading_fees"][0]
+    assert res_pert["realized_daily_turnover"][0] == res_base["realized_daily_turnover"][0]

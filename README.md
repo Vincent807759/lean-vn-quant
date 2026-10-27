@@ -288,7 +288,9 @@ lean-vn-quant/
 │   ├── setup_autostart.ps1          # Task Scheduler automated service script
 │   └── telegram_bot_service.py      # 2-Way Telegram Bot interactive management daemon
 ├── scripts/
-│   └── security_scan.py             # Zero-leak secret & alpha privacy auditor
+│   ├── security_scan.py             # Zero-leak secret & alpha privacy auditor
+│   ├── compare_backtest_b6_b11.py   # Empirical backtest comparison runner
+│   └── audit_argon_revisions.py     # Argon 4 statistical verification experiment suite
 ├── .gitignore                       # Strict exclusion rules for data, keys & private alphas
 ├── LICENSE                          # MIT License
 ├── pyproject.toml                   # Project metadata & build configuration
@@ -299,6 +301,18 @@ lean-vn-quant/
 
 ---
 
-## 9. License
+## 9. Data Integrity & Methodological Disclosures
+
+### 9.1. Universe Selection & Survivorship Bias
+- **Fixed Basket Limitation:** The default historical data ingestion (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23) utilizes the 30 constituent tickers of the VN30 index as constituted in 2026. Companies that were removed from VN30 prior to 2026 (e.g., ROS, HNG, NVL) are excluded from the default sample basket, introducing potential survivorship bias.
+- **Point-in-Time Membership Support:** The pipeline interface `engine/data_pipeline.py` supports `universe_membership_path: Optional[str] = None` to dynamically filter tickers per historical HOSE index rebalancing effective dates (January and July annual cycles) when constituent membership tables are provided.
+
+### 9.2. Price Basis & Dual-Price Simulation
+- **Entrade Adjusted Data:** Prices obtained from the upstream Entrade REST API are backward-adjusted for stock splits, bonus shares, and cash dividends (`price_basis = "entrade_adjusted"`).
+- **Impact on Historical Levels:** While returns and corporate-action NAV preservation remain mathematically exact, nominal historical price thresholds (such as $\pm 7\%$ ceiling/floor step levels in 2023) reflect post-split adjusted scales rather than unadjusted exchange ticker tape prices.
+
+---
+
+## 10. License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

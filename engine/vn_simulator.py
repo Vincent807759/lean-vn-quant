@@ -410,7 +410,22 @@ def _simulate_vn_microstructure_core(
     cum_adv_fees = 0.0
     
     for t in range(T):
-        t_lag = max(0, t - 1)
+        if t == 0:
+            # Session t=0 is the initialization baseline session.
+            # 100% cash is held, zero orders executed to prevent look-ahead bias
+            # from same-day volume (daily_vol[0] / adv20[0] known only post-close).
+            equity[0] = initial_cash
+            cash_history[0] = initial_cash
+            realized_fees[0] = 0.0
+            advance_fees[0] = 0.0
+            broker_fees_hist[0] = 0.0
+            sell_tax_hist[0] = 0.0
+            daily_turnover_hist[0] = 0.0
+            div_receivable_hist[0] = 0.0
+            locked_corp_hist[0] = 0.0
+            continue
+
+        t_lag = t - 1
         # ----------------------------------------------------------------------
         # A. SETTLEMENT UPDATES & CORPORATE ACTIONS (At Open of day t)
         # ----------------------------------------------------------------------
@@ -1084,6 +1099,7 @@ def simulate_vietnam(
         "broker_fees": b_fees,
         "sell_tax": s_tax,
         "advance_interest_fees": adv_fees,
+        "advance_fees": adv_fees,
         "realized_daily_turnover": to_hist,
         "mean_daily_turnover": float(np.mean(to_hist)),
         "dividend_cash_receivable": div_rec,

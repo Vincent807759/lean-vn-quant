@@ -15,7 +15,5 @@ duckdb==0.10.3
 
 # Network, Analytics & Risk Modeling
 requests==2.31.0
-quantstats==0.0.62
-scikit-learn==1.4.2
 python-dotenv==1.0.1
 pytest==8.1.1

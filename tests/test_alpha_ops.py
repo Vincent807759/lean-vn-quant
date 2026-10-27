@@ -176,3 +176,51 @@ def test_b7_orthogonalization_strict_causality_no_look_ahead():
     max_diff = float(np.max(np.abs(ortho_orig[:t0 + 1] - ortho_pert[:t0 + 1])))
     assert max_diff == 0.0, f"B7 VIOLATION: Look-ahead leakage detected in orthogonalization, max_diff={max_diff}"
 
+
+def test_ridge_and_lowdin_strict_causality_no_look_ahead():
+    """
+    C1 Causality / Future Perturbation Test:
+    Verifies that neither ridge_factor_projection nor lowdin_symmetric_orthogonalization
+    leaks future data: perturbing data at t > t0 must have 0.0 effect on results at t <= t0.
+    """
+    np.random.seed(102)
+    T, N = 80, 15
+    t0 = 35
+
+    base_f1 = np.random.randn(T, N)
+    base_f2 = 0.50 * base_f1 + 0.50 * np.random.randn(T, N)
+    cand_alpha = 0.70 * base_f1 + 0.30 * np.random.randn(T, N)
+
+    # 1. Baseline Ridge Projection
+    ridge_orig, _, _ = ops.ridge_factor_projection(
+        alpha_target=cand_alpha,
+        benchmark_factors=[base_f1, base_f2],
+        threshold=0.10
+    )
+
+    # Perturb future data strictly at t > t0
+    cand_pert = cand_alpha.copy()
+    base_f1_pert = base_f1.copy()
+    base_f2_pert = base_f2.copy()
+    cand_pert[t0 + 1:, :] += 12345.0
+    base_f1_pert[t0 + 1:, :] -= 67890.0
+    base_f2_pert[t0 + 1:, :] += 45678.0
+
+    ridge_pert, _, _ = ops.ridge_factor_projection(
+        alpha_target=cand_pert,
+        benchmark_factors=[base_f1_pert, base_f2_pert],
+        threshold=0.10
+    )
+
+    diff_ridge = float(np.max(np.abs(ridge_orig[:t0 + 1] - ridge_pert[:t0 + 1])))
+    assert diff_ridge < 1e-12, f"C1 VIOLATION: Look-ahead detected in ridge_factor_projection! diff={diff_ridge}"
+
+    # 2. Baseline Löwdin Orthogonalization
+    lowdin_orig = ops.lowdin_symmetric_orthogonalization([base_f1, base_f2, cand_alpha])
+    lowdin_pert = ops.lowdin_symmetric_orthogonalization([base_f1_pert, base_f2_pert, cand_pert])
+
+    for k in range(len(lowdin_orig)):
+        diff_lowdin_k = float(np.max(np.abs(lowdin_orig[k][:t0 + 1] - lowdin_pert[k][:t0 + 1])))
+        assert diff_lowdin_k < 1e-12, f"C1 VIOLATION: Look-ahead detected in Löwdin factor {k}! diff={diff_lowdin_k}"
+
+

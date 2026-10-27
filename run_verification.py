@@ -521,12 +521,12 @@ def test_5_phase1_microstructure_audit():
     floor = np.full((T, N), 46500.0)
     adv20_shares = np.full((T, N), 1000000.0)
     
-    # Day 0: Buy asset 0 only (Target weight 0.50 on 1B VND = 500M VND)
-    # Day 1: Hold
-    # Day 2: Sell asset 0 to 0.0 (Sell 500M VND)
+    # Day 0: Baseline 100% cash, zero trades (C2 Invariant)
+    # Day 1-2: Buy asset 0 (Target weight 0.50 on 1B VND = 500M VND)
+    # Day 3: Sell asset 0 to 0.0 (Sell 500M VND)
     target_weights = np.zeros((T, N), dtype=np.float64)
-    target_weights[0:2, 0] = 0.50
-    target_weights[2:, 0] = 0.0
+    target_weights[1:3, 0] = 0.50
+    target_weights[3:, 0] = 0.0
     
     res = sim.simulate_vietnam(
         raw_open=raw_open,
@@ -544,14 +544,18 @@ def test_5_phase1_microstructure_audit():
     b_fees = res["broker_fees"]
     s_tax = res["sell_tax"]
     
-    # At Day 0: Only Buy occurred. Broker fee > 0, Sell tax == 0
-    assert b_fees[0] > 0.0, "[FAIL] Broker fee on Buy must be positive!"
-    assert s_tax[0] == 0.0, "[FAIL] Sell tax on Buy must be strictly 0.0!"
+    # At Day 0: No trades executed
+    assert b_fees[0] == 0.0, "[FAIL] Broker fee on Day 0 must be 0.0!"
+    assert s_tax[0] == 0.0, "[FAIL] Sell tax on Day 0 must be 0.0!"
     
-    # At Day 2: Sell occurred. Both broker fee and sell tax must be recorded independently
-    buy_fee_val = b_fees[0]
-    sell_fee_val = b_fees[2] - b_fees[1]
-    sell_tax_val = s_tax[2]
+    # At Day 1: Only Buy occurred. Broker fee > 0, Sell tax == 0
+    assert b_fees[1] > 0.0, "[FAIL] Broker fee on Buy must be positive!"
+    assert s_tax[1] == 0.0, "[FAIL] Sell tax on Buy must be strictly 0.0!"
+    
+    # At Day 3: Sell occurred. Both broker fee and sell tax must be recorded independently
+    buy_fee_val = b_fees[1]
+    sell_fee_val = b_fees[3] - b_fees[2]
+    sell_tax_val = s_tax[3]
     
     # Buy fee is 0.15% of buy volume, Sell fee is 0.15% of sell volume
     # Sell tax is 0.10% of sell volume
@@ -627,23 +631,23 @@ def test_5_phase1_microstructure_audit():
     # SUBTEST 5.4: Floor-Trapped Order Priority Queue with -7%/session penalty slippage
     # --------------------------------------------------------------------------
     print("  [5.4] Auditing Floor-Trapped Order Queue & Adverse Penalty Slippage...")
-    T_flr, N_flr = 6, 1
+    T_flr, N_flr = 7, 1
     ro_flr = np.full((T_flr, N_flr), 50000.0)
     rc_flr = np.full((T_flr, N_flr), 50000.0)
     ceil_flr = np.full((T_flr, N_flr), 53500.0)
     flr_flr = np.full((T_flr, N_flr), 46500.0)
     adv_flr = np.full((T_flr, N_flr), 10000000.0)
     
-    # At t=2, 3: market opens locked at floor 46,500
-    ro_flr[2, 0] = 46500.0
+    # At t=3, 4: market opens locked at floor 46,500
     ro_flr[3, 0] = 46500.0
-    # At t=4: market opens at 48,000 (unlocked)
-    ro_flr[4, 0] = 48000.0
+    ro_flr[4, 0] = 46500.0
+    # At t=5, 6: market opens at 48,000 (unlocked)
     ro_flr[5, 0] = 48000.0
+    ro_flr[6, 0] = 48000.0
     
     w_flr = np.zeros((T_flr, N_flr), dtype=np.float64)
-    w_flr[0:2, 0] = 1.0  # Buy at t=0
-    w_flr[2:, 0] = 0.0   # Attempt sell at t=2 (locked floor), t=3 (locked floor), t=4 (unlocked)
+    w_flr[1:3, 0] = 1.0  # Buy at t=1, settles at t=3
+    w_flr[3:, 0] = 0.0   # Attempt sell at t=3 (locked floor), t=4 (locked floor), t=5 (unlocked)
     
     res_flr = sim.simulate_vietnam(
         raw_open=ro_flr,
@@ -658,11 +662,12 @@ def test_5_phase1_microstructure_audit():
         sell_tax=0.0010
     )
     
-    # Realized fees should confirm sell executed only on day 4 when unlocked
+    # Realized fees should confirm sell executed only on day 5 when unlocked
     assert res_flr["sell_tax"][1] == 0.0, "[FAIL] Sell tax before exit must be 0"
-    assert res_flr["sell_tax"][2] == 0.0, "[FAIL] Cannot sell during floor trap at t=2"
+    assert res_flr["sell_tax"][2] == 0.0, "[FAIL] Sell tax before exit must be 0"
     assert res_flr["sell_tax"][3] == 0.0, "[FAIL] Cannot sell during floor trap at t=3"
-    assert res_flr["sell_tax"][4] > 0.0, "[FAIL] Sell must execute at t=4 when unlocked"
+    assert res_flr["sell_tax"][4] == 0.0, "[FAIL] Cannot sell during floor trap at t=4"
+    assert res_flr["sell_tax"][5] > 0.0, "[FAIL] Sell must execute at t=5 when unlocked"
     print("  [PASS] Floor-Trapped Queue Verified: Order held safely during floor lock sessions and exited upon liquidity return.")
 
     # --------------------------------------------------------------------------
@@ -760,15 +765,15 @@ def test_6_phase2_pit_and_market_impact():
     # SUBTEST 6.2: Orderly Liquidation Mechanism (liquidation_grace_mask <= 5 sessions)
     # --------------------------------------------------------------------------
     print("  [6.2] Auditing Orderly Liquidation Mechanism & Grace Counter...")
-    T_liq, N_liq = 6, 1
+    T_liq, N_liq = 7, 1
     ro_liq = np.full((T_liq, N_liq), 50000.0)
     rc_liq = np.full((T_liq, N_liq), 50000.0)
     ceil_liq = np.full((T_liq, N_liq), 53500.0)
     flr_liq = np.full((T_liq, N_liq), 46500.0)
     adv_liq = np.full((T_liq, N_liq), 1000000.0)
-    w_liq = np.ones((T_liq, N_liq), dtype=np.float64)  # Caller requests 100% long all 6 days
+    w_liq = np.ones((T_liq, N_liq), dtype=np.float64)  # Caller requests 100% long all days
     pit_liq = np.ones((T_liq, N_liq), dtype=bool)
-    pit_liq[2:, 0] = False  # Excluded from index starting at t=2
+    pit_liq[3:, 0] = False  # Excluded from index starting at t=3
     
     res_liq = sim.simulate_vietnam(
         raw_open=ro_liq,
@@ -780,9 +785,10 @@ def test_6_phase2_pit_and_market_impact():
         initial_cash=1.0e9,
         in_pit_universe=pit_liq
     )
-    # Stock bought at t=0, settle at t=2, then immediately liquidated on t=2 due to pit exclusion
+    # Stock bought at t=1, settles at t=3, then immediately liquidated on t=3 due to pit exclusion
     assert res_liq["sell_tax"][1] == 0.0, "[FAIL] No sell at t=1"
-    assert res_liq["sell_tax"][2] > 0.0, "[FAIL] Excluded stock must be liquidated starting at t=2"
+    assert res_liq["sell_tax"][2] == 0.0, "[FAIL] No sell at t=2"
+    assert res_liq["sell_tax"][3] > 0.0, "[FAIL] Excluded stock must be liquidated starting at t=3"
     assert res_liq["equity"][-1] > 0.98e9, "[FAIL] Cash from liquidated stock must be preserved"
     print("  [PASS] Orderly Liquidation Verified: Excluded stock cleanly liquidated without orphan positions.")
 
