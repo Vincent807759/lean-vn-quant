@@ -218,6 +218,8 @@ To mitigate data mining selection bias across multiple trial evaluations, Lean V
 
 By coupling unstructured financial news/event contagion matrices from Trụ cột 2 (`vn-fingraph`) into the Trụ cột 1 quantitative execution engine via Parquet bridge, we evaluate the impact of Graph Laplacian risk diffusion $\alpha \in \{0.15, 0.25, 0.50, 0.70\}$:
 
+*(Lưu ý: FinGraph cần module riêng `fin_corpus_pipeline` và `knowledge_graph_engine` chưa công khai; `fingraph/bridge_to_vnquant.py` thực hiện lazy import kèm cảnh báo rõ ràng khi thiếu các module này).*
+
 | Laplacian Propagation $\alpha$ | Rank IC (1-Day Forward) | Cumulative Return (6-Factor) | CAGR (%/yr) | Annualized Sharpe | Max Drawdown | Architectural Assessment |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | **$\alpha = 0.15$** (Fast decay) | -0.0158 | +63.14% | 13.91% | 0.58 | 19.97% | Narrow diffusion; shocks contained at epicenter. Performs on par with 5-factor baseline (+63.32%). |
@@ -278,7 +280,7 @@ lean-vn-quant/
 │   └── vn_simulator.py              # HOSE T+2.5 microstructure engine & dynamic hedge
 ├── fingraph/
 │   ├── __init__.py
-│   └── bridge_to_vnquant.py         # Hawkes/OU decay filter & Van der Waerden score
+│   └── bridge_to_vnquant.py         # Hawkes/OU decay filter & Van der Waerden score (FinGraph cần module riêng chưa công khai)
 ├── services/
 │   ├── __init__.py
 │   ├── daily_paper_trader.py        # Forward-testing engine & order ticket generator

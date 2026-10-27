@@ -31,9 +31,6 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from fin_corpus_pipeline import FinancialCorpusPipeline, VN30_UNIVERSE
-from knowledge_graph_engine import FinancialKnowledgeGraph
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("BridgeToVNQuant")
 
@@ -151,6 +148,18 @@ class VNQuantBridge:
         else:
             cand = self.data_dir / "vn30_financial_corpus.parquet"
             self.corpus_path = cand if cand.exists() else Path("./data/vn30_financial_corpus.parquet")
+
+        try:
+            try:
+                from .fin_corpus_pipeline import FinancialCorpusPipeline
+                from .knowledge_graph_engine import FinancialKnowledgeGraph
+            except (ImportError, ValueError):
+                from fin_corpus_pipeline import FinancialCorpusPipeline
+                from knowledge_graph_engine import FinancialKnowledgeGraph
+        except ImportError as e:
+            raise ImportError(
+                "FinGraph cần fin_corpus_pipeline và knowledge_graph_engine, chưa công khai; xem README"
+            ) from e
 
         self.kg = FinancialKnowledgeGraph()
         self.pipeline = FinancialCorpusPipeline(data_dir=str(self.data_dir))

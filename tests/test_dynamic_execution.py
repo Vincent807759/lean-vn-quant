@@ -213,3 +213,19 @@ def test_b6_no_look_ahead_close_to_ato_execution():
     assert np.allclose(res_orig["broker_fees"][:t0 + 1], res_pert["broker_fees"][:t0 + 1]), \
         "B6 VIOLATION: Broker fees up to t0 ATO differ after altering close[t0]!"
 
+
+def test_fingraph_bridge_import_hermetic():
+    """
+    F12 & Hermetic Test:
+    Verifies that fingraph.bridge_to_vnquant can be imported successfully when
+    private modules (fin_corpus_pipeline, knowledge_graph_engine) are absent, and
+    calling FinGraphBridge raises ImportError with a clear explanatory message.
+    """
+    import fingraph.bridge_to_vnquant as bridge
+    assert hasattr(bridge, "sparse_event_tilt_cross_section")
+    assert hasattr(bridge, "HOSE_HOLIDAYS")
+
+    with pytest.raises(ImportError) as excinfo:
+        bridge.VNQuantBridge()
+    assert "FinGraph cần fin_corpus_pipeline và knowledge_graph_engine, chưa công khai; xem README" in str(excinfo.value)
+
