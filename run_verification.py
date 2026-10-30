@@ -36,6 +36,9 @@ except ImportError:
 
 
 # ==============================================================================
+# Constant for VN30F Derivative Beta Hedge margin requirement
+VN30F_MARGIN_RATE = 0.30  # TODO: xác nhận với công ty chứng khoán (VSD quy định ký quỹ ban đầu ~17%, CTCK yêu cầu 20-30%)
+
 # TEST 1: 0% LOOK-AHEAD BIAS VERIFICATION
 # ==============================================================================
 
@@ -132,7 +135,7 @@ def test_1_look_ahead_bias():
     
     assert hist_orig == hist_pert, "[FAIL] Look-ahead bias detected in align_pit_fundamentals!"
     print("  [PASS] align_pit_fundamentals   : 0% look-ahead bias confirmed (join_asof).")
-    print(">>> TEST 1 RESULT: ALL 11 OPERATORS & PIT JOIN PASSED 100%!\n")
+    print(">>> TEST 1 RESULT: ALL 11 OPERATORS & PIT JOIN PASSED!\n")
 
 
 # ==============================================================================
@@ -182,7 +185,7 @@ def test_2_orthogonalization():
     assert perm_diff < 1e-10, f"[FAIL] Permutation invariance violated: max diff {perm_diff}"
     assert corr_p1 < 0.05, f"[FAIL] Ridge multi-factor correlation {corr_p1} >= 0.05"
     print(f"  [PASS] Ridge Factor Projection: Order-Invariance confirmed (Delta={perm_diff:.2e}), Post-Corr={corr_p1:.2e} (< 0.05).")
-    print(">>> TEST 2 RESULT: FACTOR ORTHOGONALIZATION & PERMUTATION INVARIANCE PASSED 100%!\n")
+    print(">>> TEST 2 RESULT: FACTOR ORTHOGONALIZATION & PERMUTATION INVARIANCE PASSED!\n")
 
 
 # ==============================================================================
@@ -226,7 +229,7 @@ def test_3_turnover_dampener():
     
     assert dampened_to <= 0.05, f"[FAIL] Dampened turnover {dampened_to * 100:.2f}% exceeds 5%/day threshold!"
     print(f"  [PASS] Successfully suppressed daily turnover from {naive_to * 100:.2f}%/day down to {dampened_to * 100:.2f}%/day (<= 5%/day).")
-    print(">>> TEST 3 RESULT: TURNOVER DAMPENING PASSED 100%!\n")
+    print(">>> TEST 3 RESULT: TURNOVER DAMPENING PASSED!\n")
 
 
 # ==============================================================================
@@ -261,9 +264,11 @@ def compute_verification_signal(raw_close: np.ndarray, tradable_mask: np.ndarray
     try:
         import private_alphas
         if hasattr(private_alphas, "compute_custom_alpha"):
+            print("  [ALPHA SOURCE] Loaded production alpha from private_alphas package.")
             return private_alphas.compute_custom_alpha(raw_close, tradable_mask)
     except (ImportError, ModuleNotFoundError):
         pass
+    print("  [ALPHA SOURCE] private_alphas not detected; using open-source textbook placeholder signal.")
     return _default_textbook_placeholder_signal(raw_close, tradable_mask)
 
 
@@ -355,7 +360,8 @@ def test_4_full_backtest():
     naive_equity = sim.simulate_naive(
         raw_close=rc_eval,
         target_weights=weights_eval,
-        initial_cash=1.0e9
+        initial_cash=1.0e9,
+        raw_open=ro_eval
     )
     
     # 4. Simulate Realistic Vietnam Microstructure Engine
@@ -381,7 +387,8 @@ def test_4_full_backtest():
     bm_equity = sim.simulate_naive(
         raw_close=rc_eval,
         target_weights=ew_weights,
-        initial_cash=1.0e9
+        initial_cash=1.0e9,
+        raw_open=ro_eval
     )
     
     # 5. Evaluate Performance & Risk Metrics
@@ -416,12 +423,13 @@ def test_4_full_backtest():
     hedge_info = sim.calculate_vn30f_hedge(
         portfolio_value=metrics_real["final_equity"],
         beta=portfolio_beta,
-        futures_price=1280.0
+        futures_price=1280.0,
+        margin_req=VN30F_MARGIN_RATE
     )
     
     # 6. Format and Print ASCII Performance Table
     print("\n" + "=" * 85)
-    print(" " * 22 + "STRATEGY BACKTEST PERFORMANCE REPORT (AUDITED)")
+    print(" " * 22 + "STRATEGY BACKTEST PERFORMANCE REPORT")
     print("=" * 85)
     header = f"{'Metric':<34} | {'Naive (T+0 No Fee)':<22} | {'Real VN (T+2.5 Real)':<22}"
     print(header)
@@ -475,7 +483,7 @@ def test_4_full_backtest():
     print(f"  Underlying Portfolio Value : {metrics_real['final_equity']:,.0f} VND")
     print(f"  Original Portfolio Beta    : {hedge_info['original_beta']:.2f}")
     print(f"  Futures Contracts to Short : {hedge_info['contracts_to_short']} contracts")
-    print(f"  Margin Capital Required    : {hedge_info['margin_required_vnd']:,.0f} VND (20% margin)")
+    print(f"  Margin Capital Required    : {hedge_info['margin_required_vnd']:,.0f} VND ({VN30F_MARGIN_RATE*100:.0f}% margin)")
     print(f"  Residual Net Beta          : {hedge_info['residual_beta']:.2f}")
     print("=" * 80)
     
@@ -498,7 +506,7 @@ def test_4_full_backtest():
     assert turnover <= 0.05, f"[FAIL] Daily Turnover {turnover*100:.2f}% > 5.0%!"
     assert not kill_switch, f"[FAIL] Kill-Switch triggered: {metrics_real['kill_switch_reasons']}"
     
-    print(">>> TEST 4 RESULT: FULL BACKTEST AUDITED AND PASSED 100% WITH PHYSICALLY CONSISTENT SHORTFALL!\n")
+    print(">>> TEST 4 RESULT: FULL BACKTEST AUDITED AND PASSED WITH PHYSICALLY CONSISTENT SHORTFALL!\n")
 
 
 # ==============================================================================
@@ -683,7 +691,7 @@ def test_5_phase1_microstructure_audit():
     assert metrics["initial_equity"] == 1.0e9, f"[FAIL] Initial capital is {metrics['initial_equity']}, expected 1,000,000,000"
     assert metrics["daily_turnover"] > 0.0, "[FAIL] Realized daily turnover must be positive"
     print(f"  [PASS] Initial Capital verified at exactly {metrics['initial_equity']:,.0f} VND; Mean Realized Turnover = {metrics['daily_turnover']*100:.2f}%/day.")
-    print(">>> TEST 5 RESULT: ALL 5 PHASE 1 MICROSTRUCTURE REPAIRS AUDITED AND PASSED 100%!\n")
+    print(">>> TEST 5 RESULT: ALL 5 PHASE 1 MICROSTRUCTURE REPAIRS AUDITED AND PASSED!\n")
 
 
 # ==============================================================================
@@ -829,7 +837,7 @@ def test_6_phase2_pit_and_market_impact():
     assert s_huge["cap_applied"], "[FAIL] Order > 3% ADV must trigger participation cap"
     assert s_huge["q_total"] == 30000.0, f"Expected capped at 30,000, got {s_huge['q_total']}"
     print(f"  [PASS] Intraday Slicing Verified: 25% ATO ({s_large['q_ato']:.0f}), 55% TWAP ({s_large['q_twap']:.0f}), 20% ATC ({s_large['q_atc']:.0f}), Cap enforced.")
-    print(">>> TEST 6 RESULT: ALL 4 PHASE 2 AUDIT SUBTESTS PASSED 100%!\n")
+    print(">>> TEST 6 RESULT: ALL 4 PHASE 2 AUDIT SUBTESTS PASSED!\n")
 
 
 # ==============================================================================
@@ -880,7 +888,7 @@ def test_7_phase3_fingraph_decay_and_vdw():
         assert df_fg.shape[0] >= 900, f"[FAIL] Expected >= 900 sessions in event contagion, got {df_fg.shape[0]}"
         assert "ACB" in df_fg.columns and "VIC" in df_fg.columns, "[FAIL] VN30 tickers missing from event contagion"
         print(f"  [PASS] VN-FinGraph Production Parquet Verified: {df_fg.shape[0]} sessions, {len(df_fg.columns)-1} tickers aligned.")
-    print(">>> TEST 7 RESULT: ALL 3 PHASE 3 FINGRAPH INTEGRATION SUBTESTS PASSED 100%!\n")
+    print(">>> TEST 7 RESULT: ALL 3 PHASE 3 FINGRAPH INTEGRATION SUBTESTS PASSED!\n")
 
 
 # ==============================================================================
@@ -901,6 +909,7 @@ def test_8_phase4_dynamic_hedge_and_dsr():
         portfolio_value=1.0e9,
         beta_cw=0.98,
         futures_price=1280.0,
+        margin_req=VN30F_MARGIN_RATE,
         lambda_contagion=0.40,
         vn30_close_history=p_uptrend
     )
@@ -912,6 +921,7 @@ def test_8_phase4_dynamic_hedge_and_dsr():
         portfolio_value=1.0e9,
         beta_cw=0.98,
         futures_price=1280.0,
+        margin_req=VN30F_MARGIN_RATE,
         lambda_contagion=0.40,
         vn30_close_history=p_shock
     )
@@ -923,6 +933,7 @@ def test_8_phase4_dynamic_hedge_and_dsr():
         portfolio_value=1.0e9,
         beta_cw=0.98,
         futures_price=1280.0,
+        margin_req=VN30F_MARGIN_RATE,
         lambda_contagion=0.42,
         vn30_close_history=p_shock,
         prev_h=h_shock["h_actual"]
@@ -933,10 +944,11 @@ def test_8_phase4_dynamic_hedge_and_dsr():
         portfolio_value=1.0e9,
         beta_cw=1.50,
         futures_price=1280.0,
+        margin_req=VN30F_MARGIN_RATE,
         lambda_contagion=0.95,
         vn30_close_history=p_shock
     )
-    max_allowed = int(np.floor((1.0e9 * 0.18) / (0.30 * 1280.0 * 100000.0)))
+    max_allowed = int(np.floor((1.0e9 * 0.18) / (VN30F_MARGIN_RATE * 1280.0 * 100000.0)))
     assert h_extreme["contracts_to_short"] <= max_allowed, f"[FAIL] Contracts {h_extreme['contracts_to_short']} exceeded buffer limit {max_allowed}"
     print(f"  [PASS] Dynamic Regime Switch verified: Uptrend=0 contracts (0 roll bleed), Shock={h_shock['contracts_to_short']} contracts ({h_shock['h_actual']*100:.1f}%), Whipsaw Deadband & 18% NAV margin cap strictly enforced.")
     
@@ -985,7 +997,7 @@ def test_8_phase4_dynamic_hedge_and_dsr():
     assert dsr_multi["deflated_sharpe_ratio"] >= 0.95, f"[FAIL] Multi-alpha DSR {dsr_multi['deflated_sharpe_ratio']} < 0.95"
     assert dsr_multi["p_value"] <= 0.05, f"[FAIL] Multi-alpha p-value {dsr_multi['p_value']} > 0.05"
     print(f"  [PASS] Calibrated DSR Formulation Verified (Synthetic T=2100 sessions): N_eff(eig)={n_eff_eig:.1f}, N_eff(rho)={n_eff_rho:.1f} (vs naive {N_trials}), Calibrated SR_0={sr_0_calib:.2f} (vs naive 1.09), Multi-Alpha DSR={dsr_multi['deflated_sharpe_ratio']:.4f} (p={dsr_multi['p_value']:.4f} <= 0.05).")
-    print(">>> TEST 8 RESULT: ALL PHASE 4 DYNAMIC HEDGE & STATISTICAL DSR AUDITS PASSED 100%!\n")
+    print(">>> TEST 8 RESULT: ALL PHASE 4 DYNAMIC HEDGE & STATISTICAL DSR AUDITS PASSED!\n")
 
 
 # ==============================================================================
@@ -1007,5 +1019,5 @@ if __name__ == "__main__":
     test_8_phase4_dynamic_hedge_and_dsr()
     
     print("#" * 80)
-    print("### ALL 8 VERIFICATION TESTS COMPLETED AND PASSED 100% WITH ZERO ERRORS ###")
+    print("### ALL 8 VERIFICATION TESTS COMPLETED AND PASSED WITH ZERO ERRORS ###")
     print("#" * 80 + "\n")

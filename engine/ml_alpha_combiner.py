@@ -322,8 +322,8 @@ def run_comparative_experiment(parquet_path: str = DEFAULT_PARQUET) -> Dict[str,
     res_single = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_single_exec)
     res_multi = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_multi_exec)
 
-    naive_single = sim.simulate_naive(raw_close, w_single_exec)
-    naive_multi = sim.simulate_naive(raw_close, w_multi_exec)
+    naive_single = sim.simulate_naive(raw_close, w_single_exec, raw_open=raw_open)
+    naive_multi = sim.simulate_naive(raw_close, w_multi_exec, raw_open=raw_open)
 
     m_single = sim.evaluate_strategy(res_single["equity"], w_single_exec, naive_single)
     m_multi = sim.evaluate_strategy(res_multi["equity"], w_multi_exec, naive_multi)

@@ -108,8 +108,8 @@ def run_all_argon_audits():
     # Before
     res_s_b = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_single, penalty_rate_per_day=0.07)
     res_m_b = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_multi, penalty_rate_per_day=0.07)
-    naive_s_b = sim.simulate_naive(raw_close, w_single)
-    naive_m_b = sim.simulate_naive(raw_close, w_multi)
+    naive_s_b = sim.simulate_naive(raw_close, w_single, raw_open=raw_open)
+    naive_m_b = sim.simulate_naive(raw_close, w_multi, raw_open=raw_open)
     m_s_b = sim.evaluate_strategy(res_s_b["equity"], w_single, naive_s_b)
     m_m_b = sim.evaluate_strategy(res_m_b["equity"], w_multi, naive_m_b)
 
@@ -118,8 +118,8 @@ def run_all_argon_audits():
     w_m_exec = np.zeros_like(w_multi); w_m_exec[1:] = w_multi[:-1]
     res_s_a = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_s_exec, dates=dates, penalty_rate_per_day=0.0)
     res_m_a = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_m_exec, dates=dates, penalty_rate_per_day=0.0)
-    naive_s_a = sim.simulate_naive(raw_close, w_s_exec)
-    naive_m_a = sim.simulate_naive(raw_close, w_m_exec)
+    naive_s_a = sim.simulate_naive(raw_close, w_s_exec, raw_open=raw_open)
+    naive_m_a = sim.simulate_naive(raw_close, w_m_exec, raw_open=raw_open)
     m_s_a = sim.evaluate_strategy(res_s_a["equity"], w_s_exec, naive_s_a)
     m_m_a = sim.evaluate_strategy(res_m_a["equity"], w_m_exec, naive_m_a)
 

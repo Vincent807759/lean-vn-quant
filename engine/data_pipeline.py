@@ -226,6 +226,28 @@ def generate_fallback_data(
     return df
 
 
+def _apply_universe_membership(df: pl.DataFrame, universe_membership_path: Optional[str]) -> pl.DataFrame:
+    """
+    Updates the 'is_listed' column based on Point-in-Time (date, symbol) membership
+    present in the provided CSV or Parquet file.
+    """
+    if universe_membership_path is not None and os.path.exists(universe_membership_path):
+        if universe_membership_path.endswith(".csv"):
+            mem_df = pl.read_csv(universe_membership_path)
+        else:
+            mem_df = pl.read_parquet(universe_membership_path)
+        mem_df = mem_df.select([
+            pl.col("date").cast(pl.Date),
+            pl.col("symbol").cast(pl.Utf8)
+        ]).unique()
+        mem_df = mem_df.with_columns(pl.lit(True).alias("_in_universe"))
+        df = df.join(mem_df, on=["date", "symbol"], how="left", coalesce=True)
+        df = df.with_columns(
+            (pl.col("is_listed") & pl.col("_in_universe").fill_null(False)).alias("is_listed")
+        ).drop("_in_universe")
+    return df
+
+
 def fetch_vn_ohlcv(
     symbols: Optional[List[str]] = None,
     start_date: str = "2023-01-01",
@@ -262,6 +284,7 @@ def fetch_vn_ohlcv(
         
     if force_fallback:
         df = generate_fallback_data(symbols, start_date, end_date)
+        df = _apply_universe_membership(df, universe_membership_path)
         if save_parquet:
             parent_dir = os.path.dirname(save_parquet)
             if parent_dir:
@@ -345,6 +368,7 @@ def fetch_vn_ohlcv(
         )
     else:
         df = pl.DataFrame(records).sort(["date", "symbol"])
+        df = _apply_universe_membership(df, universe_membership_path)
         if success_count < len(symbols):
             failed_symbols = [s for s in symbols if s not in successful_symbols]
             print(f"[DATA_PIPELINE WARNING] {len(failed_symbols)} symbols failed to fetch: {failed_symbols}")
