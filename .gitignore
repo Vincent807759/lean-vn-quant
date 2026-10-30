@@ -8,6 +8,7 @@ local_docs/
 AGENTS.md
 GEMINI.md
 danh_sach_alpha_chuan_bi_nop.md
+alpha_*
 *.ipynb_checkpoints/
 
 .env

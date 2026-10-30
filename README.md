@@ -1,5 +1,5 @@
 # Lean VN-Quant
-### Institutional Systematic Execution & Microstructure Engine for Vietnam Equities (HOSE)
+### Systematic Execution & Microstructure Simulation Engine for Vietnam Equities (HOSE)
 
 [![CI Quantitative Audit](https://github.com/Vincent807759/lean-vn-quant/actions/workflows/quant_audit_ci.yml/badge.svg)](https://github.com/Vincent807759/lean-vn-quant/actions/workflows/quant_audit_ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11-blue.svg)](https://www.python.org/)
@@ -18,7 +18,7 @@ Standard quantitative backtesting frameworks (Backtrader, Zipline, VectorBT) ass
 - **Exchange Price Limits & Floor Locks:** Strict daily price limits (±7%) with zero-bid floor-locked liquidation penalties and zero-ask ceiling-locked execution blocks.
 - **Round-Lot Discretization:** Compulsory round-lot execution (100 shares), producing uninvested cash drag.
 
-**Lean VN-Quant** is an open-source, high-performance quantitative simulation and execution engine engineered in Python, Numba C-speed JIT, and Polars. It enforces strict temporal causality (0% look-ahead bias), provides permutation-invariant factor orthogonalization via **Ridge Factor Projection** and **Löwdin Symmetric Orthogonalization**, models non-linear market impact via a **3-Tier LOB Sweep Model**, and executes dynamic risk mitigation via a **Regime-Switching VN30F1M Futures Beta Hedge**.
+**Lean VN-Quant** is an open-source, high-performance quantitative simulation engine engineered in Python, Numba C-speed JIT, and Polars. It models strict temporal causality, provides factor orthogonalization via **Ridge Factor Projection** and **Löwdin Symmetric Orthogonalization**, models non-linear market impact, and evaluates dynamic risk mitigation via a **Regime-Switching VN30F1M Futures Beta Hedge** calculation.
 
 ```mermaid
 flowchart TD
@@ -78,15 +78,20 @@ valid_alpha_mask = in_index_pit & (adv_20d_lag1 >= 10_000_000_000.0)
 ```
 Setting `min_samples=15` guarantees newly listed or transferred stocks cannot bypass the 20-day liquidity filter during initial IPO/listing spikes until stable multi-week volume is established. Non-constituents receive `null` masked values, ensuring complete perturbation invariance ($\Delta \text{Signal} \equiv 0.000000$).
 
-### 2.3. 3-Tier Order Book Sweep & Intraday Slicing
-Large institutional orders incur realistic non-linear market impact:
+### 2.3. Market Impact Modeling & Standalone Execution Utilities
+#### Historical Simulation Engine Model:
+In backtest simulations (`engine/vn_simulator.py`), execution slippage is modeled via `_calc_dynamic_slippage` combining a 12 bps half-spread floor with temporary and permanent volume impact:
 
 $$
-IS(Q) = \frac{S_t}{2 P_{\text{mid}}} + \text{SweepCost}_{\text{LOB}} + \mathbb{I}(Q > Q_{\text{vis}}) \left[ \eta \cdot \sigma_{\text{daily}} \left(\frac{Q - Q_{\text{vis}}}{\text{ADV}_{20}}\right)^\delta + \gamma_{\text{perm}} \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right) \right]
+IS(Q) = \max\left(\text{base\_slippage}, \quad \text{half\_spread\_floor} + \eta \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right)^\delta + \gamma_{\text{perm}} \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right)\right)
 $$
 
-- Half-spread floor: 12 bps (0.0012).
-- Intraday order slicing rule: If order $Q > 0.5\% \times \text{ADV}\_{20}$, execution is automatically partitioned into **25% ATO** (09:00 - 09:15), **55% TWAP** (09:30 - 14:15), and **20% ATC** (14:30 - 14:45), capped at $3\% \times \text{ADV}\_{20}$.
+- **Parameters & Floor:** Base slippage 10 bps, half-spread floor 12 bps (0.0012), with literature parameters $\eta = 0.75$, $\delta = 0.55$, $\gamma_{\text{perm}} = 0.30$.
+- **Empirical Calibration Status:** These parameters are literature defaults and **have not yet been calibrated from empirical tick/order book data**.
+- **Data Limitation:** The historical dataset (`data/vn30_production.parquet`) consists solely of daily 1D OHLCV bars; full limit order book (LOB depth) data is not present.
+#### Standalone Execution & Risk Management Modules:
+- **LOB Sweep & Slicing:** The functions `compute_hose_market_impact` (3-tier LOB sweep) and `slice_intraday_order` (25% ATO / 55% TWAP / 20% ATC, capped at 3% ADV20) in `engine/alpha_ops.py` have been independently unit-tested (`tests/test_dynamic_execution.py`), but **are not currently called by the simulation engine** (`_simulate_vn_microstructure_core` in `engine/vn_simulator.py`).
+- **VN30F Derivative Hedge:** The hedging calculators `calculate_vn30f_hedge` and `calculate_dynamic_vn30f_hedge` in `engine/vn_simulator.py` provide tested sizing formulas, but **are not currently included in the simulation P&L loop**.
 
 ### 2.4. Permutation-Invariant Factor Orthogonalization
 Standard Gram-Schmidt QR decomposition suffers from column-order dependence. Lean VN-Quant implements **Ridge Factor Projection**:
@@ -126,7 +131,7 @@ lean-vn-quant/
 ### Dynamic Loading Mechanism
 Both [`run_verification.py`](run_verification.py) and [`services/daily_paper_trader.py`](services/daily_paper_trader.py) query the local environment dynamically:
 1. **Local Deployment with `private_alphas/`:** Automatically imports your custom alpha functions and generates live trading allocations.
-2. **Open-Source / CI/CD (No `private_alphas/`):** Automatically falls back to `_default_textbook_placeholder_signal` (SMA-40/50 Breakout Z-Score), allowing the entire 8-stage verification test suite to run and pass with 100% determinism.
+2. **Open-Source / CI/CD (No `private_alphas/`):** Automatically falls back to `_default_textbook_placeholder_signal` (SMA-40/50 Breakout Z-Score), allowing verification tests to run and pass deterministically.
 
 ---
 
@@ -140,7 +145,7 @@ python run_verification.py
 ### Test Suite Coverage:
 | Test Stage | Verification Target | Acceptance Criteria |
 | :--- | :--- | :--- |
-| **TEST 1** | 0% Look-Ahead Bias | All 11 operators & PIT join pass perturbation invariance ($\Delta = 0.0$). |
+| **TEST 1** | Temporal Causality | All 11 operators & PIT join pass perturbation invariance ($\Delta = 0.0$). |
 | **TEST 2** | Ridge Factor Projection | Permutation invariance confirmed ($\Delta = 4.44 \times 10^{-16}$), Correlation $< 0.05$. |
 | **TEST 3** | Turnover Dampener | Suppresses raw daily turnover from $> 45\%/\text{day}$ to $\le 5.0\%/\text{day}$. |
 | **TEST 4** | Full Backtest Engine | Physically consistent shortfall (0% ≤ IS ≤ 5%), Automated kill-switch SAFE. |
@@ -153,13 +158,16 @@ python run_verification.py
 
 ## 5. Quantitative Verification & Empirical Results (947 VN30 Sessions: 2023–2026)
 
+> [!WARNING] Methodological & Statistical Disclaimer
+> Các bảng dưới đây kiểm tra engine và mô hình hóa ma sát vi cấu trúc; **không chứng minh có alpha thực tế có ý nghĩa thống kê**. Mẫu thử nghiệm: ~3.7 năm (947 phiên giao dịch từ 2023-01-03 đến 2026-10-23), một chế độ thị trường, rổ VN30 cố định theo cấu thành 2026 (thiên lệch người sống sót), danh mục chỉ giữ 2–4 mã (`top_k_in=2`, `top_k_out=4`).
+
 All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23) via `scripts/compare_backtest_b6_b11.py` and `scripts/audit_argon_revisions.py`.
 
 ### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
 
-| Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 B&H) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
+| Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 Equal-Weight Rebalanced) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Final Real NAV (VND)** | **1,955,217,553** | **1,633,197,940** | 1,611,194,562 | 2,280,883,849 | 1,584,236,865 | Initial capital 1.0B VND. Both strategies outperform benchmark after all realistic frictions. |
+| **Final Real NAV (VND)** | **1,955,217,553** | **1,633,197,940** | 1,611,194,562 | 2,280,883,849 | 1,584,236,865 | Initial capital 1.0B VND. Multi-Alpha achieves an annualized Sharpe of 0.58 compared to 0.59 for the daily rebalanced VN30 benchmark, with higher maximum drawdown (19.87% vs 17.78%). Single-Alpha Sharpe is 0.81 with a Newey-West standard error of ±0.53, overlapping with the benchmark confidence interval (0.59 ± 0.54). |
 | **Final Naive NAV (VND)** | **2,178,173,194** | **1,848,372,768** | N/A | 2,167,275,320 | 1,812,437,072 | Theoretical frictionless T+0 baseline (zero fees, zero taxes, zero slippage). |
 | **Cumulative Return** | **+95.52%** | **+63.32%** | +61.12% | +128.09% | +58.42% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, and 3-tier LOB sweep impact. |
 | **Realized CAGR (%/yr)** | **19.53%** | **13.94%** | 13.53% | 24.54% | 13.02% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR increased from 13.02% to 13.94%. |
@@ -173,6 +181,11 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 | **Annualized IS (%/yr)** | **+3.48%/yr** | **+3.82%/yr** | N/A | -1.68%/yr | +4.12%/yr | $\text{CAGR}\_{\text{Naive}} - \text{CAGR}\_{\text{Real}}$: Market frictions impose an annual drag of 3.48%–3.82%/year. |
 | **Total Fees & Transfer Taxes** | **82.7M VND** | **79.4M VND** | 30.0M VND | 89.3M VND | 79.0M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
 | **Advance Borrowing Interest** | **26.8M VND** | **19.8M VND** | 0.3M VND | 32.1M VND | 19.1M VND | 94.3% of advance borrowing costs stem from the 50,000 VND floor fee on small lots. |
+
+> [!NOTE] Methodological Notes on Table 5.1
+> - **Implementation Shortfall (IS):** IS đo bằng hiệu NAV Naive − Real; xem Phase 2, kết quả này sẽ được cập nhật sau khi căn lại timing giữa Naive và Real.
+> - **Deflated Sharpe Ratio (DSR):** p-value của DSR trải từ 0.07 đến 0.82 trên cả Single và Multi-Alpha (xem Bảng 5.3), không chế độ nào đạt ý nghĩa thống kê sau khi hiệu chỉnh multiple testing.
+> - **Benchmark Definition:** Cột Benchmark phản ánh rổ VN30 tái cân bằng tỷ trọng đều hằng ngày (Equal-Weight daily rebalanced), không phải Buy & Hold tĩnh.
 
 ---
 
@@ -223,15 +236,54 @@ By coupling unstructured financial news/event contagion matrices from Trụ cộ
 | Laplacian Propagation $\alpha$ | Rank IC (1-Day Forward) | Cumulative Return (6-Factor) | CAGR (%/yr) | Annualized Sharpe | Max Drawdown | Architectural Assessment |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | **$\alpha = 0.15$** (Fast decay) | -0.0158 | +63.14% | 13.91% | 0.58 | 19.97% | Narrow diffusion; shocks contained at epicenter. Performs on par with 5-factor baseline (+63.32%). |
-| **$\alpha = 0.25$** (Standard configuration) | -0.0137 | **+65.81%** | **14.40%** | **0.60** | **19.99%** | **Optimal balance: Adds +2.49% return over 5-factor baseline, Sharpe improves from 0.58 to 0.60.** |
+| **$\alpha = 0.25$** (Standard configuration) | -0.0137 | **+65.81%** | **14.40%** | **0.60** | **19.99%** | Standard balance: Adds +2.49% return over 5-factor baseline, Sharpe improves from 0.58 to 0.60. |
 | **$\alpha = 0.50$** (Broad network diffusion) | -0.0121 | +69.57% | 15.09% | 0.63 | 18.77% | Broad transmission; lifts CAGR to 15.09% while dampening MaxDD to 18.77%. |
 | **$\alpha = 0.70$** (High amplification) | -0.0086 | +83.00% | 17.45% | 0.73 | 18.76% | High amplification; lifts Sharpe to 0.73 but introduces cross-network systemic sensitivity. |
+
+> [!NOTE] Methodological Limitation & Non-Public Dependencies
+> - **Rank IC:** Rank IC 1 ngày forward đều mang giá trị âm ở cả 4 mức $\alpha$ (từ -0.0158 đến -0.0086).
+> - **Khả năng tái lập:** Hai module nguồn FinGraph (`fin_corpus_pipeline` và `knowledge_graph_engine`) là nghiên cứu riêng chưa công khai nên bảng thực nghiệm này không thể tái lập độc lập từ repo công khai.
+
+---
+
+### 5.5. Hướng Dẫn Tái Lập Thực Nghiệm (Reproducibility Guide)
+
+#### 1. Nạp dữ liệu thị trường (Entrade REST API)
+Dữ liệu lịch sử có thể được tải mới trực tiếp qua pipeline nạp dữ liệu:
+```python
+from engine.data_pipeline import fetch_vn_ohlcv
+
+# Tải dữ liệu 30 mã VN30 và lưu thành tệp Parquet
+df = fetch_vn_ohlcv(
+    start_date="2023-01-01",
+    end_date="2026-10-24",
+    save_parquet="data/vn30_production.parquet"
+)
+```
+*Lưu ý:* Số liệu thực nghiệm có thể có độ lệch nhẹ giữa các thời điểm tải dữ liệu do API Entrade cập nhật điều chỉnh hồi quy (backward-adjusted) chuỗi giá lịch sử mỗi khi có sự kiện chia tách cổ phiếu hoặc chi trả cổ tức.
+
+#### 2. Nguồn gốc tín hiệu Alpha trong các bảng thực nghiệm
+- Toàn bộ kết quả trong Bảng 5.1, 5.2, 5.3 được sinh ra hoàn toàn nội sinh bằng mã nguồn công khai, không sử dụng `private_alphas/`.
+- **Single-Alpha (`w_single`):** Sử dụng Alpha 1 (Breakout Z-Score SMA-40/50) từ hàm `generate_five_alphas` (`engine/ml_alpha_combiner.py`), kết hợp bộ làm mượt vòng quay `dampen_turnover`.
+- **Multi-Alpha (`w_multi`):** Kết hợp 5 nhân tố kỹ thuật cơ bản sau khi trực giao hóa Löwdin bằng bộ Purged Walk-Forward Combiner (`window=120`, `embargo=3`).
+
+#### 3. Các lệnh thực thi kiểm thử và đối soát
+```bash
+# So sánh mô phỏng thực tế vs Naive baseline (sinh Bảng 5.1):
+python scripts/compare_backtest_b6_b11.py
+
+# Chạy toàn bộ bộ thí nghiệm kiểm toán Argon 4 (sinh Bảng 5.2, 5.3):
+python scripts/audit_argon_revisions.py
+
+# Chạy toàn bộ bộ kiểm thử tự động (47 unit tests):
+python -m pytest tests/ -v
+```
 
 ---
 
 ## 6. Security & Pre-Commit Protection
 
-Run the zero-leak security auditor:
+Run the security auditor:
 ```bash
 python scripts/security_scan.py
 ```
@@ -239,7 +291,8 @@ The scanner enforces strict pre-commit checks:
 - Blocks tracked `.env` credentials, private keys, or personal workspace file paths.
 - Intercepts forbidden private directories (`private_alphas/`, `research/`, `local_docs/`).
 - Blocks proprietary data files (`*.parquet`, `*.csv`) from Git index.
-- Enforces Zero-Leak integrity across GitHub Actions CI/CD.
+- Enforces secret and sensitive data exclusion across GitHub Actions CI/CD.
+- **CI/CD Scope:** CI chạy `scripts/security_scan.py` và `pytest tests/`. `run_verification.py` là script chạy tay, không nằm trong CI.
 
 ---
 
@@ -288,7 +341,7 @@ lean-vn-quant/
 │   ├── setup_autostart.ps1          # Task Scheduler automated service script
 │   └── telegram_bot_service.py      # 2-Way Telegram Bot interactive management daemon
 ├── scripts/
-│   ├── security_scan.py             # Zero-leak secret & alpha privacy auditor
+│   ├── security_scan.py             # Secret & alpha privacy auditor
 │   ├── compare_backtest_b6_b11.py   # Empirical backtest comparison runner
 │   └── audit_argon_revisions.py     # Argon 4 statistical verification experiment suite
 ├── .gitignore                       # Strict exclusion rules for data, keys & private alphas
