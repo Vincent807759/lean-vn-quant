@@ -725,7 +725,8 @@ def dampen_turnover(
     top_k_out: int = 18,
     ema_span: int = 10,
     max_daily_turnover: float = 0.05,
-    mask: Optional[np.ndarray] = None
+    mask: Optional[np.ndarray] = None,
+    tie_break_key: Optional[np.ndarray] = None
 ) -> np.ndarray:
     """
     Applies Rank Hysteresis (No-Trade Buffer) + EMA time-series smoothing
@@ -767,7 +768,12 @@ def dampen_turnover(
     valid_count0 = np.sum(np.isfinite(row0) & (row0 > -1e30))
     k0 = min(top_k_in, valid_count0) if valid_count0 > 0 else 0
     if k0 > 0:
-        top_idx0 = np.argsort(-row0, kind="stable")[:k0]
+        if tie_break_key is not None:
+            key0 = np.asarray(tie_break_key[0], dtype=np.float64).copy()
+            key0[~np.isfinite(key0)] = -np.inf
+            top_idx0 = np.lexsort((np.arange(N), -key0, -row0))[:k0]
+        else:
+            top_idx0 = np.argsort(-row0, kind="stable")[:k0]
         held[top_idx0] = True
         weights[0, held] = 1.0 / k0
         
@@ -779,7 +785,12 @@ def dampen_turnover(
         row[~valid] = -np.inf
         
         # Determine cross-sectional rank position (1 = best)
-        sorted_indices = np.argsort(-row, kind="stable")
+        if tie_break_key is not None:
+            key_t = np.asarray(tie_break_key[t], dtype=np.float64).copy()
+            key_t[~np.isfinite(key_t)] = -np.inf
+            sorted_indices = np.lexsort((np.arange(N), -key_t, -row))
+        else:
+            sorted_indices = np.argsort(-row, kind="stable")
         rank_pos = np.zeros(N, dtype=int)
         for pos, idx in enumerate(sorted_indices):
             if np.isfinite(row[idx]) and row[idx] > -1e30:
