@@ -296,7 +296,7 @@ def compute_bands_and_ticks(
 # 2. NUMBA JIT MICROSTRUCTURE SIMULATION CORE
 # ==============================================================================
 
-@numba.njit(fastmath=True, cache=True)
+@numba.njit(cache=True)
 def _calc_borrow_cap(pending: float, rate: float, days: float, min_fee: float) -> float:
     """
     Computes maximum advance cash withdrawal capacity given pending receivables,
@@ -362,7 +362,9 @@ def _simulate_vn_microstructure_core(
     penalty_rate_per_day: float,
     is_t3_regime: np.ndarray,
     min_advance_notional: float = 0.0,
-    half_spread_floor: float = 0.0012
+    half_spread_floor: float = 0.0012,
+    dividend_tax_rate: float = 0.05,
+    strict_t25_ato_lock: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     High-performance Numba engine simulating Vietnam microstructure:
@@ -431,14 +433,14 @@ def _simulate_vn_microstructure_core(
         # A. SETTLEMENT UPDATES & CORPORATE ACTIONS (At Open of day t)
         # ----------------------------------------------------------------------
         # 1. Stocks settlement: T+3 ATO (before 2022-08-29) vs T+2.5 (from 2022-08-29 onwards)
-        if is_t3_regime[t]:
-            # T+3 regime: 3-step queue (buy_t2 -> buy_t1 -> buy_t0), unlocks at ATO morning of T+3
+        if is_t3_regime[t] or strict_t25_ato_lock:
+            # T+3 regime (or strict ATO-only T+2.5 execution): 3-step queue unlocks at ATO morning of T+3
             shares_sellable += buy_t2
             buy_t2 = buy_t1.copy()
             buy_t1 = buy_t0.copy()
             buy_t0[:] = 0.0
         else:
-            # T+2.5 regime: shares bought at T settle into available at T+2
+            # Standard 1-bar/day T+2.5 approximation: unlocks at T+2 (locked at T and T+1)
             shares_sellable += buy_t2 + buy_t1
             buy_t2[:] = 0.0
             buy_t1 = buy_t0.copy()
@@ -472,7 +474,7 @@ def _simulate_vn_microstructure_core(
             c_div = corp_div_ex[t, i]
             if c_div > 0.0 and shares_held[i] > 0.0:
                 p_day = int(corp_div_pay_t[t, i])
-                div_amt = shares_held[i] * c_div
+                div_amt = shares_held[i] * c_div * (1.0 - dividend_tax_rate)
                 cum_div_receivable += div_amt
                 if p_day < T:
                     div_payout_schedule[p_day] += div_amt
@@ -582,7 +584,11 @@ def _simulate_vn_microstructure_core(
                 
                 # Expand participation limit to 10% ADV if grace period reached to ensure complete exit
                 eff_max_adv = max_adv_participation if liquidation_grace_counter[i] < 5 else max(max_adv_participation, 0.10)
-                adv_limit = np.floor((adv20_shares[t_lag, i] * eff_max_adv) / 100.0) * 100.0
+                adv_sh_sell = adv20_shares[t_lag, i]
+                if np.isnan(adv_sh_sell) or adv_sh_sell <= 0.0:
+                    adv_limit = 0.0
+                else:
+                    adv_limit = np.floor((adv_sh_sell * eff_max_adv) / 100.0) * 100.0
                 qty_sell = min(qty_sell, adv_limit)
                 
                 if qty_sell > 0.0:
@@ -687,9 +693,10 @@ def _simulate_vn_microstructure_core(
                         daily_turnover_traded += qty_buy * p_open
                         
                         take_t1 = min(shortfall, cap_t1)
-                        adv_cost_t1 = max(min_advance_fee, take_t1 * advance_fee_rate * days_t1)
-                        pending_cash_t1 -= (take_t1 + adv_cost_t1)
-                        cum_adv_fees += adv_cost_t1
+                        if take_t1 > 0.0:
+                            adv_cost_t1 = max(min_advance_fee, take_t1 * advance_fee_rate * days_t1)
+                            pending_cash_t1 -= (take_t1 + adv_cost_t1)
+                            cum_adv_fees += adv_cost_t1
                         
                         rem = shortfall - take_t1
                         if rem > 0.0:
@@ -728,9 +735,10 @@ def _simulate_vn_microstructure_core(
                             cash_avail = 0.0
                             
                             take_t1 = min(shortfall, cap_t1)
-                            adv_cost_t1 = max(min_advance_fee, take_t1 * advance_fee_rate * days_t1)
-                            pending_cash_t1 -= (take_t1 + adv_cost_t1)
-                            cum_adv_fees += adv_cost_t1
+                            if take_t1 > 0.0:
+                                adv_cost_t1 = max(min_advance_fee, take_t1 * advance_fee_rate * days_t1)
+                                pending_cash_t1 -= (take_t1 + adv_cost_t1)
+                                cum_adv_fees += adv_cost_t1
                             
                             rem = shortfall - take_t1
                             if rem > 0.0:
@@ -948,7 +956,9 @@ def simulate_vietnam(
     split_date: Optional[Union[str, datetime.date]] = "2022-08-29",
     penalty_rate_per_day: float = 0.0,
     min_advance_notional: float = 0.0,
-    half_spread_floor: float = 0.0012
+    half_spread_floor: float = 0.0012,
+    dividend_tax_rate: float = 0.05,
+    strict_t25_ato_lock: bool = False
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
@@ -1116,7 +1126,9 @@ def simulate_vietnam(
         penalty_rate_per_day=penalty_rate_per_day,
         is_t3_regime=is_t3_regime,
         min_advance_notional=min_advance_notional,
-        half_spread_floor=half_spread_floor
+        half_spread_floor=half_spread_floor,
+        dividend_tax_rate=dividend_tax_rate,
+        strict_t25_ato_lock=strict_t25_ato_lock
     )
     
     if not np.all(np.isfinite(eq)):

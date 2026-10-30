@@ -624,7 +624,8 @@ def test_5_phase1_microstructure_audit():
         slippage=0.0,
         sell_tax=0.0,
         corp_action_div_cash=div_cash_matrix,
-        corp_action_div_pay_t=div_pay_matrix
+        corp_action_div_pay_t=div_pay_matrix,
+        dividend_tax_rate=0.0
     )
     
     eq_corp = res_corp["equity"]

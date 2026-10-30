@@ -183,3 +183,73 @@ def test_naive_real_t0_weights():
     assert max_rel_diff < 1e-5, (
         f"Real and Naive diverged on non-zero t=0 weights! Max rel diff: {max_rel_diff:.2e}"
     )
+
+
+def test_t25_lock_diverges_from_naive_on_t1_flip():
+    """
+    Verifies that T+2.5 settlement lock prevents flipping positions at T+1 (t=2) in Real simulation,
+    causing Real and Naive to diverge when weights flip at T+1.
+    """
+    T = 6
+    N = 2
+    init_cash = 1e9
+
+    raw_open = np.array([
+        [100.0, 100.0],
+        [100.0, 100.0],
+        [100.0, 120.0],
+        [70.0, 150.0],
+        [70.0, 150.0],
+        [70.0, 150.0],
+    ], dtype=np.float64)
+
+    raw_close = np.array([
+        [100.0, 100.0],
+        [100.0, 100.0],
+        [100.0, 130.0],
+        [60.0, 160.0],
+        [60.0, 160.0],
+        [60.0, 160.0],
+    ], dtype=np.float64)
+
+    ceiling = raw_close * 1.50
+    floor = raw_close * 0.50
+    adv20_shares = np.full((T, N), 1e18, dtype=np.float64)
+    daily_vol = np.zeros((T, N), dtype=np.float64)
+
+    weights = np.zeros((T, N), dtype=np.float64)
+    weights[1] = [1.0, 0.0]
+    weights[2] = [0.0, 1.0]
+    weights[3] = [0.0, 1.0]
+    weights[4] = [0.0, 1.0]
+    weights[5] = [0.0, 1.0]
+
+    res_real = sim.simulate_vietnam(
+        raw_open=raw_open,
+        raw_close=raw_close,
+        ceiling=ceiling,
+        floor=floor,
+        adv20_shares=adv20_shares,
+        target_weights=weights,
+        initial_cash=init_cash,
+        broker_fee=0.0,
+        slippage=0.0,
+        sell_tax=0.0,
+        advance_fee_rate=0.0,
+        min_advance_fee=0.0,
+        half_spread_floor=0.0,
+        daily_vol=daily_vol,
+        max_adv_participation=1.0,
+        penalty_rate_per_day=0.0
+    )
+
+    naive_eq = sim.simulate_naive(
+        raw_close=raw_close,
+        target_weights=weights,
+        initial_cash=init_cash,
+        raw_open=raw_open
+    )
+
+    assert not np.allclose(res_real["equity"], naive_eq), (
+        "Real and Naive should diverge when flipping positions at T+1 due to T+2.5 lock!"
+    )

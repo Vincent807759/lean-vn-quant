@@ -43,3 +43,7 @@ jobs:
       - name: Step 2 - Execute Hermetic Pytest Verification Suite
         run: |
           python -m pytest tests/ -v
+
+      - name: Step 3 - Execute End-to-End Quant Verification Suite
+        run: |
+          python run_verification.py

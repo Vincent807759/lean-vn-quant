@@ -190,7 +190,8 @@ def test_corporate_action_nav_preservation():
         slippage=0.0,
         sell_tax=0.0,
         corp_action_div_cash=div_cash,
-        corp_action_div_pay_t=div_pay
+        corp_action_div_pay_t=div_pay,
+        dividend_tax_rate=0.0
     )
 
     eq = res["equity"]
@@ -280,3 +281,46 @@ def test_full_microstructure_simulation_synthetic():
     assert metrics_real["implementation_shortfall_pct"] > 0.0, "Implementation shortfall must be strictly positive"
     assert metrics_real["daily_turnover"] > 0.0
     assert not metrics_real["kill_switch_triggered"], f"Kill switch triggered: {metrics_real['kill_switch_reasons']}"
+
+
+def test_cash_dividend_5pct_pit_tax():
+    """
+    Verifies that when dividend_tax_rate=0.05 (default), personal income tax (5%)
+    is deducted, and the investor receives exactly 95% of the gross cash dividend.
+    """
+    T, N = 10, 1
+    ro = np.full((T, N), 50000.0)
+    rc = np.full((T, N), 50000.0)
+    ceil = np.full((T, N), 60000.0)
+    flr = np.full((T, N), 30000.0)
+    adv = np.full((T, N), 10000000.0)
+    w = np.ones((T, N), dtype=np.float64)
+
+    div_cash = np.zeros((T, N), dtype=np.float64)
+    div_pay = np.zeros((T, N), dtype=np.float64)
+    div_cash[3, 0] = 10000.0
+    div_pay[3, 0] = 7.0
+
+    res = sim.simulate_vietnam(
+        raw_open=ro,
+        raw_close=rc,
+        ceiling=ceil,
+        floor=flr,
+        adv20_shares=adv,
+        target_weights=w,
+        initial_cash=1.0e9,
+        broker_fee=0.0,
+        slippage=0.0,
+        sell_tax=0.0,
+        corp_action_div_cash=div_cash,
+        corp_action_div_pay_t=div_pay,
+        daily_vol=np.zeros((T, N)),
+        dividend_tax_rate=0.05,
+        half_spread_floor=0.0
+    )
+
+    # 1.0e9 / 50k = 20,000 shares * 10,000 * 0.95 = 190,000,000 VND
+    expected_net_div = 20000.0 * 10000.0 * 0.95
+    assert np.isclose(res["dividend_cash_receivable"][3], expected_net_div), (
+        f"Expected net dividend {expected_net_div:,.0f}, got {res['dividend_cash_receivable'][3]:,.0f}"
+    )

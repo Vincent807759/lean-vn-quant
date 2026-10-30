@@ -249,7 +249,7 @@ def ts_rank(x: np.ndarray, d: int) -> np.ndarray:
     return (raw_rk + 1.0) / 2.0
 
 
-@numba.njit(fastmath=True, cache=True)
+@numba.njit(cache=True)
 def _ts_decay_linear_numba(x: np.ndarray, d: int) -> np.ndarray:
     T, N = x.shape
     out = np.full((T, N), np.nan, dtype=np.float64)
@@ -281,7 +281,7 @@ def ts_decay_linear(x: np.ndarray, d: int) -> np.ndarray:
     return _ts_decay_linear_numba(x, d)
 
 
-@numba.njit(fastmath=True, cache=True)
+@numba.njit(cache=True)
 def _ts_corr_numba(x: np.ndarray, y: np.ndarray, d: int) -> np.ndarray:
     T, N = x.shape
     out = np.full((T, N), np.nan, dtype=np.float64)
@@ -767,7 +767,7 @@ def dampen_turnover(
     valid_count0 = np.sum(np.isfinite(row0) & (row0 > -1e30))
     k0 = min(top_k_in, valid_count0) if valid_count0 > 0 else 0
     if k0 > 0:
-        top_idx0 = np.argsort(-row0)[:k0]
+        top_idx0 = np.argsort(-row0, kind="stable")[:k0]
         held[top_idx0] = True
         weights[0, held] = 1.0 / k0
         
@@ -779,7 +779,7 @@ def dampen_turnover(
         row[~valid] = -np.inf
         
         # Determine cross-sectional rank position (1 = best)
-        sorted_indices = np.argsort(-row)
+        sorted_indices = np.argsort(-row, kind="stable")
         rank_pos = np.zeros(N, dtype=int)
         for pos, idx in enumerate(sorted_indices):
             if np.isfinite(row[idx]) and row[idx] > -1e30:

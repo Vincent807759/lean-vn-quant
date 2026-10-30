@@ -104,3 +104,52 @@ def test_fee_accounting_identity_smart_sweep_leakage():
             f"Seed {seed} leaked fees on unexecuted orders! "
             f"eq_loss={eq_loss:,.2f}, fees_sum={fees_sum:,.2f}, diff={diff:,.2f}"
         )
+
+
+def test_cash_advance_no_ghost_fee_when_t1_is_zero():
+    """
+    Verifies that when only pending_cash_t0 (receivable from today's sale) is available
+    and pending_cash_t1 == 0, advance fee is charged only once for t0, no ghost 50,000 VND
+    fee is charged to t1, and cash balances never become negative.
+    """
+    T = 5
+    N = 2
+    init_cash = 100_000_000.0
+    p = 50_000.0
+    raw_open = np.full((T, N), p, dtype=np.float64)
+    raw_close = np.full((T, N), p, dtype=np.float64)
+    ceiling = np.full((T, N), p * 1.5, dtype=np.float64)
+    floor = np.full((T, N), p * 0.5, dtype=np.float64)
+    adv20_shares = np.full((T, N), 1e9, dtype=np.float64)
+    daily_vol = np.zeros((T, N), dtype=np.float64)
+
+    weights = np.zeros((T, N), dtype=np.float64)
+    weights[1] = [1.0, 0.0]
+    weights[2] = [1.0, 0.0]
+    weights[3] = [0.0, 1.0]
+
+    res = sim.simulate_vietnam(
+        raw_open=raw_open,
+        raw_close=raw_close,
+        ceiling=ceiling,
+        floor=floor,
+        adv20_shares=adv20_shares,
+        target_weights=weights,
+        initial_cash=init_cash,
+        broker_fee=0.0015,
+        slippage=0.0,
+        sell_tax=0.0010,
+        advance_fee_rate=0.00035,
+        min_advance_fee=50000.0,
+        half_spread_floor=0.0,
+        daily_vol=daily_vol,
+        max_adv_participation=1.0,
+        penalty_rate_per_day=0.0,
+        min_advance_notional=0.0
+    )
+
+    adv_fees_t3 = res["advance_fees"][3] - res["advance_fees"][2]
+    assert 0.0 < adv_fees_t3 < 90000.0, (
+        f"Expected single advance fee (~50k), got {adv_fees_t3:,.0f} VND"
+    )
+    assert np.all(res["cash_history"] >= -1e-6), "Cash history should not be negative"
