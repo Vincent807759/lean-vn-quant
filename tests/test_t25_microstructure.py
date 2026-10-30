@@ -242,7 +242,8 @@ def test_full_microstructure_simulation_synthetic():
     naive_eq = sim.simulate_naive(
         raw_close=raw_close,
         target_weights=w_exec,
-        initial_cash=1.0e9
+        initial_cash=1.0e9,
+        raw_open=raw_open
     )
 
     vn_res = sim.simulate_vietnam(

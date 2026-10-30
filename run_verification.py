@@ -358,7 +358,8 @@ def test_4_full_backtest():
     naive_equity = sim.simulate_naive(
         raw_close=rc_eval,
         target_weights=weights_eval,
-        initial_cash=1.0e9
+        initial_cash=1.0e9,
+        raw_open=ro_eval
     )
     
     # 4. Simulate Realistic Vietnam Microstructure Engine
@@ -384,7 +385,8 @@ def test_4_full_backtest():
     bm_equity = sim.simulate_naive(
         raw_close=rc_eval,
         target_weights=ew_weights,
-        initial_cash=1.0e9
+        initial_cash=1.0e9,
+        raw_open=ro_eval
     )
     
     # 5. Evaluate Performance & Risk Metrics

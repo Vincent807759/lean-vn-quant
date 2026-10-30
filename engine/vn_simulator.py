@@ -361,7 +361,8 @@ def _simulate_vn_microstructure_core(
     daily_vol: np.ndarray,
     penalty_rate_per_day: float,
     is_t3_regime: np.ndarray,
-    min_advance_notional: float = 0.0
+    min_advance_notional: float = 0.0,
+    half_spread_floor: float = 0.0012
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     High-performance Numba engine simulating Vietnam microstructure:
@@ -543,7 +544,7 @@ def _simulate_vn_microstructure_core(
                     penalty_rate = min(0.40, penalty_rate_per_day * float(trapped_days[i]))
                     vol_i = daily_vol[t_lag, i]
                     adv_i = adv20_shares[t_lag, i]
-                    dyn_slip = _calc_dynamic_slippage(q_trap, adv_i, vol_i, base_slippage=slippage)
+                    dyn_slip = _calc_dynamic_slippage(q_trap, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
                     exec_price = p_open * (1.0 - dyn_slip - penalty_rate)
                     gross_val = q_trap * exec_price
                     b_fee = gross_val * broker_fee
@@ -595,7 +596,7 @@ def _simulate_vn_microstructure_core(
                         
                         vol_i = daily_vol[t_lag, i]
                         adv_i = adv20_shares[t_lag, i]
-                        dyn_slip = _calc_dynamic_slippage(qty_sell, adv_i, vol_i, base_slippage=slippage)
+                        dyn_slip = _calc_dynamic_slippage(qty_sell, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
                         exec_price = p_open * (1.0 - dyn_slip)
                         gross_val = qty_sell * exec_price
                         b_fee = gross_val * broker_fee
@@ -635,7 +636,7 @@ def _simulate_vn_microstructure_core(
                     
                 vol_i = daily_vol[t_lag, i]
                 adv_i = adv20_shares[t_lag, i]
-                dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
+                dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
                 exec_price = p_open * (1.0 + dyn_slip)
                 cost_per_share = exec_price * (1.0 + broker_fee)
                 total_needed = qty_buy * cost_per_share
@@ -658,7 +659,7 @@ def _simulate_vn_microstructure_core(
                                 qty_buy = scaled_qty
                                 vol_i = daily_vol[t_lag, i]
                                 adv_i = adv20_shares[t_lag, i]
-                                dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
+                                dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
                                 exec_price = p_open * (1.0 + dyn_slip)
                                 cost_per_share = exec_price * (1.0 + broker_fee)
                                 actual_needed = qty_buy * cost_per_share
@@ -704,7 +705,7 @@ def _simulate_vn_microstructure_core(
                         qty_buy = scaled_qty
                         vol_i = daily_vol[t_lag, i]
                         adv_i = adv20_shares[t_lag, i]
-                        dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage)
+                        dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
                         exec_price = p_open * (1.0 + dyn_slip)
                         cost_per_share = exec_price * (1.0 + broker_fee)
                         actual_needed = qty_buy * cost_per_share
@@ -783,7 +784,8 @@ def _simulate_vn_microstructure_core(
 def simulate_naive(
     raw_close: np.ndarray,
     target_weights: np.ndarray,
-    initial_cash: float = 1.0e9
+    initial_cash: float = 1.0e9,
+    raw_open: Optional[np.ndarray] = None
 ) -> np.ndarray:
     """
     Theoretical frictionless baseline backtest (T+0, 0% fees, 0% taxes, continuous execution).
@@ -796,13 +798,35 @@ def simulate_naive(
     equity = np.zeros(T, dtype=np.float64)
     equity[0] = initial_cash
     
-    # Daily asset returns
-    returns = np.zeros((T, N), dtype=np.float64)
-    returns[1:] = (raw_close[1:] - raw_close[:-1]) / np.maximum(raw_close[:-1], 1e-6)
-    
-    for t in range(1, T):
-        port_ret = np.sum(target_weights[t - 1] * returns[t])
-        equity[t] = equity[t - 1] * (1.0 + port_ret)
+    if raw_open is not None:
+        raw_open = np.asarray(raw_open, dtype=np.float64)
+        for t in range(1, T):
+            w_pre = np.zeros(N, dtype=np.float64) if t == 1 else target_weights[t - 1]
+            denom_c = np.maximum(raw_close[t - 1], 1e-6)
+            ret_overnight = np.where(
+                np.isfinite(raw_open[t]) & np.isfinite(raw_close[t - 1]),
+                (raw_open[t] - raw_close[t - 1]) / denom_c,
+                0.0
+            )
+            r_overnight = float(np.sum(np.nan_to_num(w_pre * ret_overnight)))
+
+            denom_o = np.maximum(raw_open[t], 1e-6)
+            ret_intraday = np.where(
+                np.isfinite(raw_close[t]) & np.isfinite(raw_open[t]),
+                (raw_close[t] - raw_open[t]) / denom_o,
+                0.0
+            )
+            r_intraday = float(np.sum(np.nan_to_num(target_weights[t] * ret_intraday)))
+
+            equity[t] = equity[t - 1] * (1.0 + r_overnight) * (1.0 + r_intraday)
+    else:
+        # Daily asset returns (legacy close-to-close)
+        returns = np.zeros((T, N), dtype=np.float64)
+        returns[1:] = (raw_close[1:] - raw_close[:-1]) / np.maximum(raw_close[:-1], 1e-6)
+        
+        for t in range(1, T):
+            port_ret = np.sum(target_weights[t - 1] * returns[t])
+            equity[t] = equity[t - 1] * (1.0 + port_ret)
         
     return equity
 
@@ -915,7 +939,8 @@ def simulate_vietnam(
     sanitize_inputs: bool = True,
     split_date: Optional[Union[str, datetime.date]] = "2022-08-29",
     penalty_rate_per_day: float = 0.0,
-    min_advance_notional: float = 0.0
+    min_advance_notional: float = 0.0,
+    half_spread_floor: float = 0.0012
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
@@ -1082,7 +1107,8 @@ def simulate_vietnam(
         daily_vol=daily_vol_arr,
         penalty_rate_per_day=penalty_rate_per_day,
         is_t3_regime=is_t3_regime,
-        min_advance_notional=min_advance_notional
+        min_advance_notional=min_advance_notional,
+        half_spread_floor=half_spread_floor
     )
     
     if not np.all(np.isfinite(eq)):

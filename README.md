@@ -161,29 +161,29 @@ python run_verification.py
 > [!WARNING] Methodological & Statistical Disclaimer
 > Các bảng dưới đây kiểm tra engine và mô hình hóa ma sát vi cấu trúc; **không chứng minh có alpha thực tế có ý nghĩa thống kê**. Mẫu thử nghiệm: ~3.7 năm (947 phiên giao dịch từ 2023-01-03 đến 2026-10-23), một chế độ thị trường, rổ VN30 cố định theo cấu thành 2026 (thiên lệch người sống sót), danh mục chỉ giữ 2–4 mã (`top_k_in=2`, `top_k_out=4`).
 
-All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23) via `scripts/compare_backtest_b6_b11.py` and `scripts/audit_argon_revisions.py`.
+All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23, SHA256: `90b6e1df855a9b70b4cbaad4f145be8d204a0a5b828a2a0ebda231c6181f7d98`) via `scripts/compare_backtest_b6_b11.py` and `scripts/audit_argon_revisions.py`.
 
 ### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
 
 | Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 Equal-Weight Rebalanced) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Final Real NAV (VND)** | **1,955,217,553** | **1,633,197,940** | 1,611,194,562 | 2,280,883,849 | 1,584,236,865 | Initial capital 1.0B VND. Multi-Alpha achieves an annualized Sharpe of 0.58 compared to 0.59 for the daily rebalanced VN30 benchmark, with higher maximum drawdown (19.87% vs 17.78%). Single-Alpha Sharpe is 0.81 with a Newey-West standard error of ±0.53, overlapping with the benchmark confidence interval (0.59 ± 0.54). |
-| **Final Naive NAV (VND)** | **2,178,173,194** | **1,848,372,768** | N/A | 2,167,275,320 | 1,812,437,072 | Theoretical frictionless T+0 baseline (zero fees, zero taxes, zero slippage). |
-| **Cumulative Return** | **+95.52%** | **+63.32%** | +61.12% | +128.09% | +58.42% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, and 3-tier LOB sweep impact. |
-| **Realized CAGR (%/yr)** | **19.53%** | **13.94%** | 13.53% | 24.54% | 13.02% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR increased from 13.02% to 13.94%. |
-| **Theoretical Naive CAGR** | **23.02%** | **17.76%** | N/A | 22.85% | 17.15% | Theoretical compound annual growth rate without microstructural penalties. |
-| **Annualized Sharpe (Newey-West)** | **0.81 (±0.53)** | **0.58 (±0.53)** | 0.59 (±0.54) | 1.01 (±0.54) | 0.53 (±0.53) | Newey-West HAC standard error indicates confidence intervals of ~ ±0.53. |
-| **Sortino Ratio** | **1.04** | **0.72** | 0.70 | 1.30 | 0.67 | Downside risk-adjusted return ratio. |
-| **Annualized Volatility** | **19.49%** | **18.73%** | 17.28% | 19.61% | 18.74% | Realized strategy annualized volatility is well-controlled under 20%. |
-| **Maximum Drawdown (MaxDD)** | **18.10%** | **19.87%** | 17.78% | 17.78% | 20.64% | Multi-Alpha MaxDD improved from 20.64% down to 19.87% post-fix. |
+| **Final Real NAV (VND)** | **1,890,953,104** | **1,549,617,660** | 1,611,194,562 | 2,170,022,784 | 1,509,694,826 | Initial capital 1.0B VND. Multi-Alpha achieves an annualized Sharpe of 0.51 compared to 0.59 for the daily rebalanced VN30 benchmark, with higher maximum drawdown (20.47% vs 17.78%). Single-Alpha Sharpe is 0.78 with a Newey-West standard error of ±0.54, overlapping with the benchmark confidence interval (0.59 ± 0.54). |
+| **Final Naive NAV (VND)** | **2,099,956,386** | **1,749,468,790** | N/A | 2,427,596,953 | 1,700,938,104 | Theoretical frictionless T+0 baseline (timing aligned at raw_open, zero fees, zero taxes, zero slippage). |
+| **Cumulative Return** | **+89.10%** | **+54.96%** | +61.12% | +117.00% | +50.97% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, and 3-tier LOB sweep impact. |
+| **Realized CAGR (%/yr)** | **18.47%** | **12.36%** | 13.53% | 22.90% | 11.58% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR adjusted to 12.36% post-fix. |
+| **Theoretical Naive CAGR** | **21.83%** | **16.05%** | N/A | 26.62% | 15.18% | Theoretical compound annual growth rate without microstructural penalties. |
+| **Annualized Sharpe (Newey-West)** | **0.78 (±0.54)** | **0.51 (±0.54)** | 0.59 (±0.54) | 0.97 (±0.54) | 0.47 (±0.54) | Newey-West HAC standard error indicates confidence intervals of ~ ±0.54 across all strategies. |
+| **Sortino Ratio** | **0.99** | **0.64** | 0.70 | 1.24 | 0.59 | Downside risk-adjusted return ratio. |
+| **Annualized Volatility** | **19.06%** | **18.55%** | 17.28% | 19.12% | 18.55% | Realized strategy annualized volatility is well-controlled under 20%. |
+| **Maximum Drawdown (MaxDD)** | **17.93%** | **20.47%** | 17.78% | 17.75% | 21.77% | Single-Alpha MaxDD is 17.93% (comparable to benchmark 17.78%); Multi-Alpha MaxDD is 20.47%. |
 | **Daily Turnover (4 decimals)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Strictly bound by rank hysteresis dampener `max_turnover_target = 0.015`. |
-| **Cumulative IS (% Capital)** | **+22.30%** | **+21.52%** | N/A | -11.36% | +22.82% | $(\text{NAV}\_{\text{Naive}} - \text{NAV}\_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 21.5%–22.3% of initial capital. |
-| **Annualized IS (%/yr)** | **+3.48%/yr** | **+3.82%/yr** | N/A | -1.68%/yr | +4.12%/yr | $\text{CAGR}\_{\text{Naive}} - \text{CAGR}\_{\text{Real}}$: Market frictions impose an annual drag of 3.48%–3.82%/year. |
-| **Total Fees & Transfer Taxes** | **82.7M VND** | **79.4M VND** | 30.0M VND | 89.3M VND | 79.0M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
-| **Advance Borrowing Interest** | **26.8M VND** | **19.8M VND** | 0.3M VND | 32.1M VND | 19.1M VND | 94.3% of advance borrowing costs stem from the 50,000 VND floor fee on small lots. |
+| **Cumulative IS (% Capital)** | **+20.90%** | **+19.99%** | N/A | +25.76% | +19.12% | $(\text{NAV}_{\text{Naive}} - \text{NAV}_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 19.99%–20.90% of initial capital. |
+| **Annualized IS (%/yr)** | **+3.35%/yr** | **+3.69%/yr** | N/A | +3.72%/yr | +3.60%/yr | $\text{CAGR}_{\text{Naive}} - \text{CAGR}_{\text{Real}}$: Market frictions impose an annual drag of 3.35%–3.69%/year. |
+| **Total Fees & Transfer Taxes** | **79.5M VND** | **75.5M VND** | 30.0M VND | 85.7M VND | 74.8M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
+| **Advance Borrowing Interest** | **21.4M VND** | **17.4M VND** | 0.3M VND | 28.4M VND | 16.9M VND | 94.3%–95.2% of advance borrowing costs stem from the 50,000 VND floor fee on small lots. |
 
 > [!NOTE] Methodological Notes on Table 5.1
-> - **Implementation Shortfall (IS):** IS đo bằng hiệu NAV Naive − Real; xem Phase 2, kết quả này sẽ được cập nhật sau khi căn lại timing giữa Naive và Real.
+> - **Implementation Shortfall (IS):** IS đo bằng hiệu NAV Naive − Real sau khi căn chuẩn timing tại `raw_open` (Phase 2), loại bỏ hoàn toàn sai lệch tính toán thời điểm và chỉ phản ánh ma sát thị trường thực tế (phí, thuế, trượt giá, lãi vay ứng trước).
 > - **Deflated Sharpe Ratio (DSR):** p-value của DSR trải từ 0.07 đến 0.82 trên cả Single và Multi-Alpha (xem Bảng 5.3), không chế độ nào đạt ý nghĩa thống kê sau khi hiệu chỉnh multiple testing.
 > - **Benchmark Definition:** Cột Benchmark phản ánh rổ VN30 tái cân bằng tỷ trọng đều hằng ngày (Equal-Weight daily rebalanced), không phải Buy & Hold tĩnh.
 
@@ -202,16 +202,16 @@ By configuring `min_advance_notional = 71,428,571 VND`, the engine completely by
 #### Single-Alpha Cash Sweep Comparison:
 | Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Naive Greedy Sweep (Baseline)** | 26,800,000 | ~0.62% / order (Floor penalty) | +95.52% | 506 times (94.3% fee) | 1,955,217,553 |
-| **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+97.78% (+2.26%)** | **0 times** | **1,977,783,568** |
-| **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +97.78% (+2.26%) | 0 times | 1,977,783,568 |
+| **Naive Greedy Sweep (Baseline)** | 21,400,000 | ~0.62% / order (Floor penalty) | +89.10% | 506 times (94.3% fee) | 1,890,953,104 |
+| **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+91.80% (+2.70%)** | **0 times** | **1,918,036,246** |
+| **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +91.80% (+2.70%) | 0 times | 1,918,036,246 |
 
 #### Multi-Alpha Cash Sweep Comparison:
 | Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Naive Greedy Sweep (Baseline)** | 19,750,000 | ~0.62% / order (Floor penalty) | +63.32% | 376 times (95.2% fee) | 1,633,197,940 |
-| **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+66.66% (+3.34%)** | **0 times** | **1,666,613,212** |
-| **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +66.66% (+3.34%) | 0 times | 1,666,613,212 |
+| **Naive Greedy Sweep (Baseline)** | 17,400,000 | ~0.62% / order (Floor penalty) | +54.96% | 376 times (95.2% fee) | 1,549,617,660 |
+| **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+56.92% (+1.96%)** | **0 times** | **1,569,195,878** |
+| **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +56.92% (+1.96%) | 0 times | 1,569,195,878 |
 
 ---
 
