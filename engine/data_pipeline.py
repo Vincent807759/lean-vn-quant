@@ -237,7 +237,7 @@ def _apply_universe_membership(df: pl.DataFrame, universe_membership_path: Optio
         else:
             mem_df = pl.read_parquet(universe_membership_path)
         mem_df = mem_df.select([
-            pl.col("date").cast(pl.Date),
+            (pl.col("date").str.to_date() if mem_df.schema["date"] in (pl.Utf8, pl.String) else pl.col("date").cast(pl.Date)).alias("date"),
             pl.col("symbol").cast(pl.Utf8)
         ]).unique()
         mem_df = mem_df.with_columns(pl.lit(True).alias("_in_universe"))
