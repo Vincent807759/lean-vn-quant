@@ -110,11 +110,18 @@ def test_paper_trader_greedy_cash_sweep_executes_without_name_error():
     """
     Verifies that generate_next_day_orders runs smoothly when available_cash > 0.15 * real_nav,
     confirming that the greedy cash sweep branch calculates sma50 without NameError.
+    Hermetic test: generates in-RAM synthetic data without depending on untracked parquet files.
     """
-    import polars as pl
+    from engine import data_pipeline as dp
     from services.daily_paper_trader import generate_next_day_orders
 
-    df_market = pl.read_parquet("data/vn30_production.parquet")
+    df_market = dp.generate_fallback_data(
+        symbols=["ACB", "FPT", "HPG", "VCB", "MBB", "TCB"],
+        start_date="2023-01-01",
+        end_date="2023-05-15",
+        seed=42
+    )
+    last_date = str(df_market["date"].max())
     state = {
         "initial_capital": 100_000_000.0,
         "last_real_nav": 100_000_000.0,
@@ -122,9 +129,9 @@ def test_paper_trader_greedy_cash_sweep_executes_without_name_error():
         "receivable_cash_t1": 0.0,
         "receivable_cash_t2": 0.0,
         "holdings": {},
-        "last_update_date": "2026-10-23"
+        "last_update_date": last_date
     }
-    orders = generate_next_day_orders(state, df_market, "2026-10-23")
+    orders = generate_next_day_orders(state, df_market, last_date)
     assert isinstance(orders, list)
     assert len(orders) > 0
 

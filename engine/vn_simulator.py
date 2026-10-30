@@ -328,7 +328,7 @@ def _calc_dynamic_slippage(
     IS(Q) = half_spread_floor (min 12 bps) + eta * vol * (Q / ADV20)^0.55 + gamma_perm * vol * (Q / ADV20).
     """
     if np.isnan(qty) or np.isnan(adv20) or adv20 <= 1.0 or qty <= 0.0:
-        return 0.0010
+        return max(base_slippage, half_spread_floor)
     q_ratio = qty / adv20
     temp_impact = eta * vol * (q_ratio ** delta)
     perm_impact = gamma_perm * vol * q_ratio

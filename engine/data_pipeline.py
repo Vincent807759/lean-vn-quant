@@ -243,10 +243,7 @@ def _apply_universe_membership(df: pl.DataFrame, universe_membership_path: Optio
         mem_df = mem_df.with_columns(pl.lit(True).alias("_in_universe"))
         df = df.join(mem_df, on=["date", "symbol"], how="left", coalesce=True)
         df = df.with_columns(
-            pl.when(pl.col("_in_universe").is_not_null())
-            .then(pl.col("_in_universe"))
-            .otherwise(pl.lit(False))
-            .alias("is_listed")
+            (pl.col("is_listed") & pl.col("_in_universe").fill_null(False)).alias("is_listed")
         ).drop("_in_universe")
     return df
 
