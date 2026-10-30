@@ -39,8 +39,8 @@ ortho_alphas, raw_corr, ortho_corr = orthogonalize_factor_library(raw_alphas, fa
 composite_alpha, _ = purged_walk_forward_combiner(ortho_alphas, raw_close, tradable_mask, window=120, embargo=3)
 composite_ranked = ops.rank(composite_alpha, mask=tradable_mask)
 
-w_single = ops.dampen_turnover(raw_alphas[0], 2, 4, 20, 0.015, tradable_mask)
-w_multi = ops.dampen_turnover(composite_ranked, 2, 4, 20, 0.015, tradable_mask)
+w_single = ops.dampen_turnover(raw_alphas[0], 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20)
+w_multi = ops.dampen_turnover(composite_ranked, 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20)
 
 # Benchmark VN30 Equal-Weight
 w_bm = np.where(tradable_mask, 1.0, 0.0)
