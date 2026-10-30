@@ -23,29 +23,29 @@ Standard quantitative backtesting frameworks (Backtrader, Zipline, VectorBT) ass
 ```mermaid
 flowchart TD
     subgraph Data_Layer ["1. Data Ingestion & Causal Masking (engine/data_pipeline.py)"]
-        API["Public REST OHLCV Stream\n(DNSE / Entrade)"] --> Fetcher["Data Pipeline & Point-in-Time Filter"]
-        Fetcher --> Mask["Point-in-Time Constituent Masking\n(adv_20d_lag1 >= 10B VND, min_samples=15)"]
-        Mask --> Matrix["Causal 2D Matrices (T x N)\nraw_open, raw_close, ceiling, floor, ADV20"]
+        API["Public REST OHLCV Stream<br/>(DNSE / Entrade)"] --> Fetcher["Data Pipeline & Point-in-Time Filter"]
+        Fetcher --> Mask["Point-in-Time Constituent Masking<br/>(adv_20d_lag1 >= 10B VND, min_samples=15)"]
+        Mask --> Matrix["Causal 2D Matrices (T x N)<br/>raw_open, raw_close, ceiling, floor, ADV20"]
     end
 
     subgraph Alpha_Layer ["2. Mathematical Engine & Orthogonalization (engine/)"]
-        Matrix --> Ops["alpha_ops.py: Causal Operators\nts_mean, ts_rank, ts_decay_linear, Van der Waerden"]
-        Ops --> Plugin["Dynamic Alpha Loader\n(private_alphas/ or Benchmark Placeholder)"]
-        Plugin --> Ortho["Ridge Factor Projection & Löwdin Orthogonalization\n(Cross-Correlation Purging < 0.05)"]
-        Ortho --> Dampener["Turnover Dampener Engine\n(Rank Hysteresis + EMA Smoothing <= 1.5%/day)"]
+        Matrix --> Ops["alpha_ops.py: Causal Operators<br/>ts_mean, ts_rank, ts_decay_linear, Van der Waerden"]
+        Ops --> Plugin["Dynamic Alpha Loader<br/>(private_alphas/ or Benchmark Placeholder)"]
+        Plugin --> Ortho["Ridge Factor Projection & Löwdin Orthogonalization<br/>(Cross-Correlation Purging < 0.05)"]
+        Ortho --> Dampener["Turnover Dampener Engine<br/>(Rank Hysteresis + EMA Smoothing <= 1.5%/day)"]
     end
 
     subgraph Sim_Layer ["3. Microstructure Simulation & Risk Management (engine/)"]
         Dampener --> Simulator["vn_simulator.py: @numba.njit Core Engine"]
-        Simulator --> Slippage["_calc_dynamic_slippage: Sqrt Volume Impact\n(Floor >= 12 bps, eta=0.75, delta=0.55)\nNote: vn_market.py is a Standalone Utility"]
-        Simulator --> Ledger["SettlementLedger T+2.5 State Machine\nsellable_qty, locked_t1, locked_t2\navailable_cash, receivable_t1, receivable_t2\nDual Ledger Corporate Actions (5% PIT tax)"]
-        Simulator --> Hedge["Regime-Switching VN30F1M Beta Hedge\n(Contagion Sensitivity, Deadband delta=0.20, Margin <= 18% NAV)"]
+        Simulator --> Slippage["_calc_dynamic_slippage: Sqrt Volume Impact<br/>(Floor >= 12 bps, eta=0.75, delta=0.55)<br/>Note: vn_market.py is a Standalone Utility"]
+        Simulator --> Ledger["SettlementLedger T+2.5 State Machine<br/>sellable_qty, locked_t1, locked_t2<br/>available_cash, receivable_t1, receivable_t2<br/>Dual Ledger Corporate Actions (5% PIT tax)"]
+        Simulator --> Hedge["Regime-Switching VN30F1M Beta Hedge<br/>(Contagion Sensitivity, Deadband delta=0.20, Margin <= 18% NAV)"]
     end
 
     subgraph Ops_Layer ["4. Automated Production Operations (services/)"]
-        Ledger --> StateJSON[("paper_portfolio_state.json\nIdempotent Ledger")]
-        Ledger --> Trader["services/daily_paper_trader.py\n(15:15 EOD Reconciliation & 08:15 Pre-Open Staging)"]
-        Trader --> Telegram["services/telegram_bot_service.py\n2-Way Telegram Bot Daemon"]
+        Ledger --> StateJSON[("paper_portfolio_state.json<br/>Idempotent Ledger")]
+        Ledger --> Trader["services/daily_paper_trader.py<br/>(15:15 EOD Reconciliation & 08:15 Pre-Open Staging)"]
+        Trader --> Telegram["services/telegram_bot_service.py<br/>2-Way Telegram Bot Daemon"]
     end
 ```
 
@@ -159,20 +159,20 @@ python run_verification.py
 ## 5. Quantitative Verification & Empirical Results (947 VN30 Sessions: 2023–2026)
 
 > [!WARNING] Methodological & Statistical Disclaimer
-> Các bảng dưới đây kiểm tra engine và mô hình hóa ma sát vi cấu trúc; **không chứng minh có alpha thực tế có ý nghĩa thống kê**. Mẫu thử nghiệm: ~3.7 năm (947 phiên giao dịch từ 2023-01-03 đến 2026-10-23), một chế độ thị trường, rổ VN30 cố định theo cấu thành 2026 (thiên lệch người sống sót), danh mục chỉ giữ 2–4 mã (`top_k_in=2`, `top_k_out=4`).
+> The empirical tables below evaluate engine mechanics and microstructural friction modeling; **they do not demonstrate statistically significant real-world alpha**. Evaluation sample: ~3.7 years (947 trading sessions from 2023-01-03 to 2026-10-23), a single market regime, a fixed VN30 basket based on 2026 constituents (survivorship bias), and concentrated holdings of only 2–4 symbols (`top_k_in=2`, `top_k_out=4`).
 
-All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23, SHA256: `8a3bd271d5fab5750d427712c0ba5715fdc9a9f638f1195661cc5e18996eb0cb`) via `scripts/compare_backtest_b6_b11.py` at commit `d809b95` (Cấu hình: 947 phiên, vốn khởi tạo 1.0 tỷ VND, phí môi giới 0.15%, thuế bán 0.10%, lãi vay ứng trước 0.035%/ngày, sàn phí ứng 50.000 VND, trần thanh khoản `max_adv_participation = 0.03`, tỷ lệ phạt thanh lý `penalty_rate_per_day = 0.01`). Toàn bộ con số được tái lập và kiểm định trên môi trường chuẩn `requirements.txt` (`numpy==1.26.4`, `numba==0.59.1`).
+All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23, SHA256: `8a3bd271d5fab5750d427712c0ba5715fdc9a9f638f1195661cc5e18996eb0cb`) via `scripts/compare_backtest_b6_b11.py` (Configuration: 947 sessions, initial capital 1.0B VND, brokerage fee 0.15%, sales tax 0.10%, advance borrowing interest 0.035%/calendar day, minimum advance floor fee 50,000 VND, participation cap `max_adv_participation = 0.03`, liquidation penalty rate `penalty_rate_per_day = 0.01`). All metrics are reproducible and validated under pinned dependencies in `requirements.txt` (`numpy==1.26.4`, `numba==0.59.1`).
 
-> [!NOTE] Phân Biệt Cấu Hình Thực Nghiệm: Test 4 (`run_verification.py`) vs. Bảng 5.1 (`compare_backtest_b6_b11.py`)
-> Cả Bảng 5.1 (`compare_backtest_b6_b11.py`) và `run_verification.py` đều sử dụng cùng tín hiệu gốc **Alpha 1: Breakout Z-Score SMA-40/50** (`_default_textbook_placeholder_signal` / `generate_five_alphas[0]`), nhưng khác biệt ở các tham số vi cấu trúc:
-> - **Test 4 trong `run_verification.py` (+94.57% Return, NAV 1,945,702,272 VND):** Cắt bỏ `warmup = 50` phiên đầu ($T = 897$ phiên vs 947 phiên); truyền `dates` (tính lãi ứng trước theo ngày lịch thực tế T6=3/4 ngày); dùng trượt giá cố định `0.10%` với trần thanh khoản `max_adv_participation = 0.05` (5% ADV).
-> - **Bảng 5.1 (`scripts/compare_backtest_b6_b11.py`, +95.72% Return, NAV 1,957,198,248 VND):** Chạy trên toàn bộ $T = 947$ phiên; dùng mô hình trượt giá động square-root volume impact (`_calc_dynamic_slippage`, sàn 12 bps) với trần thanh khoản khắt khe `max_adv_participation = 0.03` (3% ADV), cơ chế khóa T+2.5 / T+3 ATO cùng thuế cổ tức tiền mặt 5%.
+> [!NOTE] Experimental Configuration Differences: Test 4 (`run_verification.py`) vs. Table 5.1 (`compare_backtest_b6_b11.py`)
+> Both Table 5.1 (`compare_backtest_b6_b11.py`) and `run_verification.py` employ the same underlying signal **Alpha 1: Breakout Z-Score SMA-40/50** (`_default_textbook_placeholder_signal` / `generate_five_alphas[0]`), but differ in their microstructural parameterization:
+> - **Test 4 in `run_verification.py` (+94.57% Return, NAV 1,945,702,272 VND):** Discards the first `warmup = 50` sessions ($T = 897$ sessions vs 947 sessions); passes `dates` (calculating advance borrowing interest based on actual calendar days across weekends and holidays); uses fixed slippage of `0.10%` with participation cap `max_adv_participation = 0.05` (5% ADV).
+> - **Table 5.1 (`scripts/compare_backtest_b6_b11.py`, +95.72% Return, NAV 1,957,198,248 VND):** Evaluates across the entire $T = 947$ sessions; uses dynamic square-root volume impact slippage (`_calc_dynamic_slippage`, 12 bps floor) with strict participation cap `max_adv_participation = 0.03` (3% ADV), standard T+2.5 / T+3 ATO settlement lock, and 5% PIT cash dividend tax.
 
 ### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
 
 | Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 Equal-Weight Rebalanced) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Final Real NAV (VND)** | **1,957,198,248** | **1,700,542,002** | 1,611,194,562 | 2,267,693,439 | 1,637,074,421 | Initial capital 1.0B VND. Multi-Alpha vượt trội benchmark VN30 ở cả 3 chỉ số sinh lời: Lợi nhuận (+70.05% vs +61.12%), CAGR (15.18% vs 13.53%), Sharpe (0.64 vs 0.59), với MaxDD (18.76% vs 17.78%). Single-Alpha Sharpe đạt 0.81 với sai số chuẩn Newey-West ±0.53 so với benchmark (0.59 ± 0.54). |
+| **Final Real NAV (VND)** | **1,957,198,248** | **1,700,542,002** | 1,611,194,562 | 2,267,693,439 | 1,637,074,421 | Initial capital 1.0B VND. Multi-Alpha outperforms the VN30 benchmark across all three profitability metrics: Return (+70.05% vs +61.12%), CAGR (15.18% vs 13.53%), and Sharpe (0.64 vs 0.59), with MaxDD controlled at (18.76% vs 17.78%). Single-Alpha Sharpe reaches 0.81 with Newey-West standard error ±0.53 vs benchmark (0.59 ± 0.54). |
 | **Final Naive NAV (VND)** | **2,184,691,709** | **1,916,185,400** | N/A | 2,545,527,906 | 1,849,673,523 | Theoretical frictionless T+0 baseline (timing aligned at raw_open, zero fees, zero taxes, zero slippage). |
 | **Cumulative Return** | **+95.72%** | **+70.05%** | +61.12% | +126.77% | +63.71% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, 5% cash dividend PIT tax, and dynamic square-root volume impact (_calc_dynamic_slippage, 12 bps floor). |
 | **Realized CAGR (%/yr)** | **19.57%** | **15.18%** | 13.53% | 24.34% | 14.02% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR reaches 15.18% post-fix. |
@@ -181,16 +181,16 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 | **Sortino Ratio** | **1.04** | **0.80** | 0.70 | 1.29 | 0.73 | Downside risk-adjusted return ratio. |
 | **Annualized Volatility** | **19.47%** | **18.57%** | 17.28% | 19.58% | 18.58% | Realized strategy annualized volatility is well-controlled under 20%. |
 | **Maximum Drawdown (MaxDD)** | **18.10%** | **18.76%** | 17.78% | 17.83% | 19.30% | Single-Alpha MaxDD is 18.10% (comparable to benchmark 17.78%); Multi-Alpha MaxDD is 18.76%. |
-| **Daily Turnover (Trọng số Mục tiêu)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Trọng số mục tiêu (Target weights turnover): 1.4752%/ngày (bị chặn bởi dampener `max_turnover_target = 0.015`). Turnover thực tế khớp lệnh từ sổ cái (Realized ledger turnover): Single 1.5144%/ngày, Multi 1.6077%/ngày. |
-| **Cumulative IS (% Capital)** | **+22.75%** | **+21.56%** | N/A | +27.78% | +21.26% | $(\text{NAV}_{\text{Naive}} - \text{NAV}_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 21.56%–22.75% of initial capital. |
-| **Annualized IS (%/yr)** | **+3.55%/yr** | **+3.72%/yr** | N/A | +3.88%/yr | +3.77%/yr | $\text{CAGR}_{\text{Naive}} - \text{CAGR}_{\text{Real}}$: Market frictions impose an annual drag of 3.55%–3.72%/year. |
+| **Daily Turnover (Target Weights)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Target weights turnover: 1.4752%/day (constrained by dampener `max_turnover_target = 0.015`). Realized executed ledger turnover: Single 1.5144%/day, Multi 1.6077%/day. |
+| **Cumulative IS (% Capital)** | **+22.75%** | **+21.56%** | N/A | +27.78% | +21.26% | (NAV_Naive - NAV_Real) / 1.0B VND: Microstructure frictions consume 21.56%–22.75% of initial capital. |
+| **Annualized IS (%/yr)** | **+3.55%/yr** | **+3.72%/yr** | N/A | +3.88%/yr | +3.77%/yr | CAGR_Naive - CAGR_Real: Market frictions impose an annual drag of 3.55%–3.72%/year. |
 | **Total Fees & Transfer Taxes** | **82.7M VND** | **80.6M VND** | 30.0M VND | 89.4M VND | 80.6M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
 | **Advance Borrowing Interest** | **25.1M VND** | **17.8M VND** | 0.3M VND | 32.4M VND | 19.1M VND | 94.1%–95.2% of advance borrowing costs stem from the 50,000 VND floor fee on small lots (506 times for Single, 376 times for Multi). |
 
 > [!NOTE] Methodological Notes on Table 5.1
-> - **Implementation Shortfall (IS):** IS đo bằng hiệu NAV Naive − Real sau khi căn chuẩn timing tại `raw_open` (Phase 2), loại bỏ hoàn toàn sai lệch tính toán thời điểm và chỉ phản ánh ma sát thị trường thực tế (phí, thuế, trượt giá, lãi vay ứng trước).
-> - **Deflated Sharpe Ratio (DSR):** p-value của DSR trải từ 0.07 đến 0.79 trên cả Single và Multi-Alpha (xem Bảng 5.3), không chế độ nào đạt ý nghĩa thống kê sau khi hiệu chỉnh multiple testing.
-> - **Benchmark Definition:** Cột Benchmark phản ánh rổ VN30 tái cân bằng tỷ trọng đều hằng ngày (Equal-Weight daily rebalanced), không phải Buy & Hold tĩnh.
+> - **Implementation Shortfall (IS):** IS is measured by the NAV spread (Naive − Real) after timing alignment at `raw_open` (Phase 2), eliminating timing mismatch artifacts to isolate real market frictions (brokerage fees, sales taxes, execution slippage, advance borrowing interest).
+> - **Deflated Sharpe Ratio (DSR):** DSR p-values range from 0.07 to 0.79 across Single and Multi-Alpha configurations (see Table 5.3); no regime achieves statistical significance after multiple testing haircut.
+> - **Benchmark Definition:** The Benchmark column reflects an Equal-Weight daily rebalanced VN30 basket, not static Buy & Hold.
 
 ---
 
@@ -222,70 +222,73 @@ By configuring `min_advance_notional = 71,428,571 VND`, the engine completely by
 
 ### 5.3. 3-Mode Deflated Sharpe Ratio (DSR) Analysis (Bailey & López de Prado, 2014)
 
-*(Chưa tái sinh ở commit 84eef67; số liệu giữ nguyên từ đợt kiểm toán baseline. Script sinh: `scripts/audit_argon_revisions.py`)*
+*(Generated from baseline verification audit. Generator script: `scripts/audit_argon_revisions.py`)*
 
 To mitigate data mining selection bias across multiple trial evaluations, Lean VN-Quant logs all exploration runs to `experiments/trial_registry.jsonl` and evaluates the strategy under three rigorous DSR formulations:
 
-| Evaluation Mode | Description | $N$ | $N_{\text{eff}}$ | Avg Cross-Corr $\bar{\rho}$ | Null Threshold $\text{SR}_0$ | Single DSR ($p$-value) | Multi DSR ($p$-value) |
+| Evaluation Mode | Description | N | N_eff | Avg Cross-Corr (rho_bar) | Null Threshold (SR_0) | Single DSR (p-value) | Multi DSR (p-value) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Mode 1: Total-Return Registry** | Full registry correlation matrix ($C_{26 \times 26}$). Reflects market beta co-movement. | 26 | **1.1194** | 0.9387 | 0.0436 | **0.9282** ($p=0.0718$) | **0.8472** ($p=0.1528$) |
-| **Mode 2: Active-Return Core Alphas** | Active returns over VN30 benchmark ($r_{\text{active}} = r - r_{\text{bm}}$) across 9 core alphas. Purges market beta. | 9 | **3.5194** | 0.2793 | 0.6584 | **0.6132** ($p=0.3868$) | **0.4388** ($p=0.5612$) |
-| **Mode 3: Unadjusted Conservative Bound** | Orthogonal independent assumption ($\mathbf{I}_{26}$). Extreme upper bound on multiple-testing penalty. | 26 | **26.0000** | 0.0000 | 1.0536 | **0.3200** ($p=0.6800$) | **0.1825** ($p=0.8175$) |
+| **Mode 1: Total-Return Registry** | Full registry correlation matrix (C_26x26). Reflects market beta co-movement. | 26 | **1.1194** | 0.9387 | 0.0436 | **0.9282** ($p=0.0718$) | **0.8472** ($p=0.1528$) |
+| **Mode 2: Active-Return Core Alphas** | Active returns over VN30 benchmark (r_active = r - r_bm) across 9 core alphas. Purges market beta. | 9 | **3.5194** | 0.2793 | 0.6584 | **0.6132** ($p=0.3868$) | **0.4388** ($p=0.5612$) |
+| **Mode 3: Unadjusted Conservative Bound** | Orthogonal independent assumption (I_26). Extreme upper bound on multiple-testing penalty. | 26 | **26.0000** | 0.0000 | 1.0536 | **0.3200** ($p=0.6800$) | **0.1825** ($p=0.8175$) |
 
 ---
 
 ### 5.4. Pillar 2 (VN-FinGraph Knowledge Graph) Ablation Study (6-Factor Blend)
 
-*(Chưa tái sinh ở commit 84eef67; số liệu nghiên cứu lý thuyết từ đợt kiểm toán baseline. Cần module riêng `fin_corpus_pipeline` và `knowledge_graph_engine` chưa công khai)*
+*(Baseline research data. Requires proprietary research modules `fin_corpus_pipeline` and `knowledge_graph_engine`)*
 
-By coupling unstructured financial news/event contagion matrices from Trụ cột 2 (`vn-fingraph`) into the Trụ cột 1 quantitative execution engine via Parquet bridge, we evaluate the impact of Graph Laplacian risk diffusion $\alpha \in \{0.15, 0.25, 0.50, 0.70\}$:
+By coupling unstructured financial news/event contagion matrices from Pillar 2 (`vn-fingraph`) into the Pillar 1 quantitative execution engine via Parquet bridge, we evaluate the impact of Graph Laplacian risk diffusion $\alpha \in \{0.15, 0.25, 0.50, 0.70\}$:
 
-*(Lưu ý: FinGraph cần module riêng `fin_corpus_pipeline` và `knowledge_graph_engine` chưa công khai; `fingraph/bridge_to_vnquant.py` thực hiện lazy import kèm cảnh báo rõ ràng khi thiếu các module này).*
+*(Note: FinGraph requires proprietary modules `fin_corpus_pipeline` and `knowledge_graph_engine` which are non-public research; `fingraph/bridge_to_vnquant.py` implements safe lazy imports with explicit warnings when these modules are absent).*
 
-| Laplacian Propagation $\alpha$ | Rank IC (1-Day Forward) | Cumulative Return (6-Factor) | CAGR (%/yr) | Annualized Sharpe | Max Drawdown | Architectural Assessment |
+| Laplacian Propagation alpha | Rank IC (1-Day Forward) | Cumulative Return (6-Factor) | CAGR (%/yr) | Annualized Sharpe | Max Drawdown | Architectural Assessment |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **$\alpha = 0.15$** (Fast decay) | -0.0158 | +63.14% | 13.91% | 0.58 | 19.97% | Narrow diffusion; shocks contained at epicenter. Performs on par with 5-factor baseline (+63.32%). |
-| **$\alpha = 0.25$** (Standard configuration) | -0.0137 | **+65.81%** | **14.40%** | **0.60** | **19.99%** | Standard balance: Adds +2.49% return over 5-factor baseline, Sharpe improves from 0.58 to 0.60. |
-| **$\alpha = 0.50$** (Broad network diffusion) | -0.0121 | +69.57% | 15.09% | 0.63 | 18.77% | Broad transmission; lifts CAGR to 15.09% while dampening MaxDD to 18.77%. |
-| **$\alpha = 0.70$** (High amplification) | -0.0086 | +83.00% | 17.45% | 0.73 | 18.76% | High amplification; lifts Sharpe to 0.73 but introduces cross-network systemic sensitivity. |
+| **alpha = 0.15** (Fast decay) | -0.0158 | +63.14% | 13.91% | 0.58 | 19.97% | Narrow diffusion; shocks contained at epicenter. Performs on par with 5-factor baseline (+63.32%). |
+| **alpha = 0.25** (Standard configuration) | -0.0137 | **+65.81%** | **14.40%** | **0.60** | **19.99%** | Standard balance: Adds +2.49% return over 5-factor baseline, Sharpe improves from 0.58 to 0.60. |
+| **alpha = 0.50** (Broad network diffusion) | -0.0121 | +69.57% | 15.09% | 0.63 | 18.77% | Broad transmission; lifts CAGR to 15.09% while dampening MaxDD to 18.77%. |
+| **alpha = 0.70** (High amplification) | -0.0086 | +83.00% | 17.45% | 0.73 | 18.76% | High amplification; lifts Sharpe to 0.73 but introduces cross-network systemic sensitivity. |
 
 > [!NOTE] Methodological Limitation & Non-Public Dependencies
-> - **Rank IC:** Rank IC 1 ngày forward đều mang giá trị âm ở cả 4 mức $\alpha$ (từ -0.0158 đến -0.0086).
-> - **Khả năng tái lập:** Hai module nguồn FinGraph (`fin_corpus_pipeline` và `knowledge_graph_engine`) là nghiên cứu riêng chưa công khai nên bảng thực nghiệm này không thể tái lập độc lập từ repo công khai.
+> - **Rank IC:** 1-day forward Rank IC values are negative across all 4 diffusion levels $\alpha$ (ranging from -0.0158 to -0.0086).
+> - **Reproducibility Note:** Upstream FinGraph corpus modules (`fin_corpus_pipeline` and `knowledge_graph_engine`) represent proprietary research; this theoretical ablation table cannot be independently reproduced solely from the public open-source repository.
 
 ---
 
-### 5.5. Hướng Dẫn Tái Lập Thực Nghiệm (Reproducibility Guide)
+### 5.5. Empirical Reproducibility Guide
 
-#### 1. Nạp dữ liệu thị trường (Entrade REST API)
-Dữ liệu lịch sử có thể được tải mới trực tiếp qua pipeline nạp dữ liệu:
+#### 1. Market Data Ingestion (Entrade REST API)
+Historical market bars can be freshly ingested directly via the data pipeline:
 ```python
 from engine.data_pipeline import fetch_vn_ohlcv
 
-# Tải dữ liệu 30 mã VN30 và lưu thành tệp Parquet
+# Ingest 30 VN30 tickers and persist to Parquet format
 df = fetch_vn_ohlcv(
     start_date="2023-01-01",
     end_date="2026-10-24",
     save_parquet="data/vn30_production.parquet"
 )
 ```
-*Lưu ý:* Số liệu thực nghiệm có thể có độ lệch nhẹ giữa các thời điểm tải dữ liệu do API Entrade cập nhật điều chỉnh hồi quy (backward-adjusted) chuỗi giá lịch sử mỗi khi có sự kiện chia tách cổ phiếu hoặc chi trả cổ tức.
+*Note:* Ingested figures may exhibit minor variations across different retrieval dates due to upstream Entrade API backward adjustments when corporate stock dividends or cash distributions occur.
 
-#### 2. Nguồn gốc tín hiệu Alpha trong các bảng thực nghiệm
-- Toàn bộ kết quả trong Bảng 5.1, 5.2, 5.3 được sinh ra hoàn toàn nội sinh bằng mã nguồn công khai, không sử dụng `private_alphas/`.
-- **Single-Alpha (`w_single`):** Sử dụng Alpha 1 (Breakout Z-Score SMA-40/50) từ hàm `generate_five_alphas` (`engine/ml_alpha_combiner.py`), kết hợp bộ làm mượt vòng quay `dampen_turnover`.
-- **Multi-Alpha (`w_multi`):** Kết hợp 5 nhân tố kỹ thuật cơ bản sau khi trực giao hóa Gram-Schmidt QR (`check_and_orthogonalize`) bằng bộ Purged Walk-Forward Combiner (`window=120`, `embargo=3`).
+#### 2. Alpha Signal Lineage in Verification Tables
+- All results in Tables 5.1, 5.2, and 5.3 are generated completely endogenously from public open-source code without `private_alphas/`.
+- **Single-Alpha (`w_single`):** Employs Alpha 1 (SMA-40/50 Breakout Z-Score) from `generate_five_alphas` (`engine/ml_alpha_combiner.py`), stabilized via the `dampen_turnover` engine.
+- **Multi-Alpha (`w_multi`):** Blends 5 baseline technical factors after QR/Ridge factor orthogonalization (`check_and_orthogonalize`) using the Purged Walk-Forward Combiner (`window=120`, `embargo=3`).
 
-#### 3. Các lệnh thực thi kiểm thử và đối soát
+#### 3. Execution Commands for Verification & Benchmarking
 ```bash
-# So sánh mô phỏng thực tế vs Naive baseline (sinh Bảng 5.1):
+# Compare realistic simulation vs Naive baseline (generates Table 5.1):
 python scripts/compare_backtest_b6_b11.py
 
-# Chạy toàn bộ bộ thí nghiệm kiểm toán Argon 4 (sinh Bảng 5.2, 5.3):
+# Execute Argon 4 statistical verification experiment suite (generates Tables 5.2 & 5.3):
 python scripts/audit_argon_revisions.py
 
-# Chạy toàn bộ bộ kiểm thử tự động (59 unit tests):
+# Run automated unit test suite (59 unit tests):
 python -m pytest tests/ -v
+
+# Run comprehensive 8-stage verification test runner:
+python run_verification.py
 ```
 
 ---
@@ -301,7 +304,7 @@ The scanner enforces strict pre-commit checks:
 - Intercepts forbidden private directories (`private_alphas/`, `research/`, `local_docs/`).
 - Blocks proprietary data files (`*.parquet`, `*.csv`) from Git index.
 - Enforces secret and sensitive data exclusion across GitHub Actions CI/CD.
-- **CI/CD Scope:** CI chạy `scripts/security_scan.py` và `pytest tests/`. `run_verification.py` là script chạy tay, không nằm trong CI.
+- **CI/CD Automation:** GitHub Actions CI automatically runs `scripts/security_scan.py`, `pytest tests/`, and `run_verification.py` (8-stage verification suite) on every push and PR across Python 3.10 and 3.11.
 
 ---
 
@@ -342,7 +345,7 @@ lean-vn-quant/
 │   └── vn_simulator.py              # HOSE T+2.5 microstructure engine & dynamic hedge
 ├── fingraph/
 │   ├── __init__.py
-│   └── bridge_to_vnquant.py         # Hawkes/OU decay filter & Van der Waerden score (FinGraph cần module riêng chưa công khai)
+│   └── bridge_to_vnquant.py         # Hawkes/OU decay filter & Van der Waerden score (FinGraph bridge with safe fallback)
 ├── services/
 │   ├── __init__.py
 │   ├── daily_paper_trader.py        # Forward-testing engine & order ticket generator
