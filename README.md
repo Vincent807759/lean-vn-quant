@@ -166,30 +166,41 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 > [!NOTE] Experimental Configuration Differences: Test 4 (`run_verification.py`) vs. Table 5.1 (`compare_backtest_b6_b11.py`)
 > Both Table 5.1 (`compare_backtest_b6_b11.py`) and `run_verification.py` employ the same underlying signal **Alpha 1: Breakout Z-Score SMA-40/50** (`_default_textbook_placeholder_signal` / `generate_five_alphas[0]`), but differ in their microstructural parameterization:
 > - **Test 4 in `run_verification.py` (+94.57% Return, NAV 1,945,702,272 VND):** Discards the first `warmup = 50` sessions ($T = 897$ sessions vs 947 sessions); passes `dates` (calculating advance borrowing interest based on actual calendar days across weekends and holidays); uses fixed slippage of `0.10%` with participation cap `max_adv_participation = 0.05` (5% ADV).
-> - **Table 5.1 (`scripts/compare_backtest_b6_b11.py`, +95.72% Return, NAV 1,957,198,248 VND):** Evaluates across the entire $T = 947$ sessions; uses dynamic square-root volume impact slippage (`_calc_dynamic_slippage`, 12 bps floor) with strict participation cap `max_adv_participation = 0.03` (3% ADV), standard T+2.5 / T+3 ATO settlement lock, and 5% PIT cash dividend tax.
+> - **Table 5.1 (`scripts/compare_backtest_b6_b11.py`, +105.79% Return, NAV 2,057,898,443 VND):** Evaluates across the entire $T = 947$ sessions; uses dynamic square-root volume impact slippage (`_calc_dynamic_slippage`, 12 bps floor) with strict participation cap `max_adv_participation = 0.03` (3% ADV), standard T+2.5 / T+3 ATO settlement lock, and 5% PIT cash dividend tax.
 
 ### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
 
 | Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 Equal-Weight Rebalanced) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Final Real NAV (VND)** | **1,957,198,248** | **1,700,542,002** | 1,611,194,562 | 2,267,693,439 | 1,637,074,421 | Initial capital 1.0B VND. Multi-Alpha outperforms the VN30 benchmark across all three profitability metrics: Return (+70.05% vs +61.12%), CAGR (15.18% vs 13.53%), and Sharpe (0.64 vs 0.59), with MaxDD controlled at (18.76% vs 17.78%). Single-Alpha Sharpe reaches 0.81 with Newey-West standard error ±0.53 vs benchmark (0.59 ± 0.54). |
-| **Final Naive NAV (VND)** | **2,184,691,709** | **1,916,185,400** | N/A | 2,545,527,906 | 1,849,673,523 | Theoretical frictionless T+0 baseline (timing aligned at raw_open, zero fees, zero taxes, zero slippage). |
-| **Cumulative Return** | **+95.72%** | **+70.05%** | +61.12% | +126.77% | +63.71% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, 5% cash dividend PIT tax, and dynamic square-root volume impact (_calc_dynamic_slippage, 12 bps floor). |
-| **Realized CAGR (%/yr)** | **19.57%** | **15.18%** | 13.53% | 24.34% | 14.02% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR reaches 15.18% post-fix. |
-| **Theoretical Naive CAGR** | **23.12%** | **18.89%** | N/A | 28.23% | 17.78% | Theoretical compound annual growth rate without microstructural penalties. |
-| **Annualized Sharpe (Newey-West)** | **0.81 (±0.53)** | **0.64 (±0.54)** | 0.59 (±0.54) | 1.01 (±0.54) | 0.58 (±0.53) | Newey-West HAC standard error indicates confidence intervals of ~ ±0.54 across all strategies. |
-| **Sortino Ratio** | **1.04** | **0.80** | 0.70 | 1.29 | 0.73 | Downside risk-adjusted return ratio. |
-| **Annualized Volatility** | **19.47%** | **18.57%** | 17.28% | 19.58% | 18.58% | Realized strategy annualized volatility is well-controlled under 20%. |
-| **Maximum Drawdown (MaxDD)** | **18.10%** | **18.76%** | 17.78% | 17.83% | 19.30% | Single-Alpha MaxDD is 18.10% (comparable to benchmark 17.78%); Multi-Alpha MaxDD is 18.76%. |
+| **Final Real NAV (VND)** | **2,057,898,443** | **1,771,706,428** | 1,611,194,562 | 2,308,250,300 | 1,646,312,288 | Initial capital 1.0B VND. Single-Alpha Sharpe reaches 0.85 with Newey-West standard error ±0.53 vs benchmark (0.59 ± 0.54); Multi-Alpha Sharpe is 0.68 (±0.53). Both strategies' Sharpe improvements fall within the Newey-West standard error margin (±0.53 vs ±0.54), indicating no statistically significant outperformance over the VN30 benchmark after accounting for sampling uncertainty. |
+| **Final Naive NAV (VND)** | **2,303,698,451** | **2,006,355,122** | N/A | 2,592,210,561 | 1,869,549,812 | Theoretical frictionless T+0 baseline (timing aligned at raw_open, zero fees, zero taxes, zero slippage). |
+| **Cumulative Return** | **+105.79%** | **+77.17%** | +61.12% | +130.83% | +64.63% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, 5% cash dividend PIT tax, and dynamic square-root volume impact (_calc_dynamic_slippage, 12 bps floor). |
+| **Realized CAGR (%/yr)** | **21.17%** | **16.44%** | 13.53% | 24.93% | 14.19% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR reaches 16.44% post-fix. |
+| **Theoretical Naive CAGR** | **24.87%** | **20.36%** | N/A | 28.85% | 18.12% | Theoretical compound annual growth rate without microstructural penalties. |
+| **Annualized Sharpe (Newey-West)** | **0.85 (±0.53)** | **0.68 (±0.53)** | 0.59 (±0.54) | 1.00 (±0.53) | 0.58 (±0.53) | Newey-West HAC standard error indicates confidence intervals of ~ ±0.53 across all strategies. |
+| **Sortino Ratio** | **1.10** | **0.85** | 0.70 | 1.29 | 0.73 | Downside risk-adjusted return ratio. |
+| **Annualized Volatility** | **20.28%** | **19.40%** | 17.28% | 20.30% | 19.35% | Realized strategy annualized volatility is well-controlled under 21%. |
+| **Maximum Drawdown (MaxDD)** | **18.11%** | **18.87%** | 17.78% | 17.96% | 19.53% | Single-Alpha MaxDD is 18.11% (comparable to benchmark 17.78%); Multi-Alpha MaxDD is 18.87%. |
 | **Daily Turnover (Target Weights)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Target weights turnover: 1.4752%/day (constrained by dampener `max_turnover_target = 0.015`). Realized executed ledger turnover: Single 1.5144%/day, Multi 1.6077%/day. |
-| **Cumulative IS (% Capital)** | **+22.75%** | **+21.56%** | N/A | +27.78% | +21.26% | (NAV_Naive - NAV_Real) / 1.0B VND: Microstructure frictions consume 21.56%–22.75% of initial capital. |
-| **Annualized IS (%/yr)** | **+3.55%/yr** | **+3.72%/yr** | N/A | +3.88%/yr | +3.77%/yr | CAGR_Naive - CAGR_Real: Market frictions impose an annual drag of 3.55%–3.72%/year. |
-| **Total Fees & Transfer Taxes** | **82.7M VND** | **80.6M VND** | 30.0M VND | 89.4M VND | 80.6M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
-| **Advance Borrowing Interest** | **25.1M VND** | **17.8M VND** | 0.3M VND | 32.4M VND | 19.1M VND | 94.1%–95.2% of advance borrowing costs stem from the 50,000 VND floor fee on small lots (506 times for Single, 376 times for Multi). |
+| **Cumulative IS (% Capital)** | **+24.58%** | **+23.46%** | N/A | +28.40% | +22.32% | (NAV_Naive - NAV_Real) / 1.0B VND: Microstructure frictions consume 23.46%–24.58% of initial capital. |
+| **Annualized IS (%/yr)** | **+3.69%/yr** | **+3.92%/yr** | N/A | +3.92%/yr | +3.93%/yr | CAGR_Naive - CAGR_Real: Market frictions impose an annual drag of 3.69%–3.92%/year. |
+| **Total Fees & Transfer Taxes** | **87.0M VND** | **84.6M VND** | 30.0M VND | 91.3M VND | 81.8M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
+| **Advance Borrowing Interest** | **27.4M VND** | **22.6M VND** | 0.3M VND | 35.6M VND | 21.8M VND | Advance borrowing costs include the 50,000 VND floor fee on small lots (count not exposed directly by the simulator, estimated from total advance fees). |
 
-> [!NOTE] Methodological Notes on Table 5.1
+### 5.1b. Sensitivity to Settlement Mode: Default T+2.5 vs. Strict T+2.5 ATO Lock
+
+| Strategy Configuration | Default T+2.5 Lock NAV (VND) | Strict T+2.5 ATO Lock NAV (VND) | Delta NAV (VND / %) | Total Return (Default vs Strict) | Sharpe (Default vs Strict) | MaxDD (Default vs Strict) | Settlement & Economic Interpretation |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Single-Alpha (Post B6-B11)** | **2,057,898,443** | **2,057,856,292** | -42,151 VND (-0.002%) | 105.79% vs 105.79% | 0.85 vs 0.85 | 18.11% vs 18.11% | Negligible impact across 947 sessions (< 0.003% NAV). Because the strategy holds concentrated positions over multi-week horizons, liquidations on exactly T+2 morning ATO are extremely rare. |
+| **Multi-Alpha (Post B6-B11)** | **1,771,706,428** | **1,771,705,258** | -1,170 VND (-0.0001%) | 77.17% vs 77.17% | 0.68 vs 0.68 | 18.87% vs 18.87% | Negligible difference (~1.1k VND). Both execution modes reflect virtually identical risk profiles and returns under realistic market friction modeling. |
+| **Benchmark (VN30 Rebalanced)** | 1,611,194,562 | 1,611,199,007 | +4,445 VND (+0.0003%) | 61.12% vs 61.12% | 0.59 vs 0.59 | 17.78% vs 17.78% | Passive rebalancing shows identical performance regardless of ATO lock mode. |
+
+> [!NOTE] Methodological Notes on Tables 5.1 & 5.1b
 > - **Implementation Shortfall (IS):** IS is measured by the NAV spread (Naive − Real) after timing alignment at `raw_open` (Phase 2), eliminating timing mismatch artifacts to isolate real market frictions (brokerage fees, sales taxes, execution slippage, advance borrowing interest).
-> - **Deflated Sharpe Ratio (DSR):** DSR p-values range from 0.07 to 0.79 across Single and Multi-Alpha configurations (see Table 5.3); no regime achieves statistical significance after multiple testing haircut.
+> - **Column-Order Sensitivity & Deterministic Liquidity Tie-Breaking:** Prior to incorporating `tie_break_key=adv20`, `dampen_turnover` broke ties based on array column order (ticker alphabetical order), causing Multi Real NAV to swing between 1.31B and 1.81B across 50 column permutations (std = 120M VND, 7.32% of mean; underperforming benchmark in 40% of orderings). Adding causal ADV20 tie-breaking ensures deterministic, permutation-invariant behavior: Single-Alpha NAV standard deviation drops to 0.02% (floating-point precision noise), and Multi-Alpha Real NAV achieves 1.77B (outperforming benchmark in 96% of seeds).
+> - **T+2.5 ATO Lock Mechanism (Default vs Strict):** By default, the simulation engine allows selling during the morning ATO session of T+2 (consistent with current HOSE practice where securities are credited by the Vietnam Securities Depository by late afternoon of T+1.5 or T+2). The `--strict-t25-ato-lock` flag enforces a strict lock prohibiting ATO selling on morning T+2, unlocking shares exclusively starting from morning T+3 ATO.
+> - **Cash Dividend PIT Tax (5%):** The 5% personal income transfer tax on cash dividends is implemented and validated in the microstructure state machine (`tests/test_t25_microstructure.py::test_cash_dividend_5pct_pit_tax`). In Tables 5.1 and 5.2, historical data is backward-adjusted by the upstream data provider without a separate explicit cash dividend matrix, so this tax has zero impact on the empirical figures reported.
+> - **Deflated Sharpe Ratio (DSR):** DSR p-values range from 0.07 to 0.82 across Single and Multi-Alpha configurations (see Table 5.3); no regime achieves statistical significance after multiple testing haircut.
 > - **Benchmark Definition:** The Benchmark column reflects an Equal-Weight daily rebalanced VN30 basket, not static Buy & Hold.
 
 ---
@@ -207,14 +218,14 @@ By configuring `min_advance_notional = 71,428,571 VND`, the engine completely by
 #### Single-Alpha Cash Sweep Comparison:
 | Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Naive Greedy Sweep (Baseline)** | 25,150,000 | ~0.62% / order (Floor penalty) | +95.72% | 506 times | 1,957,198,248 |
+| **Naive Greedy Sweep (Baseline)** | 25,150,000 | ~0.62% / order (Floor penalty) | +95.72% | Estimated from fee total (simulator does not expose discrete hit count) | 1,957,198,248 |
 | **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+97.42% (+1.70%)** | **0 times** | **1,974,165,840** |
 | **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +97.42% (+1.70%) | 0 times | 1,974,165,840 |
 
 #### Multi-Alpha Cash Sweep Comparison:
 | Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Naive Greedy Sweep (Baseline)** | 17,800,000 | ~0.62% / order (Floor penalty) | +70.05% | 376 times | 1,700,542,002 |
+| **Naive Greedy Sweep (Baseline)** | 17,800,000 | ~0.62% / order (Floor penalty) | +70.05% | Estimated from fee total (simulator does not expose discrete hit count) | 1,700,542,002 |
 | **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+72.95% (+2.90%)** | **0 times** | **1,729,491,161** |
 | **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +72.95% (+2.90%) | 0 times | 1,729,491,161 |
 
