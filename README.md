@@ -31,7 +31,7 @@ flowchart TD
     subgraph Alpha_Layer ["2. Mathematical Engine & Orthogonalization (engine/)"]
         Matrix --> Ops["alpha_ops.py: Causal Operators<br/>ts_mean, ts_rank, ts_decay_linear, Van der Waerden"]
         Ops --> Plugin["Dynamic Alpha Loader<br/>(private_alphas/ or Benchmark Placeholder)"]
-        Plugin --> Ortho["Ridge Factor Projection & Löwdin Orthogonalization<br/>(Cross-Correlation Purging < 0.05)"]
+        Plugin --> Ortho["Gram-Schmidt & Ridge Factor Projection<br/>(alpha_ops.py & ml_alpha_combiner.py)"]
         Ortho --> Dampener["Turnover Dampener Engine<br/>(Rank Hysteresis + EMA Smoothing <= 1.5%/day)"]
     end
 
@@ -39,7 +39,7 @@ flowchart TD
         Dampener --> Simulator["vn_simulator.py: @numba.njit Core Engine"]
         Simulator --> Slippage["_calc_dynamic_slippage: Sqrt Volume Impact<br/>(Floor >= 12 bps, eta=0.75, delta=0.55)<br/>Note: vn_market.py is a Standalone Utility"]
         Simulator --> Ledger["SettlementLedger T+2.5 State Machine<br/>sellable_qty, locked_t1, locked_t2<br/>available_cash, receivable_t1, receivable_t2<br/>Dual Ledger Corporate Actions (5% PIT tax)"]
-        Simulator --> Hedge["Regime-Switching VN30F1M Beta Hedge<br/>(Contagion Sensitivity, Deadband delta=0.20, Margin <= 18% NAV)"]
+        Simulator -.->|standalone utility| Hedge["Regime-Switching VN30F1M Beta Hedge<br/>(Risk sizing utility, not in backtest P&L loop)"]
     end
 
     subgraph Ops_Layer ["4. Automated Production Operations (services/)"]
@@ -284,7 +284,7 @@ python scripts/compare_backtest_b6_b11.py
 # Execute Argon 4 statistical verification experiment suite (generates Tables 5.2 & 5.3):
 python scripts/audit_argon_revisions.py
 
-# Run automated unit test suite (59 unit tests):
+# Run automated unit test suite (63 unit tests):
 python -m pytest tests/ -v
 
 # Run comprehensive 8-stage verification test runner:
@@ -339,9 +339,9 @@ lean-vn-quant/
 │       └── quant_audit_ci.yml       # Automated GitHub Actions CI/CD test runner
 ├── engine/
 │   ├── __init__.py
-│   ├── alpha_ops.py                 # Vectorized causal operators & PIT universe masking
+│   ├── alpha_ops.py                 # Vectorized causal operators, PIT masking & Gram-Schmidt orthogonalization
 │   ├── data_pipeline.py             # Entrade REST data ingestion & DuckDB engine
-│   ├── ml_alpha_combiner.py         # Ridge factor projection & Löwdin orthogonalization
+│   ├── ml_alpha_combiner.py         # Ridge factor projection, Löwdin orthogonalization & walk-forward combiner
 │   └── vn_simulator.py              # HOSE T+2.5 microstructure engine & dynamic hedge
 ├── fingraph/
 │   ├── __init__.py
