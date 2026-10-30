@@ -29,7 +29,7 @@ ceiling, _, _ = dp.pivot_to_matrix(df_masked, "ceiling_price")
 floor, _, _ = dp.pivot_to_matrix(df_masked, "floor_price")
 tradable_mask, _, _ = dp.pivot_to_matrix(df_masked, "tradable_mask")
 
-adv20_shares = np.where(raw_close > 0, adv20 / np.maximum(raw_close, 1e-4), 1e6)
+adv20_shares = np.where((raw_close > 0) & np.isfinite(adv20), adv20 / np.maximum(raw_close, 1e-4), 1e6)
 T, N = raw_close.shape
 years = T / 252.0
 

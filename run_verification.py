@@ -264,9 +264,11 @@ def compute_verification_signal(raw_close: np.ndarray, tradable_mask: np.ndarray
     try:
         import private_alphas
         if hasattr(private_alphas, "compute_custom_alpha"):
+            print("  [ALPHA SOURCE] Loaded production alpha from private_alphas package.")
             return private_alphas.compute_custom_alpha(raw_close, tradable_mask)
     except (ImportError, ModuleNotFoundError):
         pass
+    print("  [ALPHA SOURCE] private_alphas not detected; using open-source textbook placeholder signal.")
     return _default_textbook_placeholder_signal(raw_close, tradable_mask)
 
 

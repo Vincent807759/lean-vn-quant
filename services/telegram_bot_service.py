@@ -317,15 +317,17 @@ def handle_sync() -> str:
         script_path = os.path.join(ROOT_DIR, "services", "daily_paper_trader.py")
         
     cmd = [python_exe, script_path, "--send-telegram"]
+    env = load_env()
+    bot_token = env.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN")
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if proc.returncode == 0:
             return "⚡ <b>SYNCHRONIZATION COMPLETED!</b>\nMarket data updated and T+2.5 ledger settled.\nFull report dispatched via Telegram."
         else:
-            clean_err = sanitize_error_message(proc.stderr[:400], token=BOT_TOKEN)
+            clean_err = sanitize_error_message(proc.stderr[:400], token=bot_token)
             return f"⚠️ <b>SYNC ERROR:</b>\n{clean_err}"
     except Exception as e:
-        clean_err = sanitize_error_message(str(e), token=BOT_TOKEN)
+        clean_err = sanitize_error_message(str(e), token=bot_token)
         return f"⚠️ Sync execution error: {clean_err}"
 
 

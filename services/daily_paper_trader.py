@@ -828,6 +828,7 @@ def generate_next_day_orders(
     rem_cash = total_available_funds - total_est_buy_cost
     
     if rem_cash > 0.15 * real_nav:
+        sma50 = ops.ts_mean(raw_close, 50)
         top_candidates = []
         alpha_today = alpha[-1]
         for i, s in enumerate(syms):

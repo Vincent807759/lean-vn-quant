@@ -312,7 +312,7 @@ def _calc_borrow_cap(pending: float, rate: float, days: float, min_fee: float) -
         return pending / (1.0 + rate * eff_days)
 
 
-@numba.njit(fastmath=True, cache=True)
+@numba.njit(cache=True)
 def _calc_dynamic_slippage(
     qty: float,
     adv20: float,
@@ -327,8 +327,8 @@ def _calc_dynamic_slippage(
     Computes dynamic market impact slippage under HOSE microstructure:
     IS(Q) = half_spread_floor (min 12 bps) + eta * vol * (Q / ADV20)^0.55 + gamma_perm * vol * (Q / ADV20).
     """
-    if adv20 <= 1.0 or qty <= 0.0:
-        return max(base_slippage, half_spread_floor)
+    if np.isnan(qty) or np.isnan(adv20) or adv20 <= 1.0 or qty <= 0.0:
+        return 0.0010
     q_ratio = qty / adv20
     temp_impact = eta * vol * (q_ratio ** delta)
     perm_impact = gamma_perm * vol * q_ratio
@@ -627,7 +627,11 @@ def _simulate_vn_microstructure_core(
                     continue  # Ceiling locked, cannot purchase
                     
                 desired_buy = delta_shares[i]
-                adv_limit = np.floor((adv20_shares[t_lag, i] * max_adv_participation) / 100.0) * 100.0
+                adv_sh = adv20_shares[t_lag, i]
+                if np.isnan(adv_sh) or adv_sh <= 0.0:
+                    adv_limit = 0.0
+                else:
+                    adv_limit = np.floor((adv_sh * max_adv_participation) / 100.0) * 100.0
                 qty_buy = min(desired_buy, adv_limit)
                 qty_buy = np.floor(qty_buy / 100.0) * 100.0
                 
@@ -876,6 +880,8 @@ def sanitize_market_matrices(
         consecutive_missing = 0
         last_valid_close = np.nan
         for t in range(T):
+            if np.isnan(clean_adv[t, j]) or clean_adv[t, j] < 0.0:
+                clean_adv[t, j] = 0.0
             is_close_nan = np.isnan(clean_close[t, j])
             is_open_nan = np.isnan(clean_open[t, j])
             

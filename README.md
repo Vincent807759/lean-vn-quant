@@ -161,11 +161,12 @@ python run_verification.py
 > [!WARNING] Methodological & Statistical Disclaimer
 > Các bảng dưới đây kiểm tra engine và mô hình hóa ma sát vi cấu trúc; **không chứng minh có alpha thực tế có ý nghĩa thống kê**. Mẫu thử nghiệm: ~3.7 năm (947 phiên giao dịch từ 2023-01-03 đến 2026-10-23), một chế độ thị trường, rổ VN30 cố định theo cấu thành 2026 (thiên lệch người sống sót), danh mục chỉ giữ 2–4 mã (`top_k_in=2`, `top_k_out=4`).
 
-All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23, SHA256: `90b6e1df855a9b70b4cbaad4f145be8d204a0a5b828a2a0ebda231c6181f7d98`) via `scripts/compare_backtest_b6_b11.py` at commit `84eef67` (Cấu hình: 947 phiên, vốn khởi tạo 1.0 tỷ VND, phí môi giới 0.15%, thuế bán 0.10%, lãi vay ứng trước 0.035%/ngày, sàn phí ứng 50.000 VND, trần thanh khoản `max_adv_participation = 0.03`, tỷ lệ phạt thanh lý `penalty_rate_per_day = 0.01`).
+All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23, SHA256: `8a3bd271d5fab5750d427712c0ba5715fdc9a9f638f1195661cc5e18996eb0cb`) via `scripts/compare_backtest_b6_b11.py` at commit `d809b95` (Cấu hình: 947 phiên, vốn khởi tạo 1.0 tỷ VND, phí môi giới 0.15%, thuế bán 0.10%, lãi vay ứng trước 0.035%/ngày, sàn phí ứng 50.000 VND, trần thanh khoản `max_adv_participation = 0.03`, tỷ lệ phạt thanh lý `penalty_rate_per_day = 0.01`). Toàn bộ con số được tái lập và kiểm định trên môi trường chuẩn `requirements.txt` (`numpy==1.26.4`, `numba==0.59.1`).
 
-> [!NOTE] Phân Biệt Nguồn Gốc Số Liệu: Test 4 (`run_verification.py`) vs. Bảng 5.1 (`compare_backtest_b6_b11.py`)
-> - **Test 4 trong `run_verification.py` (+94.57% Return, NAV 1,945,702,272 VND):** Script kiểm thử tự động độc lập, loại bỏ 50 phiên đầu làm warmup (`warmup = 50`, $T = 897$ phiên từ ~tháng 3/2023 đến 10/2026), trần thanh khoản `max_adv_participation = 0.05` (5% ADV), và sử dụng tín hiệu textbook placeholder (SMA-40/50 breakout).
-> - **Bảng 5.1 (`scripts/compare_backtest_b6_b11.py`, +89.10% Return, NAV 1,890,953,104 VND):** Đánh giá toàn diện trên toàn bộ $T = 947$ phiên lịch sử (bắt đầu từ $t=0$), trần thanh khoản khắt khe hơn `max_adv_participation = 0.03` (3% ADV), và sử dụng nhân tố đảo chiều ngắn hạn thực tế `Alpha_Rev10 = -ts_rank(ts_delta(close, 10), 10)`.
+> [!NOTE] Phân Biệt Cấu Hình Thực Nghiệm: Test 4 (`run_verification.py`) vs. Bảng 5.1 (`compare_backtest_b6_b11.py`)
+> Cả Bảng 5.1 (`compare_backtest_b6_b11.py`) và `run_verification.py` đều sử dụng cùng tín hiệu gốc **Alpha 1: Breakout Z-Score SMA-40/50** (`_default_textbook_placeholder_signal` / `generate_five_alphas[0]`), nhưng khác biệt ở các tham số vi cấu trúc:
+> - **Test 4 trong `run_verification.py` (+94.57% Return, NAV 1,945,702,272 VND):** Cắt bỏ `warmup = 50` phiên đầu ($T = 897$ phiên vs 947 phiên); truyền `dates` (tính lãi ứng trước theo ngày lịch thực tế T6=3/4 ngày); dùng trượt giá cố định `0.10%` với trần thanh khoản `max_adv_participation = 0.05` (5% ADV).
+> - **Bảng 5.1 (`scripts/compare_backtest_b6_b11.py`, +89.10% Return, NAV 1,890,953,104 VND):** Chạy trên toàn bộ $T = 947$ phiên; dùng mô hình trượt giá động 3 tầng LOB (`_calc_dynamic_slippage`, sàn 12 bps) với trần thanh khoản khắt khe `max_adv_participation = 0.03` (3% ADV).
 
 ### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
 
@@ -184,7 +185,7 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 | **Cumulative IS (% Capital)** | **+20.90%** | **+19.99%** | N/A | +25.76% | +19.12% | $(\text{NAV}_{\text{Naive}} - \text{NAV}_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 19.99%–20.90% of initial capital. |
 | **Annualized IS (%/yr)** | **+3.35%/yr** | **+3.69%/yr** | N/A | +3.72%/yr | +3.60%/yr | $\text{CAGR}_{\text{Naive}} - \text{CAGR}_{\text{Real}}$: Market frictions impose an annual drag of 3.35%–3.69%/year. |
 | **Total Fees & Transfer Taxes** | **79.5M VND** | **75.5M VND** | 30.0M VND | 85.7M VND | 74.8M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
-| **Advance Borrowing Interest** | **21.4M VND** | **17.4M VND** | 0.3M VND | 28.4M VND | 16.9M VND | 94.3%–95.2% of advance borrowing costs stem from the 50,000 VND floor fee on small lots. |
+| **Advance Borrowing Interest** | **21.4M VND** | **17.4M VND** | 0.3M VND | 28.4M VND | 16.9M VND | 100% of advance borrowing costs stem from the 50,000 VND floor fee on small lots (428 times for Single, 348 times for Multi). |
 
 > [!NOTE] Methodological Notes on Table 5.1
 > - **Implementation Shortfall (IS):** IS đo bằng hiệu NAV Naive − Real sau khi căn chuẩn timing tại `raw_open` (Phase 2), loại bỏ hoàn toàn sai lệch tính toán thời điểm và chỉ phản ánh ma sát thị trường thực tế (phí, thuế, trượt giá, lãi vay ứng trước).
@@ -206,14 +207,14 @@ By configuring `min_advance_notional = 71,428,571 VND`, the engine completely by
 #### Single-Alpha Cash Sweep Comparison:
 | Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Naive Greedy Sweep (Baseline)** | 21,400,000 | ~0.62% / order (Floor penalty) | +89.10% | 506 times (94.3% fee) | 1,890,953,104 |
+| **Naive Greedy Sweep (Baseline)** | 21,400,000 | ~0.62% / order (Floor penalty) | +89.10% | 428 times | 1,890,953,104 |
 | **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+91.80% (+2.70%)** | **0 times** | **1,918,036,246** |
 | **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +91.80% (+2.70%) | 0 times | 1,918,036,246 |
 
 #### Multi-Alpha Cash Sweep Comparison:
 | Configuration | Advance Fees Paid (VND) | Effective Advance Rate | Cumulative Return | 50k Floor Fee Incurred | Final Real NAV (VND) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Naive Greedy Sweep (Baseline)** | 17,400,000 | ~0.62% / order (Floor penalty) | +54.96% | 376 times (95.2% fee) | 1,549,617,660 |
+| **Naive Greedy Sweep (Baseline)** | 17,400,000 | ~0.62% / order (Floor penalty) | +54.96% | 348 times | 1,549,617,660 |
 | **Smart Cash Sweep (`min = 71.4M`)** | **0** | **0.00% (Zero borrowing)** | **+56.92% (+1.96%)** | **0 times** | **1,569,195,878** |
 | **No Advance Sweep (T+2 Closed)** | 0 | 0.00% | +56.92% (+1.96%) | 0 times | 1,569,195,878 |
 
@@ -273,7 +274,7 @@ df = fetch_vn_ohlcv(
 #### 2. Nguồn gốc tín hiệu Alpha trong các bảng thực nghiệm
 - Toàn bộ kết quả trong Bảng 5.1, 5.2, 5.3 được sinh ra hoàn toàn nội sinh bằng mã nguồn công khai, không sử dụng `private_alphas/`.
 - **Single-Alpha (`w_single`):** Sử dụng Alpha 1 (Breakout Z-Score SMA-40/50) từ hàm `generate_five_alphas` (`engine/ml_alpha_combiner.py`), kết hợp bộ làm mượt vòng quay `dampen_turnover`.
-- **Multi-Alpha (`w_multi`):** Kết hợp 5 nhân tố kỹ thuật cơ bản sau khi trực giao hóa Löwdin bằng bộ Purged Walk-Forward Combiner (`window=120`, `embargo=3`).
+- **Multi-Alpha (`w_multi`):** Kết hợp 5 nhân tố kỹ thuật cơ bản sau khi trực giao hóa Gram-Schmidt QR (`check_and_orthogonalize`) bằng bộ Purged Walk-Forward Combiner (`window=120`, `embargo=3`).
 
 #### 3. Các lệnh thực thi kiểm thử và đối soát
 ```bash
@@ -283,7 +284,7 @@ python scripts/compare_backtest_b6_b11.py
 # Chạy toàn bộ bộ thí nghiệm kiểm toán Argon 4 (sinh Bảng 5.2, 5.3):
 python scripts/audit_argon_revisions.py
 
-# Chạy toàn bộ bộ kiểm thử tự động (47 unit tests):
+# Chạy toàn bộ bộ kiểm thử tự động (56 unit tests):
 python -m pytest tests/ -v
 ```
 

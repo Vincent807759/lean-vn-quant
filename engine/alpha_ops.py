@@ -896,7 +896,8 @@ def apply_pit_universe_mask(
             lf_mem,
             left_on=ticker_col,
             right_on=mem_ticker_col,
-            how="left"
+            how="left",
+            coalesce=True
         )
         .with_columns(
             (
