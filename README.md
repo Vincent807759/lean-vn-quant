@@ -161,13 +161,17 @@ python run_verification.py
 > [!WARNING] Methodological & Statistical Disclaimer
 > Các bảng dưới đây kiểm tra engine và mô hình hóa ma sát vi cấu trúc; **không chứng minh có alpha thực tế có ý nghĩa thống kê**. Mẫu thử nghiệm: ~3.7 năm (947 phiên giao dịch từ 2023-01-03 đến 2026-10-23), một chế độ thị trường, rổ VN30 cố định theo cấu thành 2026 (thiên lệch người sống sót), danh mục chỉ giữ 2–4 mã (`top_k_in=2`, `top_k_out=4`).
 
-All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23, SHA256: `90b6e1df855a9b70b4cbaad4f145be8d204a0a5b828a2a0ebda231c6181f7d98`) via `scripts/compare_backtest_b6_b11.py` and `scripts/audit_argon_revisions.py`.
+All empirical metrics below are evaluated directly on the complete 947-session historical dataset of the HOSE VN30 basket (`data/vn30_production.parquet`, 2023-01-03 to 2026-10-23, SHA256: `90b6e1df855a9b70b4cbaad4f145be8d204a0a5b828a2a0ebda231c6181f7d98`) via `scripts/compare_backtest_b6_b11.py` at commit `84eef67` (Cấu hình: 947 phiên, vốn khởi tạo 1.0 tỷ VND, phí môi giới 0.15%, thuế bán 0.10%, lãi vay ứng trước 0.035%/ngày, sàn phí ứng 50.000 VND, trần thanh khoản `max_adv_participation = 0.03`, tỷ lệ phạt thanh lý `penalty_rate_per_day = 0.01`).
+
+> [!NOTE] Phân Biệt Nguồn Gốc Số Liệu: Test 4 (`run_verification.py`) vs. Bảng 5.1 (`compare_backtest_b6_b11.py`)
+> - **Test 4 trong `run_verification.py` (+94.57% Return, NAV 1,945,702,272 VND):** Script kiểm thử tự động độc lập, loại bỏ 50 phiên đầu làm warmup (`warmup = 50`, $T = 897$ phiên từ ~tháng 3/2023 đến 10/2026), trần thanh khoản `max_adv_participation = 0.05` (5% ADV), và sử dụng tín hiệu textbook placeholder (SMA-40/50 breakout).
+> - **Bảng 5.1 (`scripts/compare_backtest_b6_b11.py`, +89.10% Return, NAV 1,890,953,104 VND):** Đánh giá toàn diện trên toàn bộ $T = 947$ phiên lịch sử (bắt đầu từ $t=0$), trần thanh khoản khắt khe hơn `max_adv_participation = 0.03` (3% ADV), và sử dụng nhân tố đảo chiều ngắn hạn thực tế `Alpha_Rev10 = -ts_rank(ts_delta(close, 10), 10)`.
 
 ### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
 
 | Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 Equal-Weight Rebalanced) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Final Real NAV (VND)** | **1,890,953,104** | **1,549,617,660** | 1,611,194,562 | 2,170,022,784 | 1,509,694,826 | Initial capital 1.0B VND. Multi-Alpha achieves an annualized Sharpe of 0.51 compared to 0.59 for the daily rebalanced VN30 benchmark, with higher maximum drawdown (20.47% vs 17.78%). Single-Alpha Sharpe is 0.78 with a Newey-West standard error of ±0.54, overlapping with the benchmark confidence interval (0.59 ± 0.54). |
+| **Final Real NAV (VND)** | **1,890,953,104** | **1,549,617,660** | 1,611,194,562 | 2,170,022,784 | 1,509,694,826 | Initial capital 1.0B VND. Multi-Alpha thua benchmark VN30 ở cả 4 chỉ số: Lợi nhuận (+54.96% vs +61.12%), CAGR (12.36% vs 13.53%), Sharpe (0.51 vs 0.59), và MaxDD (20.47% vs 17.78%). Single-Alpha Sharpe đạt 0.78 với sai số chuẩn Newey-West ±0.54, nằm trong khoảng sai số thống kê so với benchmark (0.59 ± 0.54). |
 | **Final Naive NAV (VND)** | **2,099,956,386** | **1,749,468,790** | N/A | 2,427,596,953 | 1,700,938,104 | Theoretical frictionless T+0 baseline (timing aligned at raw_open, zero fees, zero taxes, zero slippage). |
 | **Cumulative Return** | **+89.10%** | **+54.96%** | +61.12% | +117.00% | +50.97% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, and 3-tier LOB sweep impact. |
 | **Realized CAGR (%/yr)** | **18.47%** | **12.36%** | 13.53% | 22.90% | 11.58% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR adjusted to 12.36% post-fix. |
@@ -176,7 +180,7 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 | **Sortino Ratio** | **0.99** | **0.64** | 0.70 | 1.24 | 0.59 | Downside risk-adjusted return ratio. |
 | **Annualized Volatility** | **19.06%** | **18.55%** | 17.28% | 19.12% | 18.55% | Realized strategy annualized volatility is well-controlled under 20%. |
 | **Maximum Drawdown (MaxDD)** | **17.93%** | **20.47%** | 17.78% | 17.75% | 21.77% | Single-Alpha MaxDD is 17.93% (comparable to benchmark 17.78%); Multi-Alpha MaxDD is 20.47%. |
-| **Daily Turnover (4 decimals)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Strictly bound by rank hysteresis dampener `max_turnover_target = 0.015`. |
+| **Daily Turnover (Trọng số Mục tiêu)** | **1.4752%** | **1.4752%** | 0.1045% | 1.4767% | 1.4767% | Trọng số mục tiêu (Target weights turnover): 1.4752%/ngày (bị chặn bởi dampener `max_turnover_target = 0.015`). Turnover thực tế khớp lệnh từ sổ cái (Realized ledger turnover): Single 1.5144%/ngày, Multi 1.6077%/ngày. |
 | **Cumulative IS (% Capital)** | **+20.90%** | **+19.99%** | N/A | +25.76% | +19.12% | $(\text{NAV}_{\text{Naive}} - \text{NAV}_{\text{Real}})/1\text{e}9$: Microstructure frictions consume 19.99%–20.90% of initial capital. |
 | **Annualized IS (%/yr)** | **+3.35%/yr** | **+3.69%/yr** | N/A | +3.72%/yr | +3.60%/yr | $\text{CAGR}_{\text{Naive}} - \text{CAGR}_{\text{Real}}$: Market frictions impose an annual drag of 3.35%–3.69%/year. |
 | **Total Fees & Transfer Taxes** | **79.5M VND** | **75.5M VND** | 30.0M VND | 85.7M VND | 74.8M VND | Independent accounting of 0.15% brokerage commission and 0.10% gross sales tax. |
@@ -217,6 +221,8 @@ By configuring `min_advance_notional = 71,428,571 VND`, the engine completely by
 
 ### 5.3. 3-Mode Deflated Sharpe Ratio (DSR) Analysis (Bailey & López de Prado, 2014)
 
+*(Chưa tái sinh ở commit 84eef67; số liệu giữ nguyên từ đợt kiểm toán baseline. Script sinh: `scripts/audit_argon_revisions.py`)*
+
 To mitigate data mining selection bias across multiple trial evaluations, Lean VN-Quant logs all exploration runs to `experiments/trial_registry.jsonl` and evaluates the strategy under three rigorous DSR formulations:
 
 | Evaluation Mode | Description | $N$ | $N_{\text{eff}}$ | Avg Cross-Corr $\bar{\rho}$ | Null Threshold $\text{SR}_0$ | Single DSR ($p$-value) | Multi DSR ($p$-value) |
@@ -228,6 +234,8 @@ To mitigate data mining selection bias across multiple trial evaluations, Lean V
 ---
 
 ### 5.4. Pillar 2 (VN-FinGraph Knowledge Graph) Ablation Study (6-Factor Blend)
+
+*(Chưa tái sinh ở commit 84eef67; số liệu nghiên cứu lý thuyết từ đợt kiểm toán baseline. Cần module riêng `fin_corpus_pipeline` và `knowledge_graph_engine` chưa công khai)*
 
 By coupling unstructured financial news/event contagion matrices from Trụ cột 2 (`vn-fingraph`) into the Trụ cột 1 quantitative execution engine via Parquet bridge, we evaluate the impact of Graph Laplacian risk diffusion $\alpha \in \{0.15, 0.25, 0.50, 0.70\}$:
 

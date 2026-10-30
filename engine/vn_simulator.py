@@ -710,15 +710,17 @@ def _simulate_vn_microstructure_core(
                         cost_per_share = exec_price * (1.0 + broker_fee)
                         actual_needed = qty_buy * cost_per_share
                         b_fee = qty_buy * exec_price * broker_fee
-                        cum_broker_fees += b_fee
-                        daily_turnover_traded += qty_buy * p_open
                         
                         if actual_needed <= cash_avail:
                             cash_avail -= actual_needed
+                            cum_broker_fees += b_fee
+                            daily_turnover_traded += qty_buy * p_open
                         else:
                             shortfall = actual_needed - cash_avail
                             if min_advance_notional > 0.0 and shortfall < min_advance_notional:
                                 continue
+                            cum_broker_fees += b_fee
+                            daily_turnover_traded += qty_buy * p_open
                             cash_avail = 0.0
                             
                             take_t1 = min(shortfall, cap_t1)
