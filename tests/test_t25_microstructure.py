@@ -324,3 +324,97 @@ def test_cash_dividend_5pct_pit_tax():
     assert np.isclose(res["dividend_cash_receivable"][3], expected_net_div), (
         f"Expected net dividend {expected_net_div:,.0f}, got {res['dividend_cash_receivable'][3]:,.0f}"
     )
+
+
+
+def test_strict_t25_ato_lock_earliest_sell_day():
+    """
+    Cover earliest-sell day under default T+2.5 vs strict T+2.5 ATO lock:
+    Scenario:
+    - 1 ticker, T=9
+    - Open/Close price increases 10%/day from t=2 onwards.
+    - Buy at t=2 (w[2, 0] = 1.0), then target weight drops to 0 for all t >= 3.
+    - Zero friction: broker_fee=0, slippage=0, sell_tax=0, half_spread_floor=0.
+    
+    Daily Trace Table (equity[t] / equity[t-1]):
+    | t | Price | Target W | Default Lock (1.1 = held, 1.0 = sold) | Strict Lock (1.1 = held, 1.0 = sold) |
+    |---|-------|----------|----------------------------------------|--------------------------------------|
+    | 0 | 50,000| 0.0      | 1.0000 (Cash 100%)                     | 1.0000 (Cash 100%)                   |
+    | 1 | 50,000| 0.0      | 1.0000 (Cash 100%)                     | 1.0000 (Cash 100%)                   |
+    | 2 | 55,000| 1.0      | 1.1000 (Buy matched at Open, holds)   | 1.1000 (Buy matched at Open, holds)  |
+    | 3 | 60,500| 0.0      | 1.1000 (T+1 locked, cannot sell)       | 1.1000 (T+1 locked, cannot sell)     |
+    | 4 | 66,550| 0.0      | 1.0000 (T+2 ATO unlocked, SOLD at Open)| 1.1000 (T+2 ATO locked, still holds) |
+    | 5 | 73,205| 0.0      | 1.0000 (Cash 100%, already sold)       | 1.0000 (T+3 ATO unlocked, SOLD Open) |
+    | 6 | 80,525| 0.0      | 1.0000 (Cash 100%)                     | 1.0000 (Cash 100%)                   |
+    | 7 | 88,578| 0.0      | 1.0000 (Cash 100%)                     | 1.0000 (Cash 100%)                   |
+    | 8 | 97,436| 0.0      | 1.0000 (Cash 100%)                     | 1.0000 (Cash 100%)                   |
+    
+    Assertion:
+    - Default lock (strict_t25_ato_lock=False): Earliest day ratio equals 1.0 is t=4.
+    - Strict lock (strict_t25_ato_lock=True): Earliest day ratio equals 1.0 is t=5.
+    """
+    T, N = 9, 1
+    op = np.zeros(T)
+    cl = np.zeros(T)
+    p = 50000.0
+    for t in range(T):
+        op[t] = p
+        cl[t] = op[t] * (1.1 if t >= 2 else 1.0)
+        p = cl[t]
+        
+    w = np.zeros((T, 1))
+    w[2, 0] = 1.0
+    big = 1e15
+    
+    # 1. Default lock: sellable at T+2 ATO (t=4)
+    r_def = sim.simulate_vietnam(
+        raw_open=op.reshape(T, 1),
+        raw_close=cl.reshape(T, 1),
+        ceiling=np.full((T, 1), big),
+        floor=np.zeros((T, 1)),
+        adv20_shares=np.full((T, 1), big),
+        target_weights=w,
+        initial_cash=1e12,
+        broker_fee=0.0,
+        slippage=0.0,
+        sell_tax=0.0,
+        min_advance_fee=0.0,
+        max_adv_participation=1.0,
+        daily_vol=np.zeros((T, 1)),
+        half_spread_floor=0.0,
+        strict_t25_ato_lock=False
+    )
+    eq_def = r_def["equity"]
+    ratios_def = {t: round(float(eq_def[t] / eq_def[t-1]), 4) for t in range(1, T)}
+    earliest_1_def = min(t for t in range(1, T) if ratios_def[t] == 1.0 and t >= 3)
+    assert earliest_1_def == 4, f"Expected earliest sell day t=4 for default, got t={earliest_1_def}"
+    assert ratios_def[2] == 1.1
+    assert ratios_def[3] == 1.1
+    assert ratios_def[4] == 1.0
+    
+    # 2. Strict lock: sellable at T+3 ATO (t=5)
+    r_str = sim.simulate_vietnam(
+        raw_open=op.reshape(T, 1),
+        raw_close=cl.reshape(T, 1),
+        ceiling=np.full((T, 1), big),
+        floor=np.zeros((T, 1)),
+        adv20_shares=np.full((T, 1), big),
+        target_weights=w,
+        initial_cash=1e12,
+        broker_fee=0.0,
+        slippage=0.0,
+        sell_tax=0.0,
+        min_advance_fee=0.0,
+        max_adv_participation=1.0,
+        daily_vol=np.zeros((T, 1)),
+        half_spread_floor=0.0,
+        strict_t25_ato_lock=True
+    )
+    eq_str = r_str["equity"]
+    ratios_str = {t: round(float(eq_str[t] / eq_str[t-1]), 4) for t in range(1, T)}
+    earliest_1_str = min(t for t in range(1, T) if ratios_str[t] == 1.0 and t >= 3)
+    assert earliest_1_str == 5, f"Expected earliest sell day t=5 for strict, got t={earliest_1_str}"
+    assert ratios_str[2] == 1.1
+    assert ratios_str[3] == 1.1
+    assert ratios_str[4] == 1.1
+    assert ratios_str[5] == 1.0
