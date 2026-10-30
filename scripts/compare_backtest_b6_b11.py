@@ -4,6 +4,7 @@ import sys
 
 parser = argparse.ArgumentParser(description="Compare backtest performance pre vs post B6-B11")
 parser.add_argument("--strict-t25-ato-lock", action="store_true", default=False, help="Enforce strict T+2.5 lock blocking ATO sell on T+2 (unlock at T+3 ATO)")
+parser.add_argument("--warmup", type=int, default=0, help="Initial warmup sessions where weights are zeroed out (default 0)")
 args, _ = parser.parse_known_args()
 strict_lock = args.strict_t25_ato_lock
 
@@ -51,6 +52,13 @@ w_multi = ops.dampen_turnover(composite_ranked, 2, 4, 20, 0.015, tradable_mask, 
 # Benchmark VN30 Equal-Weight
 w_bm = np.where(tradable_mask, 1.0, 0.0)
 w_bm = w_bm / np.maximum(np.sum(w_bm, axis=1, keepdims=True), 1e-6)
+
+# Warmup zeroing: when warmup N > 0, suppress initial positions across strategies and benchmark
+# for rigorous like-for-like comparison during alpha signal burn-in.
+if args.warmup > 0:
+    w_single[:args.warmup] = 0.0
+    w_multi[:args.warmup] = 0.0
+    w_bm[:args.warmup] = 0.0
 w_bm_exec = np.zeros_like(w_bm); w_bm_exec[1:] = w_bm[:-1]
 res_bm = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_bm_exec, dates=dates, penalty_rate_per_day=0.0, strict_t25_ato_lock=strict_lock)
 m_bm = sim.evaluate_strategy(res_bm["equity"], w_bm_exec)
