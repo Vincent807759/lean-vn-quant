@@ -6,6 +6,7 @@ parser = argparse.ArgumentParser(description="Compare backtest performance pre v
 parser.add_argument("--strict-t25-ato-lock", action="store_true", default=False, help="Enforce strict T+2.5 lock blocking ATO sell on T+2 (unlock at T+3 ATO)")
 parser.add_argument("--warmup", type=int, default=0, help="Initial warmup sessions where weights are zeroed out (default 0)")
 parser.add_argument("--exclude-filtered", action="store_true", default=False, help="Disqualify trend-filtered stocks (<= -900.0) from allocation")
+parser.add_argument("--rank-ic-ties", type=str, default="ordinal", choices=["ordinal", "average"], help="Method for handling ties in rank IC calculation (default 'ordinal')")
 args, _ = parser.parse_known_args()
 strict_lock = args.strict_t25_ato_lock
 
@@ -44,7 +45,7 @@ years = T / 252.0
 # Generate factors & purged walk-forward combiner
 raw_alphas, factor_names = generate_five_alphas(raw_open, raw_high, raw_low, raw_close, volume, tradable_mask)
 ortho_alphas, raw_corr, ortho_corr = orthogonalize_factor_library(raw_alphas, factor_names, tradable_mask)
-composite_alpha, _ = purged_walk_forward_combiner(ortho_alphas, raw_close, tradable_mask, window=120, embargo=3)
+composite_alpha, _ = purged_walk_forward_combiner(ortho_alphas, raw_close, tradable_mask, window=120, embargo=3, rank_ic_ties=args.rank_ic_ties)
 composite_ranked = ops.rank(composite_alpha, mask=tradable_mask)
 
 inv_below = -900.0 if args.exclude_filtered else None
