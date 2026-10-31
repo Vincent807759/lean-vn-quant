@@ -168,6 +168,13 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 > - **Test 4 in `run_verification.py` (+94.57% Return, NAV 1,945,702,272 VND):** Discards the first `warmup = 50` sessions ($T = 897$ sessions vs 947 sessions); passes `dates` (calculating advance borrowing interest based on actual calendar days across weekends and holidays); uses fixed slippage of `0.10%` with participation cap `max_adv_participation = 0.05` (5% ADV).
 > - **Table 5.1 (`scripts/compare_backtest_b6_b11.py`, +105.79% Return, NAV 2,057,898,443 VND):** Evaluates across the entire $T = 947$ sessions; uses dynamic square-root volume impact slippage (`_calc_dynamic_slippage`, 12 bps floor) with strict participation cap `max_adv_participation = 0.03` (3% ADV), standard T+2.5 / T+3 ATO settlement lock, and 5% PIT cash dividend tax.
 
+> [!NOTE] Reading Guide (Descriptive Summary)
+> - **In-sample single regime:** All reported figures reflect an in-sample backtest over a single ~3.7-year regime (947 sessions, 2023-01-03 to 2026-10-23) on fixed 2026 VN30 constituents (survivorship bias; Table 5.1).
+> - **Early-2023 tie-breaking dependence:** Single-Alpha ADV20 NAV depends heavily on the tie-breaking convention applied during the early-2023 SMA-50 burn-in ($t < 49$) and recovery ($49 \le t < 123$), where +102.4M VND of the +100.7M VND net ADV20-vs-column spread originates (Table 5.1, Section 5.1d).
+> - **Post-warmup spread compression ($W=123$):** Relative to the VN30 benchmark, strategy NAV ratios shrink when excluding the 123-session walk-forward warmup window, from 1.277x to 1.187x for Single Default (ADV20) and from 1.100x to 1.030x for Multi Default (ADV20; Table 5.1f).
+> - **Active Sharpe uncertainty interval:** Across all tested configurations at both $W=0$ and $W=123$, the Newey-West HAC $\pm 2\text{ SE}$ confidence interval for annualized active Sharpe contains 0 (Table 5.1f).
+> - **Multi-Alpha unlocked column order sensitivity:** When run without an explicit tie-breaking key, Multi-Alpha exhibits sensitivity to DataFrame column ordering (sample standard deviation 97.6M VND / 5.52% across 50 random permutations; Table 5.1b, Section 5.1e).
+
 ### 5.1. 947-Session Realistic vs. Naive Simulation (Pre vs. Post B6–B11 & Benchmark VN30)
 
 | Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 Equal-Weight Rebalanced) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
