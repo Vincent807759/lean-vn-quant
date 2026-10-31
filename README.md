@@ -364,7 +364,7 @@ python scripts/compare_backtest_b6_b11.py
 # Execute Argon 4 statistical verification experiment suite (generates Tables 5.2 & 5.3):
 python scripts/audit_argon_revisions.py
 
-# Run automated unit test suite (65 unit tests):
+# Run automated unit test suite (70 unit tests):
 python -m pytest tests/ -v
 
 # Run comprehensive 8-stage verification test runner:
