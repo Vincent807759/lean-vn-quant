@@ -223,7 +223,7 @@ To resolve whether the +5.15% (Single) and +4.18% (Multi) performance advantage 
 
 #### 2. Annual Return Decomposition: ADV20 (b) vs. Column Index (a) ($W=0$):
 | Calendar Year | Single (a) Col | Single (b) ADV20 | Delta (b - a) | Multi (a) Col | Multi (b) ADV20 | Delta (b - a) | Macroeconomic Context & Regime Analysis |
-| :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | **2023** | +3.15% | +9.48% | **+6.32%** | +1.30% | +7.69% | **+6.39%** | **100% of outperformance was generated in 2023.** Sizable steel (HPG) and private banking (STB) rally favored liquidity key. |
 | **2024** | +15.17% | +14.84% | **-0.33%** | +11.24% | +9.14% | **-2.10%** | ADV20 underperformed column index by -0.33% (Single) and -2.10% (Multi). |
 | **2025** | +81.26% | +81.06% | **-0.20%** | +57.98% | +57.78% | **-0.20%** | Negligible difference across bull market expansion (-0.20%). |
