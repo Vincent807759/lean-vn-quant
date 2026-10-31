@@ -215,11 +215,11 @@ To resolve whether the +5.15% (Single) and +4.18% (Multi) performance advantage 
 | **W=0** | **(a) Column Index (No key)** | 1,957,198,248 | 0.81 ± 0.53 | 1,700,542,002 | 0.64 ± 0.54 | Canonical array order. Arbitrarily favors lower alphabetical tickers (ACB, BID). |
 | **W=0** | **(b) ADV20 Descending (Standard)** | **2,057,898,443** | **0.85 ± 0.53** | **1,771,706,428** | **0.68 ± 0.53** | Deterministic liquidity tie-breaker (favors HPG, STB). Outperforms reversed key (c) by +8.63% / +7.30%. |
 | **W=0** | **(c) ADV20 Ascending (Reversed)** | 1,894,422,845 | 0.78 ± 0.54 | 1,651,174,595 | 0.60 ± 0.55 | Inverted liquidity tie-breaker (favors least liquid names). Significantly underperforms (b). |
-| **W=0** | **(d) 50 Permutations (Neutral Mean)** | 1,950,270,559 ± 129,053,861 | [1.68B .. 2.17B] | 1,640,964,458 ± 120,200,034 | [1.32B .. 1.81B] | Neutral expected value across 50 random column orderings without key (ddof=1). |
+| **W=0** | **(d) 50 Permutations (Neutral Mean)** | 1,950,270,559 ± 129,053,861 | n/a | 1,640,964,458 ± 120,200,034 | n/a | Neutral expected value across 50 random column orderings without key (ddof=1). Single range: [1.68B .. 2.17B]; Multi range: [1.32B .. 1.81B]. |
 | **W=50** | **(a) Column Index (No key)** | 1,965,474,323 | 0.84 ± 0.54 | 1,716,929,610 | 0.67 ± 0.55 | 50 burn-in sessions flattened. |
 | **W=50** | **(b) ADV20 Descending (Standard)** | **2,135,972,230** | **0.95 ± 0.55** | **1,837,544,764** | **0.76 ± 0.55** | Peak performance when liquidity tie-breaker is combined with flat warmup. |
 | **W=50** | **(c) ADV20 Ascending (Reversed)** | 1,954,912,722 | 0.83 ± 0.55 | 1,707,714,950 | 0.67 ± 0.55 | Inverted liquidity tie-breaker under warmup. |
-| **W=50** | **(d) 50 Permutations (Neutral Mean)** | 2,034,343,893 ± 124,521,090 | [1.82B .. 2.28B] | 1,711,757,498 ± 112,226,861 | [1.45B .. 1.93B] | Neutral expected value under warmup (ddof=1). |
+| **W=50** | **(d) 50 Permutations (Neutral Mean)** | 2,034,343,893 ± 124,521,090 | n/a | 1,711,757,498 ± 112,226,861 | n/a | Neutral expected value under warmup (ddof=1). Single range: [1.82B .. 2.28B]; Multi range: [1.45B .. 1.93B]. |
 
 #### 2. Annual Return Decomposition: ADV20 (b) vs. Column Index (a) ($W=0$):
 | Calendar Year | Single (a) Col | Single (b) ADV20 | Delta (b - a) | Multi (a) Col | Multi (b) ADV20 | Delta (b - a) | Macroeconomic Context & Regime Analysis |
