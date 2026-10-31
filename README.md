@@ -230,8 +230,8 @@ To resolve whether the +5.15% (Single) and +4.18% (Multi) performance advantage 
 | **2026 (to Oct 23)** | -9.11% | -9.60% | **-0.49%** | -4.48% | -4.47% | **+0.01%** | Negligible difference across sideways market correction (-0.49% to +0.01%). |
 
 #### 3. Asset Allocation Bias (Mean Portfolio Weight Delta: $\bar{w}_b - \bar{w}_a$):
-- **Favored by ADV20 Key (b):** `HPG` (+5.24 điểm % Single, +5.03 điểm % Multi) and `STB` (+4.68 điểm % Single, +4.75 điểm % Multi).
-- **Favored by Column Index (a):** `ACB` (-5.95 điểm % Single, -5.22 điểm % Multi) and `BID` (-4.67 điểm % Single, -5.23 điểm % Multi).
+- **Favored by ADV20 Key (b):** `HPG` (+5.24 percentage points Single, +5.03 percentage points Multi) and `STB` (+4.68 percentage points Single, +4.75 percentage points Multi).
+- **Favored by Column Index (a):** `ACB` (-5.95 percentage points Single, -5.22 percentage points Multi) and `BID` (-4.67 percentage points Single, -5.23 percentage points Multi).
 - **Conclusion:** Strict ordering $(b) > (d) > (c)$ confirms that the advantage stems from an in-sample **liquidity tilt** (allocating to high-beta liquid leaders HPG/STB rather than defensive state banks ACB/BID during early 2023). Because this tilt was chosen based on execution tractability rather than an ex-ante economic forecast, **it must not be interpreted as proprietary alpha skill**.
 
 ### 5.1e. Tie Sanitization & Noise Neutralization Analysis
