@@ -172,7 +172,7 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 
 | Metric | Single-Alpha (Post B6-B11) | Multi-Alpha (Post B6-B11) | Benchmark (VN30 Equal-Weight Rebalanced) | Single-Alpha (Pre-Fix) | Multi-Alpha (Pre-Fix) | Microstructure & Economic Interpretation |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Final Real NAV (VND)** | **2,057,898,443** | **1,771,706,428** | 1,611,194,562 | 2,308,250,300 | 1,646,312,288 | Initial capital 1.0B VND. Single-Alpha Sharpe reaches 0.85 with Newey-West standard error ±0.53 vs benchmark (0.59 ± 0.54); Multi-Alpha Sharpe is 0.68 (±0.53). Both strategies' Sharpe improvements fall within the Newey-West standard error margin (±0.53 vs ±0.54), indicating no statistically significant outperformance over the VN30 benchmark after accounting for sampling uncertainty. |
+| **Final Real NAV (VND)** | **2,057,898,443** (ADV20)<br>*1,950,270,559 ± 129,053,861 (Neutral Perm)* | **1,771,706,428** (ADV20)<br>*1,640,964,458 ± 120,200,034 (Neutral Perm)* | 1,611,194,562 | 2,308,250,300 | 1,646,312,288 | Initial capital 1.0B VND. Reported as: Deterministic ADV20 tie-break run / Neutral 50-permutation mean ± sample std (ddof=1). Single-Alpha Sharpe is 0.85 (NW SE ±0.53) vs benchmark (0.59 ± 0.54); Multi-Alpha Sharpe is 0.68 (±0.53). Both Sharpe improvements fall within the Newey-West standard error margin (±0.53 vs ±0.54), indicating no statistically significant outperformance over the VN30 benchmark after accounting for sampling uncertainty. |
 | **Final Naive NAV (VND)** | **2,303,698,451** | **2,006,355,122** | N/A | 2,592,210,561 | 1,869,549,812 | Theoretical frictionless T+0 baseline (timing aligned at raw_open, zero fees, zero taxes, zero slippage). |
 | **Cumulative Return** | **+105.79%** | **+77.17%** | +61.12% | +130.83% | +64.63% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, 5% cash dividend PIT tax, and dynamic square-root volume impact (_calc_dynamic_slippage, 12 bps floor). |
 | **Realized CAGR (%/yr)** | **21.17%** | **16.44%** | 13.53% | 24.93% | 14.19% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR reaches 16.44% post-fix. |
@@ -205,17 +205,48 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 | **Multi-Alpha (Post B6-B11)** | **1,771,706,428** | **1,837,544,764** | 77.17% vs 83.75% | 16.44% vs 17.57% | 0.68 vs 0.76 | 18.87% vs 18.74% | Suppressing trading lifts Multi NAV by +65.8M VND (+3.72%), mirroring the passive benchmark rise (+4.23%) across the same period. |
 | **Benchmark (VN30 Rebalanced)** | 1,611,194,562 | 1,679,383,483 | 61.12% vs 67.94% | 13.53% vs 14.79% | 0.59 vs 0.67 | 17.78% vs 17.82% | Benchmark weights zeroed for t < 50 for exact peer-to-peer alignment (+4.23% rise confirms market contraction during sessions 0–49). Unflattened benchmark NAV remains 1,611,194,562 VND. |
 
-> [!NOTE] Methodological Notes on Tables 5.1, 5.1b, & 5.1c
-> - **Canonical Column Order Baseline:** The "Final Real NAV" figures in Table 5.1 (Single: 2,057,898,443 VND; Multi: 1,771,706,428 VND) represent the canonical ticker order evaluation. In 50 random column permutations with causal ADV20 tie-breaking, Single-Alpha achieves mean NAV 2,057,649,062 ± 474,639 VND (std 0.023%, pure floating-point summation noise; 100% beat benchmark), and Multi-Alpha achieves mean NAV 1,730,203,905 ± 50,899,142 VND (std 2.94%, min 1.58B, max 1.82B; 96% beat benchmark).
-> - **Column-Order Sensitivity & Deterministic Liquidity Tie-Breaking:** Switching tie-breaking from array column index to causal ADV20 shifts baseline NAV by +5.15% (+100.7M VND) for Single-Alpha and +4.18% (+71.2M VND) for Multi-Alpha. Prior to incorporating `tie_break_key=adv20`, `dampen_turnover` broke ties based on ticker column position, causing Multi Real NAV to swing between 1.31B and 1.81B across 50 column permutations (std = 119.0M VND, 7.25% of mean; underperforming benchmark in 40% of seeds). Adding causal ADV20 tie-breaking ensures that ties are resolved by liquidity rather than arbitrary index order.
-> - **Multi-Factor Residual Permutation Noise (~2.94%):** Stage-by-stage tracing across the Multi-Alpha pipeline reveals that raw factor generation (`raw_alphas`) is 100% permutation-invariant (max|diff| = 0.0). However, during factor orthogonalization (`check_and_orthogonalize`), floating-point non-associativity in summation (`np.mean`, `np.linalg.lstsq`) on permuted rows produces microscopic numerical noise on the order of ~ 10^-17. When two assets have nearly identical orthogonal projections (e.g. HDB and SSB at t=199), this ~ 10^-17 variation can invert relative ranking in `ops.rank` (integer rank shift of ±1), which compounds through the walk-forward Ridge combiner to produce the residual ~2.94% variation across column orderings.
+### 5.1d. Tie-Break Liquidity Tilt Analysis & In-Sample Regime Decomposition
+
+To resolve whether the +5.15% (Single) and +4.18% (Multi) performance advantage of the ADV20 tie-breaking key over arbitrary column indexing represents genuine predictive signal or an in-sample liquidity tilt, we evaluate 4 distinct tie-breaking rules across $W \in \{0, 50\}$:
+
+#### 1. Performance Across 4 Tie-Breaking Configurations (Standardized $ddof=1$):
+| Warmup | Tie-Break Rule | Single Real NAV (VND) | Single Sharpe (±SE) | Multi Real NAV (VND) | Multi Sharpe (±SE) | Structural & Factor Interpretation |
+| :---: | :--- | :---: | :---: | :---: | :---: | :--- |
+| **W=0** | **(a) Column Index (No key)** | 1,957,198,248 | 0.81 ± 0.53 | 1,700,542,002 | 0.64 ± 0.54 | Canonical array order. Arbitrarily favors lower alphabetical tickers (ACB, BID). |
+| **W=0** | **(b) ADV20 Descending (Standard)** | **2,057,898,443** | **0.85 ± 0.53** | **1,771,706,428** | **0.68 ± 0.53** | Deterministic liquidity tie-breaker (favors HPG, STB). Outperforms reversed key (c) by +8.63% / +7.30%. |
+| **W=0** | **(c) ADV20 Ascending (Reversed)** | 1,894,422,845 | 0.78 ± 0.54 | 1,651,174,595 | 0.60 ± 0.55 | Inverted liquidity tie-breaker (favors least liquid names). Significantly underperforms (b). |
+| **W=0** | **(d) 50 Permutations (Neutral Mean)** | 1,950,270,559 ± 129,053,861 | [1.68B .. 2.17B] | 1,640,964,458 ± 120,200,034 | [1.32B .. 1.81B] | Neutral expected value across 50 random column orderings without key (ddof=1). |
+| **W=50** | **(a) Column Index (No key)** | 1,965,474,323 | 0.84 ± 0.54 | 1,716,929,610 | 0.67 ± 0.55 | 50 burn-in sessions flattened. |
+| **W=50** | **(b) ADV20 Descending (Standard)** | **2,135,972,230** | **0.95 ± 0.55** | **1,837,544,764** | **0.76 ± 0.55** | Peak performance when liquidity tie-breaker is combined with flat warmup. |
+| **W=50** | **(c) ADV20 Ascending (Reversed)** | 1,954,912,722 | 0.83 ± 0.55 | 1,707,714,950 | 0.67 ± 0.55 | Inverted liquidity tie-breaker under warmup. |
+| **W=50** | **(d) 50 Permutations (Neutral Mean)** | 2,034,343,893 ± 124,521,090 | [1.82B .. 2.28B] | 1,711,757,498 ± 112,226,861 | [1.45B .. 1.93B] | Neutral expected value under warmup (ddof=1). |
+
+#### 2. Annual Return Decomposition: ADV20 (b) vs. Column Index (a) ($W=0$):
+| Calendar Year | Single (a) Col | Single (b) ADV20 | Delta (b - a) | Multi (a) Col | Multi (b) ADV20 | Delta (b - a) | Macroeconomic Context & Regime Analysis |
+| :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **2023** | +3.15% | +9.48% | **+6.32%** | +1.30% | +7.69% | **+6.39%** | **100% of outperformance was generated in 2023.** Sizable steel (HPG) and private banking (STB) rally favored liquidity key. |
+| **2024** | +15.17% | +14.84% | **-0.33%** | +11.24% | +9.14% | **-2.10%** | ADV20 underperformed column index by -0.33% (Single) and -2.10% (Multi). |
+| **2025** | +81.26% | +81.06% | **-0.20%** | +57.98% | +57.78% | **-0.20%** | Negligible difference across bull market expansion (-0.20%). |
+| **2026 (to Oct 23)** | -9.11% | -9.60% | **-0.49%** | -4.48% | -4.47% | **+0.01%** | Negligible difference across sideways market correction (-0.49% to +0.01%). |
+
+#### 3. Asset Allocation Bias (Mean Portfolio Weight Delta: $\bar{w}_b - \bar{w}_a$):
+- **Favored by ADV20 Key (b):** `HPG` (+5.24%/day Single, +5.03% Multi) and `STB` (+4.68%/day Single, +4.75% Multi).
+- **Favored by Column Index (a):** `ACB` (-5.95%/day Single, -5.22% Multi) and `BID` (-4.67%/day Single, -5.23% Multi).
+- **Conclusion:** Strict ordering $(b) > (d) > (c)$ confirms that the advantage stems from an in-sample **liquidity tilt** (allocating to high-beta liquid leaders HPG/STB rather than defensive state banks ACB/BID during early 2023). Because this tilt was chosen based on execution tractability rather than an ex-ante economic forecast, **it must not be interpreted as proprietary alpha skill**.
+
+> [!NOTE] Methodological Notes on Tables 5.1, 5.1b, 5.1c, & 5.1d
+> - **Canonical Column Order Baseline:** The "Final Real NAV" figures in Table 5.1 (Single: 2,057,898,443 VND; Multi: 1,771,706,428 VND) represent the canonical ticker order evaluation. In 50 random column permutations with causal ADV20 tie-breaking, Single-Alpha achieves mean NAV 2,057,649,062 ± 474,639 VND (sample std ddof=1: 0.023%, pure floating-point summation noise; 100% beat benchmark), and Multi-Alpha achieves mean NAV 1,730,203,905 ± 50,899,142 VND (sample std ddof=1: 2.94%, min 1.58B, max 1.82B; 96% beat benchmark).
+> - **Mathematical Origin of Multi-Alpha Ties & Rounding Diagnostic:** At $t=199$ (2023-10-23), tickers `HDB` and `SSB` possess raw input differences $\Delta v = 13/29$ (Momentum Acceleration) and $\Delta E = 1/2$ (Breakout Z). With OLS projection slope $\beta = 26/29$, their theoretical orthogonal projections satisfy $\Delta v_{\text{ortho}} = \Delta v - \Delta E \cdot \beta = 13/29 - 13/29 \equiv 0$ (an exact mathematical tie in rational arithmetic). In 64-bit IEEE 754 floating-point arithmetic, summation non-associativity produces a residual $\sim 4.16 \times 10^{-17}$ noise, which `scipy.stats.rankdata` magnifies into an integer rank jump of $\pm 1$. Empirical testing of numerical rounding ($d \in \{8, 10, 12\}$) demonstrates that pre-rank rounding cures the leak at stage (b) `ortho_alphas` but shifts the residual leak to stage (c) `composite_alpha` (walk-forward Ridge combiner non-associativity), keeping Multi NAV permutation standard deviation at ~2.93% (above 1%). Consequently, no rounding heuristic is hardcoded into production code to preserve mathematical clarity.
 > - **Signal Burn-In & Warmup Dynamics:** Setting `--warmup 50` suppresses trading during the first 50 sessions (2023-01-03 to 2023-03-20). This raises NAV across all strategies as well as the passive VN30 benchmark (+4.23%), confirming that market decline during early 2023 is the primary driver of this increase rather than signal burn-in cleanup. Furthermore, comparing column-index vs. ADV20 tie-breaking under `--warmup 50` still produces a +8.67% (Single) and +7.03% (Multi) spread, demonstrating that tie-breaking divergence persists throughout all trading sessions rather than being an artifact of the initial burn-in period.
-> - **Multiple-Testing Exploration Disclosure:** Sensitivity variants examined during research audits (including liquidity tie-breaking keys, strict T+2.5 lock flags, and warmup parameters) were investigated for structural robustness and were not appended to `experiments/trial_registry.jsonl` (preserved at canonical N=26). Consequently, formal DSR p-values evaluated with N=26 may underestimate the multiple-testing penalty incurred by exploring these architectural alternatives.
-> - **Tables 5.2 & 5.3 Baseline Context:** Tables 5.2 (Smart Cash Sweep) and 5.3 (3-Mode DSR) reflect the canonical baseline configuration (Single NAV 1,957,198,248 VND; Multi NAV 1,700,542,002 VND) as recorded in the hermetic trial registry audit.
+> - **Post-Warmup Tie Formation:** In Single-Alpha, 9 sessions at Top-2 and 46 sessions at Top-4 experience massive cross-sectional ties of 27–29 assets. Tracing the codebase reveals the root cause at `engine/ml_alpha_combiner.py:82`: `z_filtered = np.where(in_uptrend, z, -999.0)`. During market crashes (e.g. October 2023), virtually all VN30 constituents trade below their 50-day moving average, clamping all scores to `-999.0` and creating a structural uniform tie.
+> - **Multiple-Testing Exploration Disclosure:** Sensitivity variants examined during research audits (including liquidity tie-breaking keys, reversed keys, strict T+2.5 lock flags, and warmup parameters) were investigated for structural robustness and were not appended to `experiments/trial_registry.jsonl` (preserved at canonical N=26). Consequently, formal DSR p-values evaluated with N=26 may underestimate the multiple-testing penalty incurred by exploring these architectural alternatives.
+> - **Tables 5.2 & 5.3 Baseline Context:** Tables 5.2 (Smart Cash Sweep) and 5.3 (3-Mode DSR) reflect the canonical baseline column-order configuration (Single NAV 1,957,198,248 VND; Multi NAV 1,700,542,002 VND) recorded in the hermetic trial registry ($N=26$) prior to R3/R4. They reflect the unkeyed baseline rather than the deterministic ADV20 configuration in Table 5.1.
 
 ---
 
 ### 5.2. Smart Cash Sweep Optimization
+
+*(Evaluated on baseline column-order configuration: Single NAV 1,957,198,248 VND; Multi NAV 1,700,542,002 VND recorded in the hermetic trial registry prior to R3/R4; numbers reflect the baseline configuration rather than Table 5.1's ADV20 run).*
 
 Vietnam securities brokerages enforce a compulsory minimum advance borrowing fee of **50,000 VND per advance transaction**, regardless of loan notional. Small residual cash sweep orders incur an effective annualized borrowing rate exceeding 100%:
 
@@ -243,7 +274,7 @@ By configuring `min_advance_notional = 71,428,571 VND`, the engine completely by
 
 ### 5.3. 3-Mode Deflated Sharpe Ratio (DSR) Analysis (Bailey & López de Prado, 2014)
 
-*(Generated from baseline verification audit. Generator script: `scripts/audit_argon_revisions.py`)*
+*(Generated from baseline verification audit prior to R3/R4; evaluates baseline registry configuration with Single NAV 1,957,198,248 VND and Multi NAV 1,700,542,002 VND. Generator script: `scripts/audit_argon_revisions.py`)*
 
 To mitigate data mining selection bias across multiple trial evaluations, Lean VN-Quant logs all exploration runs to `experiments/trial_registry.jsonl` and evaluates the strategy under three rigorous DSR formulations:
 
@@ -305,7 +336,7 @@ python scripts/compare_backtest_b6_b11.py
 # Execute Argon 4 statistical verification experiment suite (generates Tables 5.2 & 5.3):
 python scripts/audit_argon_revisions.py
 
-# Run automated unit test suite (63 unit tests):
+# Run automated unit test suite (65 unit tests):
 python -m pytest tests/ -v
 
 # Run comprehensive 8-stage verification test runner:
