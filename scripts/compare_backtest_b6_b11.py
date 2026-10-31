@@ -5,6 +5,7 @@ import sys
 parser = argparse.ArgumentParser(description="Compare backtest performance pre vs post B6-B11")
 parser.add_argument("--strict-t25-ato-lock", action="store_true", default=False, help="Enforce strict T+2.5 lock blocking ATO sell on T+2 (unlock at T+3 ATO)")
 parser.add_argument("--warmup", type=int, default=0, help="Initial warmup sessions where weights are zeroed out (default 0)")
+parser.add_argument("--exclude-filtered", action="store_true", default=False, help="Disqualify trend-filtered stocks (<= -900.0) from allocation")
 args, _ = parser.parse_known_args()
 strict_lock = args.strict_t25_ato_lock
 
@@ -46,8 +47,18 @@ ortho_alphas, raw_corr, ortho_corr = orthogonalize_factor_library(raw_alphas, fa
 composite_alpha, _ = purged_walk_forward_combiner(ortho_alphas, raw_close, tradable_mask, window=120, embargo=3)
 composite_ranked = ops.rank(composite_alpha, mask=tradable_mask)
 
-w_single = ops.dampen_turnover(raw_alphas[0], 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20)
-w_multi = ops.dampen_turnover(composite_ranked, 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20)
+inv_below = -900.0 if args.exclude_filtered else None
+
+# Alpha 1 breakout Z-score with MA50 filter carries -999.0 for non-uptrend
+hh = ops.ts_mean(raw_close, 40)
+dev = ops.ts_std_dev(raw_close, 40)
+z = (raw_close - hh) / np.maximum(dev, 1e-4)
+sma50 = ops.ts_mean(raw_close, 50)
+in_uptrend = raw_close > sma50
+z_filtered = np.where(in_uptrend, z, -999.0)
+
+w_single = ops.dampen_turnover(z_filtered, 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20, invalid_below=inv_below)
+w_multi = ops.dampen_turnover(composite_ranked, 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20, invalid_below=inv_below)
 
 # Benchmark VN30 Equal-Weight
 w_bm = np.where(tradable_mask, 1.0, 0.0)
