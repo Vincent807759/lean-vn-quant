@@ -25,6 +25,7 @@ import argparse
 import numpy as np
 import polars as pl
 from typing import Dict, Any, List, Tuple
+from scipy import stats
 
 # Ensure UTF-8 console output
 if hasattr(sys.stdout, "reconfigure"):
@@ -175,7 +176,8 @@ def purged_walk_forward_combiner(
     raw_close: np.ndarray,
     tradable_mask: np.ndarray,
     window: int = 120,
-    embargo: int = 3
+    embargo: int = 3,
+    rank_ic_ties: str = "ordinal"
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Dynamic Walk-Forward factor combiner using Information Coefficient (IC) weighting:
@@ -201,8 +203,12 @@ def purged_walk_forward_combiner(
         for s in range(T - 1):
             mask_s = tradable_mask[s] & np.isfinite(ortho_alphas[k][s]) & np.isfinite(fwd_ret[s])
             if np.sum(mask_s) >= 8:
-                r_a = np.argsort(np.argsort(ortho_alphas[k][s][mask_s], kind="stable"), kind="stable")
-                r_f = np.argsort(np.argsort(fwd_ret[s][mask_s], kind="stable"), kind="stable")
+                if rank_ic_ties == "average":
+                    r_a = stats.rankdata(ortho_alphas[k][s][mask_s], method="average")
+                    r_f = stats.rankdata(fwd_ret[s][mask_s], method="average")
+                else:
+                    r_a = np.argsort(np.argsort(ortho_alphas[k][s][mask_s], kind="stable"), kind="stable")
+                    r_f = np.argsort(np.argsort(fwd_ret[s][mask_s], kind="stable"), kind="stable")
                 if len(r_a) > 2 and np.std(r_a) > 0 and np.std(r_f) > 0:
                     corr_val = np.corrcoef(r_a, r_f)[0, 1]
                     if np.isfinite(corr_val):
