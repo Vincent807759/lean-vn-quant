@@ -389,13 +389,16 @@ def fetch_vn_ohlcv(
 
 
 def data_provenance(df: pl.DataFrame) -> str:
-    """Return "entrade", "synthetic", "mixed" or "unknown" from the data_source column.
+    """Return "entrade", "synthetic", "mixed", "unlabelled" or "unknown".
 
+    "unlabelled": the frame has rows but no data_source column (files written before the column existed).
+    "mixed" means two or more known sources; empty frames, null or unrecognised values yield "unknown".
     Unlike validate_real_data_source, this never raises; it is meant for labelling output.
-    "mixed" only means two or more known sources; any null or unrecognised value yields "unknown".
     """
-    if "data_source" not in df.columns or df.height == 0:
+    if df.height == 0:
         return "unknown"
+    if "data_source" not in df.columns:
+        return "unlabelled"
     sources = set(df["data_source"].unique().to_list())
     if sources == {"entrade"}:
         return "entrade"

@@ -31,23 +31,33 @@ def test_data_provenance_mixed():
     assert data_provenance(df_mixed) == "mixed"
 
 
+def test_data_provenance_unlabelled():
+    # DataFrame co it nhat 1 dong, khong co cot data_source
+    df_unlabelled = pl.DataFrame({"symbol": ["HPG"]})
+    assert data_provenance(df_unlabelled) == "unlabelled"
+
+
 def test_data_provenance_unknown():
-    # DataFrame thiếu cột data_source
-    df_no_col = pl.DataFrame({"symbol": ["HPG", "FPT"]})
-    assert data_provenance(df_no_col) == "unknown"
+    # DataFrame rong co cot data_source
+    df_empty_col = pl.DataFrame({"data_source": []})
+    assert data_provenance(df_empty_col) == "unknown"
 
-    # DataFrame rỗng
-    df_empty = pl.DataFrame({"data_source": []})
-    assert data_provenance(df_empty) == "unknown"
+    # DataFrame rong khong co cot nao
+    df_empty_nocol = pl.DataFrame()
+    assert data_provenance(df_empty_nocol) == "unknown"
 
-    # Cột data_source = [None, None]
+    # Cot data_source = [None, None]
     df_none = pl.DataFrame({"data_source": [None, None]})
     assert data_provenance(df_none) == "unknown"
 
-    # Cột data_source = ["unknown_vendor"]
+    # Cot data_source = ["unknown_vendor"]
     df_vendor = pl.DataFrame({"data_source": ["unknown_vendor"]})
     assert data_provenance(df_vendor) == "unknown"
 
-    # Cột data_source = ["entrade", None]
+    # Cot data_source = ["entrade", None]
     df_entrade_none = pl.DataFrame({"data_source": ["entrade", None]})
     assert data_provenance(df_entrade_none) == "unknown"
+
+    # Cot data_source = ["entrade", "unknown_vendor"]
+    df_entrade_vendor = pl.DataFrame({"data_source": ["entrade", "unknown_vendor"]})
+    assert data_provenance(df_entrade_vendor) == "unknown"
