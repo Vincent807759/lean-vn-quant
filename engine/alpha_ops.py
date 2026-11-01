@@ -725,7 +725,9 @@ def dampen_turnover(
     top_k_out: int = 18,
     ema_span: int = 10,
     max_daily_turnover: float = 0.05,
-    mask: Optional[np.ndarray] = None
+    mask: Optional[np.ndarray] = None,
+    tie_break_key: Optional[np.ndarray] = None,
+    invalid_below: Optional[float] = None
 ) -> np.ndarray:
     """
     Applies Rank Hysteresis (No-Trade Buffer) + EMA time-series smoothing
@@ -745,11 +747,16 @@ def dampen_turnover(
         Strict upper bound on daily rebalancing turnover.
     mask : Optional[np.ndarray], shape (T, N), bool
         Tradable mask.
+    tie_break_key : Optional[np.ndarray], shape (T, N), float
+        Secondary sorting key for resolving rank ties.
+    invalid_below : Optional[float], default None
+        Threshold below which values are treated as invalid/disqualified.
+        When set and fewer than top_k_in stocks are valid, residual capital is kept in cash.
         
     Returns:
     --------
     np.ndarray, shape (T, N), float64
-        Dampened target portfolio weights summing to 1.0.
+        Dampened target portfolio weights summing to 1.0 (or <= 1.0 if invalid_below is set).
     """
     alpha = np.asarray(alpha, dtype=np.float64)
     T, N = alpha.shape
@@ -763,23 +770,37 @@ def dampen_turnover(
     if mask is not None:
         row0[~mask[0]] = -np.inf
     row0[~np.isfinite(row0)] = -np.inf
+    if invalid_below is not None:
+        row0[row0 <= invalid_below] = -np.inf
     
     valid_count0 = np.sum(np.isfinite(row0) & (row0 > -1e30))
     k0 = min(top_k_in, valid_count0) if valid_count0 > 0 else 0
     if k0 > 0:
-        top_idx0 = np.argsort(-row0, kind="stable")[:k0]
+        if tie_break_key is not None:
+            key0 = np.asarray(tie_break_key[0], dtype=np.float64).copy()
+            key0[~np.isfinite(key0)] = -np.inf
+            top_idx0 = np.lexsort((np.arange(N), -key0, -row0))[:k0]
+        else:
+            top_idx0 = np.argsort(-row0, kind="stable")[:k0]
         held[top_idx0] = True
-        weights[0, held] = 1.0 / k0
+        weights[0, held] = 1.0 / top_k_in if invalid_below is not None else 1.0 / k0
         
     for t in range(1, T):
         row = alpha[t].copy()
         valid = np.isfinite(row)
         if mask is not None:
             valid = valid & mask[t]
+        if invalid_below is not None:
+            valid = valid & (row > invalid_below)
         row[~valid] = -np.inf
         
         # Determine cross-sectional rank position (1 = best)
-        sorted_indices = np.argsort(-row, kind="stable")
+        if tie_break_key is not None:
+            key_t = np.asarray(tie_break_key[t], dtype=np.float64).copy()
+            key_t[~np.isfinite(key_t)] = -np.inf
+            sorted_indices = np.lexsort((np.arange(N), -key_t, -row))
+        else:
+            sorted_indices = np.argsort(-row, kind="stable")
         rank_pos = np.zeros(N, dtype=int)
         for pos, idx in enumerate(sorted_indices):
             if np.isfinite(row[idx]) and row[idx] > -1e30:
@@ -803,7 +824,10 @@ def dampen_turnover(
         target_w = np.zeros(N, dtype=np.float64)
         num_held = np.sum(held)
         if num_held > 0:
-            target_w[held] = 1.0 / num_held
+            if invalid_below is not None:
+                target_w[held] = min(1.0 / top_k_in, 1.0 / num_held)
+            else:
+                target_w[held] = 1.0 / num_held
             
         # Time-series EMA smoothing
         w_t = alpha_ema * target_w + (1.0 - alpha_ema) * weights[t - 1]
@@ -815,10 +839,14 @@ def dampen_turnover(
             w_t = weights[t - 1] + diff * (max_daily_turnover / step_to)
             
         s = np.sum(np.abs(w_t))
-        if s > 1e-12:
-            w_t = w_t / s
+        if invalid_below is None:
+            if s > 1e-12:
+                w_t = w_t / s
+            else:
+                w_t = np.zeros(N, dtype=np.float64)
         else:
-            w_t = np.zeros(N, dtype=np.float64)
+            if s > 1.0:
+                w_t = w_t / s
             
         weights[t] = w_t
         
