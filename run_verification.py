@@ -306,7 +306,9 @@ def test_4_full_backtest():
     
     # Audit Proof: Print 5 first and 5 last rows of FPT and HPG
     print(f"\n  --- DATA PROVENANCE AUDIT (data_source={provenance}) ---")
-    if provenance != "entrade":
+    if provenance == "unlabelled":
+        print("  NOTE: the Parquet file has no data_source column (it predates the column); provenance is not recorded in the file - verify its SHA256 against README Section 5.5.")
+    elif provenance != "entrade":
         print(f"  *** WARNING: data_source={provenance}. Results below check code paths only; they are NOT market evidence. ***")
     for sym in ["FPT", "HPG"]:
         df_sym = df_market.filter(dp.pl.col("symbol") == sym).sort("date")
