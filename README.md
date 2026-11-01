@@ -349,6 +349,8 @@ To mitigate data mining selection bias across multiple trial evaluations, Lean V
 | **Mode 2: Active-Return Core Alphas** | Active returns over VN30 benchmark (r_active = r - r_bm) across 9 core alphas. Purges market beta. | 9 | **3.5194** | 0.2793 | 0.6584 | **0.6132** ($p=0.3868$) | **0.4388** ($p=0.5612$) |
 | **Mode 3: Unadjusted Conservative Bound** | Orthogonal independent assumption (I_26). Extreme upper bound on multiple-testing penalty. | 26 | **26.0000** | 0.0000 | 1.0536 | **0.3200** ($p=0.6800$) | **0.1825** ($p=0.8175$) |
 
+**Limitation.** The effective number of trials N_eff is the eigenvalue participation ratio of the correlation matrix of the registered trials' daily returns (`engine/vn_simulator.py:93-96`), and the variance of trial Sharpe ratios behind the null threshold SR_0 is the sample variance across the same registered trials (`engine/vn_simulator.py:99-102`); only registered trials whose return series has the same length as the evaluated series are included (`engine/vn_simulator.py:205`). Configurations examined outside the registry, such as the 32 further logged configurations noted in Section 5.1e, enter neither quantity. Both quantities are therefore estimated from a small set of strongly correlated trials on a single 947-session sample (N_eff = 1.1194 in Mode 1), so the DSR probabilities above should be read as indicative rather than as a calibrated significance test.
+
 ---
 
 ### 5.4. Pillar 2 (VN-FinGraph Knowledge Graph) Ablation Study (6-Factor Blend)
