@@ -388,6 +388,24 @@ def fetch_vn_ohlcv(
     return df
 
 
+def data_provenance(df: pl.DataFrame) -> str:
+    """Return "entrade", "synthetic", "mixed" or "unknown" from the data_source column.
+
+    Unlike validate_real_data_source, this never raises; it is meant for labelling output.
+    "mixed" only means two or more known sources; any null or unrecognised value yields "unknown".
+    """
+    if "data_source" not in df.columns or df.height == 0:
+        return "unknown"
+    sources = set(df["data_source"].unique().to_list())
+    if sources == {"entrade"}:
+        return "entrade"
+    if sources == {"synthetic"}:
+        return "synthetic"
+    if len(sources) > 1 and sources.issubset({"entrade", "synthetic"}):
+        return "mixed"
+    return "unknown"
+
+
 def validate_real_data_source(df: pl.DataFrame) -> None:
     """
     S1 Invariant: Enforces that real backtests and live/paper trading engines
