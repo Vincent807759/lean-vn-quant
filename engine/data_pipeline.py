@@ -12,6 +12,8 @@ Strict constraints:
 
 from typing import List, Optional, Tuple, Dict, Any
 import os
+import hashlib
+import json
 import datetime
 import logging
 import warnings
@@ -424,6 +426,129 @@ def validate_real_data_source(df: pl.DataFrame) -> None:
             f"S1 Invariant Violated: Real backtest cannot read non-entrade data. "
             f"Detected disallowed data source(s): {sources}"
         )
+
+
+FINGERPRINT_COLUMNS = [
+    "date", "symbol", "raw_open", "raw_high", "raw_low", "raw_close",
+    "adj_close", "volume", "adv", "ceiling_price", "floor_price", "is_listed",
+]
+
+REQUIRED_MANIFEST_KEYS = [
+    "schema_version", "fingerprint_columns", "file_sha256", "content_sha256",
+    "rows", "sessions", "symbols", "first_date", "last_date",
+    "per_column_content_sha256", "per_symbol_rows", "per_symbol_content_sha256",
+]
+
+
+def _column_segment(frame: pl.DataFrame, name: str) -> bytes:
+    col = frame[name]
+    if name == "date":
+        data = col.to_physical().cast(pl.Int32).to_numpy().astype("<i4").tobytes()
+    elif name == "symbol":
+        data = "\n".join(col.to_list()).encode("utf-8")
+    else:
+        arr = col.cast(pl.Float64).fill_null(float("nan")).to_numpy().astype("<f8")
+        arr = np.where(np.isnan(arr), np.nan, arr) + 0.0
+        data = arr.astype("<f8").tobytes()
+    return name.encode("ascii") + b"\x00" + data
+
+
+def dataset_fingerprint(df: pl.DataFrame) -> dict:
+    """Compute deterministic content fingerprint of a VN30 dataset.
+    
+    Validates input schema and data integrity, sorts by (date, symbol),
+    and computes SHA256 hashes per column, per symbol, and overall content.
+    """
+    missing = [c for c in FINGERPRINT_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing fingerprint columns: {missing}")
+    if df.height == 0:
+        raise ValueError("DataFrame is empty (0 rows)")
+    if df["symbol"].null_count() > 0:
+        raise ValueError("symbol column contains null values")
+    if df["date"].null_count() > 0:
+        raise ValueError("date column contains null values")
+
+    try:
+        if df["date"].dtype == pl.Date:
+            date_col = df["date"]
+        elif df["date"].dtype == pl.Datetime:
+            date_col = df["date"].cast(pl.Date, strict=True)
+        elif df["date"].dtype in (pl.Utf8, pl.String):
+            date_col = df["date"].str.to_date(strict=True)
+        else:
+            date_col = df["date"].cast(pl.Date, strict=True)
+    except Exception as e:
+        raise ValueError(f"date column cannot be strictly cast to Date: {e}")
+
+    if date_col.null_count() > 0:
+        raise ValueError("date column contains null values after casting")
+
+    if df.select(["date", "symbol"]).is_duplicated().any():
+        raise ValueError("Duplicate (date, symbol) pairs detected")
+
+    df_sorted = df.with_columns(date=date_col).sort(["date", "symbol"])
+
+    segments = [_column_segment(df_sorted, name) for name in FINGERPRINT_COLUMNS]
+    content_sha256 = hashlib.sha256(b"".join(segments)).hexdigest()
+
+    per_column_content_sha256 = {}
+    for name, seg in zip(FINGERPRINT_COLUMNS, segments):
+        per_column_content_sha256[name] = hashlib.sha256(seg).hexdigest()
+
+    symbols = sorted(df_sorted["symbol"].unique().to_list())
+    per_symbol_content_sha256 = {}
+    per_symbol_rows = {}
+    for sym in symbols:
+        df_sym = df_sorted.filter(pl.col("symbol") == sym)
+        sym_segments = [_column_segment(df_sym, name) for name in FINGERPRINT_COLUMNS]
+        per_symbol_content_sha256[sym] = hashlib.sha256(b"".join(sym_segments)).hexdigest()
+        per_symbol_rows[sym] = int(df_sym.height)
+
+    return {
+        "schema_version": 1,
+        "fingerprint_columns": list(FINGERPRINT_COLUMNS),
+        "content_sha256": content_sha256,
+        "rows": int(df_sorted.height),
+        "sessions": int(df_sorted["date"].n_unique()),
+        "symbols": int(len(symbols)),
+        "first_date": df_sorted["date"].min().strftime("%Y-%m-%d"),
+        "last_date": df_sorted["date"].max().strftime("%Y-%m-%d"),
+        "per_column_content_sha256": dict(sorted(per_column_content_sha256.items())),
+        "per_symbol_rows": dict(sorted(per_symbol_rows.items())),
+        "per_symbol_content_sha256": dict(sorted(per_symbol_content_sha256.items())),
+    }
+
+
+def manifest_status(df: pl.DataFrame, manifest_path: str) -> Tuple[str, Optional[str]]:
+    """Return ("NO_MANIFEST", None) if manifest does not exist;
+    ("UNAVAILABLE", None) if manifest is corrupted or dataset_fingerprint raises;
+    ("MATCH" | "MISMATCH", content_sha256) otherwise.
+    Never raises an exception.
+    """
+    if not os.path.isfile(manifest_path):
+        return ("NO_MANIFEST", None)
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        if not isinstance(manifest, dict):
+            return ("UNAVAILABLE", None)
+        for k in REQUIRED_MANIFEST_KEYS:
+            if k not in manifest:
+                return ("UNAVAILABLE", None)
+        if manifest.get("schema_version") != 1:
+            return ("UNAVAILABLE", None)
+        if manifest.get("fingerprint_columns") != FINGERPRINT_COLUMNS:
+            return ("UNAVAILABLE", None)
+
+        fp = dataset_fingerprint(df)
+        content_sha = fp["content_sha256"]
+        if content_sha == manifest.get("content_sha256"):
+            return ("MATCH", content_sha)
+        else:
+            return ("MISMATCH", content_sha)
+    except Exception:
+        return ("UNAVAILABLE", None)
 
 
 def query_parquet_duckdb(parquet_path: str, sql_query: str) -> pl.DataFrame:
