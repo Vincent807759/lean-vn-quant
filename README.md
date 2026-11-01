@@ -154,6 +154,8 @@ python run_verification.py
 | **TEST 7** | Hawkes/OU & VDW | Continuous exponential decay ($\tau = 5\text{d}, 42\text{d}$), Van der Waerden normal score. |
 | **TEST 8** | Dynamic Hedge & DSR | Dynamic VN30F1M switch, margin cap ≤ 18%, calibrated Deflated Sharpe Ratio. |
 
+**CI scope.** In GitHub Actions (`CI=true`) the end-to-end runner `run_verification.py` has no market data and Test 4 uses the synthetic fallback generator instead of the VN30 parquet. A passing CI run therefore shows that the code executes and its internal invariants hold; it does not show that the published tables reproduce. Reproducing Tables 5.1–5.3 requires the data snapshot described in Section 5.5.
+
 ---
 
 ## 5. Quantitative Verification & Empirical Results (947 VN30 Sessions: 2023–2026)
