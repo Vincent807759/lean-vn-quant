@@ -386,6 +386,8 @@ df = fetch_vn_ohlcv(
 ```
 *Note:* Ingested figures may exhibit minor variations across different retrieval dates due to upstream Entrade API backward adjustments when corporate stock dividends or cash distributions occur.
 
+**Data snapshot.** The tables in this section were generated from one parquet snapshot (`data/vn30_production.parquet`, 947 sessions, 2023-01-03 to 2026-10-23, SHA256 `8a3bd271d5fab5750d427712c0ba5715fdc9a9f638f1195661cc5e18996eb0cb`). The file is not part of the repository, so a fresh download can differ: in one local re-download the same script returned a Single-Alpha ADV20 NAV of 2,056,822,248 VND instead of 2,057,898,443 VND. Compare the SHA256 of your file with the value above before comparing any table.
+
 #### 2. Alpha Signal Lineage in Verification Tables
 - All results in Tables 5.1, 5.2, and 5.3 are generated completely endogenously from public open-source code without `private_alphas/`.
 - **Single-Alpha (`w_single`):** Employs Alpha 1 (SMA-40/50 Breakout Z-Score) from `generate_five_alphas` (`engine/ml_alpha_combiner.py`), stabilized via the `dampen_turnover` engine.
