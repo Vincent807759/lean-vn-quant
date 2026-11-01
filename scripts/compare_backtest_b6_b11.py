@@ -1,5 +1,14 @@
+import argparse
 import os
 import sys
+
+parser = argparse.ArgumentParser(description="Compare backtest performance pre vs post B6-B11")
+parser.add_argument("--strict-t25-ato-lock", action="store_true", default=False, help="Enforce strict T+2.5 lock blocking ATO sell on T+2 (unlock at T+3 ATO)")
+parser.add_argument("--warmup", type=int, default=0, help="Initial warmup sessions where weights are zeroed out (default 0)")
+parser.add_argument("--exclude-filtered", action="store_true", default=False, help="Disqualify trend-filtered stocks (<= -900.0) from allocation")
+parser.add_argument("--rank-ic-ties", type=str, default="ordinal", choices=["ordinal", "average"], help="Method for handling ties in rank IC calculation (default 'ordinal')")
+args, _ = parser.parse_known_args()
+strict_lock = args.strict_t25_ato_lock
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -36,22 +45,39 @@ years = T / 252.0
 # Generate factors & purged walk-forward combiner
 raw_alphas, factor_names = generate_five_alphas(raw_open, raw_high, raw_low, raw_close, volume, tradable_mask)
 ortho_alphas, raw_corr, ortho_corr = orthogonalize_factor_library(raw_alphas, factor_names, tradable_mask)
-composite_alpha, _ = purged_walk_forward_combiner(ortho_alphas, raw_close, tradable_mask, window=120, embargo=3)
+composite_alpha, _ = purged_walk_forward_combiner(ortho_alphas, raw_close, tradable_mask, window=120, embargo=3, rank_ic_ties=args.rank_ic_ties)
 composite_ranked = ops.rank(composite_alpha, mask=tradable_mask)
 
-w_single = ops.dampen_turnover(raw_alphas[0], 2, 4, 20, 0.015, tradable_mask)
-w_multi = ops.dampen_turnover(composite_ranked, 2, 4, 20, 0.015, tradable_mask)
+inv_below = -900.0 if args.exclude_filtered else None
+
+# Alpha 1 breakout Z-score with MA50 filter carries -999.0 for non-uptrend
+hh = ops.ts_mean(raw_close, 40)
+dev = ops.ts_std_dev(raw_close, 40)
+z = (raw_close - hh) / np.maximum(dev, 1e-4)
+sma50 = ops.ts_mean(raw_close, 50)
+in_uptrend = raw_close > sma50
+z_filtered = np.where(in_uptrend, z, -999.0)
+
+w_single = ops.dampen_turnover(z_filtered, 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20, invalid_below=inv_below)
+w_multi = ops.dampen_turnover(composite_ranked, 2, 4, 20, 0.015, tradable_mask, tie_break_key=adv20, invalid_below=inv_below)
 
 # Benchmark VN30 Equal-Weight
 w_bm = np.where(tradable_mask, 1.0, 0.0)
 w_bm = w_bm / np.maximum(np.sum(w_bm, axis=1, keepdims=True), 1e-6)
+
+# Warmup zeroing: when warmup N > 0, suppress initial positions across strategies and benchmark
+# for rigorous like-for-like comparison during alpha signal burn-in.
+if args.warmup > 0:
+    w_single[:args.warmup] = 0.0
+    w_multi[:args.warmup] = 0.0
+    w_bm[:args.warmup] = 0.0
 w_bm_exec = np.zeros_like(w_bm); w_bm_exec[1:] = w_bm[:-1]
-res_bm = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_bm_exec, dates=dates, penalty_rate_per_day=0.0)
+res_bm = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_bm_exec, dates=dates, penalty_rate_per_day=0.0, strict_t25_ato_lock=strict_lock)
 m_bm = sim.evaluate_strategy(res_bm["equity"], w_bm_exec)
 
 # 1. Unlagged (Trước B6-B11)
-res_s_b = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_single, penalty_rate_per_day=0.07)
-res_m_b = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_multi, penalty_rate_per_day=0.07)
+res_s_b = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_single, penalty_rate_per_day=0.07, strict_t25_ato_lock=strict_lock)
+res_m_b = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_multi, penalty_rate_per_day=0.07, strict_t25_ato_lock=strict_lock)
 naive_s_b = sim.simulate_naive(raw_close, w_single, raw_open=raw_open)
 naive_m_b = sim.simulate_naive(raw_close, w_multi, raw_open=raw_open)
 m_s_b = sim.evaluate_strategy(res_s_b["equity"], w_single, naive_s_b)
@@ -60,8 +86,8 @@ m_m_b = sim.evaluate_strategy(res_m_b["equity"], w_multi, naive_m_b)
 # 2. Lagged (Sau B6-B11)
 w_s_exec = np.zeros_like(w_single); w_s_exec[1:] = w_single[:-1]
 w_m_exec = np.zeros_like(w_multi); w_m_exec[1:] = w_multi[:-1]
-res_s_a = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_s_exec, dates=dates, penalty_rate_per_day=0.0)
-res_m_a = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_m_exec, dates=dates, penalty_rate_per_day=0.0)
+res_s_a = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_s_exec, dates=dates, penalty_rate_per_day=0.0, strict_t25_ato_lock=strict_lock)
+res_m_a = sim.simulate_vietnam(raw_open, raw_close, ceiling, floor, adv20_shares, w_m_exec, dates=dates, penalty_rate_per_day=0.0, strict_t25_ato_lock=strict_lock)
 naive_s_a = sim.simulate_naive(raw_close, w_s_exec, raw_open=raw_open)
 naive_m_a = sim.simulate_naive(raw_close, w_m_exec, raw_open=raw_open)
 m_s_a = sim.evaluate_strategy(res_s_a["equity"], w_s_exec, naive_s_a)
