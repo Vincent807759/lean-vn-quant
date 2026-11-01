@@ -83,7 +83,7 @@ Setting `min_samples=15` guarantees newly listed or transferred stocks cannot by
 In backtest simulations (`engine/vn_simulator.py`), execution slippage is modeled via `_calc_dynamic_slippage` combining a 12 bps half-spread floor with temporary and permanent volume impact:
 
 $$
-IS(Q) = \max\left(\text{base\_slippage}, \quad \text{half\_spread\_floor} + \eta \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right)^\delta + \gamma_{\text{perm}} \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right)\right)
+IS(Q) = \max\left(\text{base slippage}, \quad \text{half-spread floor} + \eta \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right)^\delta + \gamma_{\text{perm}} \cdot \sigma_{\text{daily}} \left(\frac{Q}{\text{ADV}_{20}}\right)\right)
 $$
 
 - **Parameters & Floor:** Base slippage 10 bps, half-spread floor 12 bps (0.0012), with literature parameters $\eta = 0.75$, $\delta = 0.55$, $\gamma_{\text{perm}} = 0.30$.
@@ -153,6 +153,8 @@ python run_verification.py
 | **TEST 6** | Phase 2 PIT & Impact | `min_samples=15` blocks unseasoned IPOs, 3-tier LOB sweep (≥ 12 bps), 25/55/20 slicing. |
 | **TEST 7** | Hawkes/OU & VDW | Continuous exponential decay ($\tau = 5\text{d}, 42\text{d}$), Van der Waerden normal score. |
 | **TEST 8** | Dynamic Hedge & DSR | Dynamic VN30F1M switch, margin cap ≤ 18%, calibrated Deflated Sharpe Ratio. |
+
+**CI scope.** In GitHub Actions (`CI=true`) the end-to-end runner `run_verification.py` has no market data and Test 4 uses the synthetic fallback generator instead of the VN30 parquet. A passing CI run therefore shows that the code executes and its internal invariants hold; it does not show that the published tables reproduce. Reproducing Tables 5.1–5.3 requires the data snapshot described in Section 5.5.
 
 ---
 
@@ -347,6 +349,8 @@ To mitigate data mining selection bias across multiple trial evaluations, Lean V
 | **Mode 2: Active-Return Core Alphas** | Active returns over VN30 benchmark (r_active = r - r_bm) across 9 core alphas. Purges market beta. | 9 | **3.5194** | 0.2793 | 0.6584 | **0.6132** ($p=0.3868$) | **0.4388** ($p=0.5612$) |
 | **Mode 3: Unadjusted Conservative Bound** | Orthogonal independent assumption (I_26). Extreme upper bound on multiple-testing penalty. | 26 | **26.0000** | 0.0000 | 1.0536 | **0.3200** ($p=0.6800$) | **0.1825** ($p=0.8175$) |
 
+**Limitation.** The effective number of trials N_eff is the eigenvalue participation ratio of the correlation matrix of the registered trials' daily returns (`engine/vn_simulator.py:93-96`), and the variance of trial Sharpe ratios behind the null threshold SR_0 is the sample variance across the same registered trials (`engine/vn_simulator.py:99-102`); only registered trials whose return series has the same length as the evaluated series are included (`engine/vn_simulator.py:205`). Configurations examined outside the registry, such as the 32 further logged configurations noted in Section 5.1e, enter neither quantity. Both quantities are therefore estimated from a small set of strongly correlated trials on a single 947-session sample (N_eff = 1.1194 in Mode 1), so the DSR probabilities above should be read as indicative rather than as a calibrated significance test.
+
 ---
 
 ### 5.4. Pillar 2 (VN-FinGraph Knowledge Graph) Ablation Study (6-Factor Blend)
@@ -385,6 +389,8 @@ df = fetch_vn_ohlcv(
 )
 ```
 *Note:* Ingested figures may exhibit minor variations across different retrieval dates due to upstream Entrade API backward adjustments when corporate stock dividends or cash distributions occur.
+
+**Data snapshot.** The tables in this section were generated from one parquet snapshot (`data/vn30_production.parquet`, 947 sessions, 2023-01-03 to 2026-10-23, SHA256 `8a3bd271d5fab5750d427712c0ba5715fdc9a9f638f1195661cc5e18996eb0cb`). The file is not part of the repository, so a fresh download can differ: in one local re-download the same script returned a Single-Alpha ADV20 NAV of 2,056,822,248 VND instead of 2,057,898,443 VND. Compare the SHA256 of your file with the value above before comparing any table.
 
 #### 2. Alpha Signal Lineage in Verification Tables
 - All results in Tables 5.1, 5.2, and 5.3 are generated completely endogenously from public open-source code without `private_alphas/`.
