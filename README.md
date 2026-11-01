@@ -278,22 +278,22 @@ To evaluate portfolio behavior free from tie-induced allocation distortions, two
 
 #### 4. Performance Post Walk-Forward Initialization Window ($W=0$ vs. $W=123$):
 
-| Configuration | $W$ | Tie-Break Key | Real NAV (VND) | Strategy / Benchmark NAV | Strategy Sharpe ($\pm$NW SE) | Benchmark Sharpe ($\pm$NW SE) | Active Sharpe ($\pm$NW SE) | $\pm 2$ SE Contains 0? | MaxDD |
+| Configuration | $W$ | Tie-Break Key | Real NAV (VND) | Strategy / Benchmark NAV | Strategy Sharpe (±NW SE) | Benchmark Sharpe (±NW SE) | Active Sharpe (±NW SE) | $\pm 2$ SE Contains 0? | MaxDD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **(A) Single Default** | 0 | Col | 1,957,198,248 | 1.215x | 0.81 ($\pm$0.53) | 0.59 ($\pm$0.54) | +0.69 ($\pm$0.57) | Yes | 18.10% |
-| **(A) Single Default** | 0 | ADV20 | 2,057,898,443 | 1.277x | 0.85 ($\pm$0.53) | 0.59 ($\pm$0.54) | +0.80 ($\pm$0.54) | Yes | 18.11% |
-| **(B) Single `--exclude-filtered`** | 0 | Col/ADV | 1,963,938,738 | 1.219x | 0.85 ($\pm$0.55) | 0.59 ($\pm$0.54) | +0.63 ($\pm$0.56) | Yes | 18.21% |
-| **(C) Multi Default** | 0 | Col | 1,700,542,002 | 1.055x | 0.64 ($\pm$0.54) | 0.59 ($\pm$0.54) | +0.31 ($\pm$0.53) | Yes | 18.76% |
-| **(C) Multi Default** | 0 | ADV20 | 1,771,706,428 | 1.100x | 0.68 ($\pm$0.53) | 0.59 ($\pm$0.54) | +0.45 ($\pm$0.47) | Yes | 18.87% |
-| **(D) Multi Both flags** | 0 | Col | 1,720,251,031 | 1.068x | 0.66 ($\pm$0.55) | 0.59 ($\pm$0.54) | +0.32 ($\pm$0.57) | Yes | 18.88% |
-| **(D) Multi Both flags** | 0 | ADV20 | 1,829,894,041 | 1.136x | 0.74 ($\pm$0.54) | 0.59 ($\pm$0.54) | +0.58 ($\pm$0.56) | Yes | 19.29% |
-| **(A) Single Default** | 123 | Col | 1,885,610,248 | 1.210x | 0.79 ($\pm$0.54) | 0.55 ($\pm$0.54) | +0.77 ($\pm$0.63) | Yes | 17.98% |
-| **(A) Single Default** | 123 | ADV20 | 1,849,938,228 | 1.187x | 0.76 ($\pm$0.54) | 0.55 ($\pm$0.54) | +0.69 ($\pm$0.63) | Yes | 18.01% |
-| **(B) Single `--exclude-filtered`** | 123 | Col/ADV | 1,831,801,875 | 1.175x | 0.75 ($\pm$0.54) | 0.55 ($\pm$0.54) | +0.65 ($\pm$0.63) | Yes | 17.95% |
-| **(C) Multi Default** | 123 | Col | 1,637,666,444 | 1.051x | 0.61 ($\pm$0.55) | 0.55 ($\pm$0.54) | +0.36 ($\pm$0.60) | Yes | 18.57% |
-| **(C) Multi Default** | 123 | ADV20 | 1,604,890,721 | 1.030x | 0.57 ($\pm$0.54) | 0.55 ($\pm$0.54) | +0.22 ($\pm$0.60) | Yes | 18.48% |
-| **(D) Multi Both flags** | 123 | Col | 1,631,909,885 | 1.047x | 0.59 ($\pm$0.55) | 0.55 ($\pm$0.54) | +0.29 ($\pm$0.61) | Yes | 18.81% |
-| **(D) Multi Both flags** | 123 | ADV20 | 1,594,968,937 | 1.023x | 0.56 ($\pm$0.54) | 0.55 ($\pm$0.54) | +0.17 ($\pm$0.61) | Yes | 18.99% |
+| **(A) Single Default** | 0 | Col | 1,957,198,248 | 1.215x | 0.81 (±0.53) | 0.59 (±0.54) | +0.69 (±0.57) | Yes | 18.10% |
+| **(A) Single Default** | 0 | ADV20 | 2,057,898,443 | 1.277x | 0.85 (±0.53) | 0.59 (±0.54) | +0.80 (±0.54) | Yes | 18.11% |
+| **(B) Single `--exclude-filtered`** | 0 | Col/ADV | 1,963,938,738 | 1.219x | 0.85 (±0.55) | 0.59 (±0.54) | +0.63 (±0.56) | Yes | 18.21% |
+| **(C) Multi Default** | 0 | Col | 1,700,542,002 | 1.055x | 0.64 (±0.54) | 0.59 (±0.54) | +0.31 (±0.53) | Yes | 18.76% |
+| **(C) Multi Default** | 0 | ADV20 | 1,771,706,428 | 1.100x | 0.68 (±0.53) | 0.59 (±0.54) | +0.45 (±0.47) | Yes | 18.87% |
+| **(D) Multi Both flags** | 0 | Col | 1,720,251,031 | 1.068x | 0.66 (±0.55) | 0.59 (±0.54) | +0.32 (±0.57) | Yes | 18.88% |
+| **(D) Multi Both flags** | 0 | ADV20 | 1,829,894,041 | 1.136x | 0.74 (±0.54) | 0.59 (±0.54) | +0.58 (±0.56) | Yes | 19.29% |
+| **(A) Single Default** | 123 | Col | 1,885,610,248 | 1.210x | 0.79 (±0.54) | 0.55 (±0.54) | +0.77 (±0.63) | Yes | 17.98% |
+| **(A) Single Default** | 123 | ADV20 | 1,849,938,228 | 1.187x | 0.76 (±0.54) | 0.55 (±0.54) | +0.69 (±0.63) | Yes | 18.01% |
+| **(B) Single `--exclude-filtered`** | 123 | Col/ADV | 1,831,801,875 | 1.175x | 0.75 (±0.54) | 0.55 (±0.54) | +0.65 (±0.63) | Yes | 17.95% |
+| **(C) Multi Default** | 123 | Col | 1,637,666,444 | 1.051x | 0.61 (±0.55) | 0.55 (±0.54) | +0.36 (±0.60) | Yes | 18.57% |
+| **(C) Multi Default** | 123 | ADV20 | 1,604,890,721 | 1.030x | 0.57 (±0.54) | 0.55 (±0.54) | +0.22 (±0.60) | Yes | 18.48% |
+| **(D) Multi Both flags** | 123 | Col | 1,631,909,885 | 1.047x | 0.59 (±0.55) | 0.55 (±0.54) | +0.29 (±0.61) | Yes | 18.81% |
+| **(D) Multi Both flags** | 123 | ADV20 | 1,594,968,937 | 1.023x | 0.56 (±0.54) | 0.55 (±0.54) | +0.17 (±0.61) | Yes | 18.99% |
 
 > [!NOTE] Methodological Note on Table 5.1f
 > Descriptive; no significance claim; benchmark flattened to the same $W$ ($W=0$ NAV: 1,611,194,562 VND; $W=123$ NAV: 1,558,836,414 VND). Active Sharpe reflects annualized daily excess returns over the benchmark ($r_{\text{active}} = r - r_{\text{bm}}$) evaluated via Newey-West HAC standard error (`scripts/compare_backtest_b6_b11.py:113-124`, 5 lags). Across all evaluated configurations at both $W=0$ and $W=123$, the $\pm 2$ SE confidence interval contains 0. Neither containing 0 nor failing to contain 0 constitutes conclusive proof of genuine alpha.
@@ -405,7 +405,7 @@ python scripts/compare_backtest_b6_b11.py
 # Execute Argon 4 statistical verification experiment suite (generates Tables 5.2 & 5.3):
 python scripts/audit_argon_revisions.py
 
-# Run automated unit test suite (70 unit tests):
+# Run automated unit test suite:
 python -m pytest tests/ -v
 
 # Run comprehensive 8-stage verification test runner:
