@@ -289,10 +289,10 @@ def test_4_full_backtest():
             parquet_file = c
             break
 
-    print(f"  [1/4] Ingesting VN30 daily OHLCV from verified storage: {parquet_file}")
+    print(f"  [1/4] Ingesting VN30 daily OHLCV; Parquet candidate: {parquet_file}")
     if os.path.exists(parquet_file) and os.path.getsize(parquet_file) > 100000:
         df_market = dp.pl.read_parquet(parquet_file)
-        print(f"        Loaded {len(df_market)} bars from existing verified Parquet storage.")
+        print(f"        Loaded {len(df_market)} bars from existing Parquet file.")
     else:
         is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
         df_market = dp.fetch_vn_ohlcv(
@@ -302,8 +302,12 @@ def test_4_full_backtest():
             force_fallback=is_ci
         )
     
+    provenance = dp.data_provenance(df_market)
+    
     # Audit Proof: Print 5 first and 5 last rows of FPT and HPG
-    print("\n  --- DATA AUTHENTICITY AUDIT (ENTRADE REST API VERIFICATION) ---")
+    print(f"\n  --- DATA PROVENANCE AUDIT (data_source={provenance}) ---")
+    if provenance != "entrade":
+        print(f"  *** WARNING: data_source={provenance}. Results below check code paths only; they are NOT market evidence. ***")
     for sym in ["FPT", "HPG"]:
         df_sym = df_market.filter(dp.pl.col("symbol") == sym).sort("date")
         print(f"  [{sym}] Head (2023): Open={df_sym['raw_open'][0]:,.0f} VND, Close={df_sym['raw_close'][0]:,.0f} VND, Vol={df_sym['volume'][0]:,.0f}")
@@ -324,7 +328,7 @@ def test_4_full_backtest():
     tradable_mask, _, _ = dp.pivot_to_matrix(df_masked, "tradable_mask")
     
     T, N = raw_close.shape
-    print(f"        Universe: {N} symbols over {T} real trading sessions.")
+    print(f"        Universe: {N} symbols over {T} sessions (data_source={provenance}).")
     
     # 2. Construct Benchmark Placeholder Alpha Strategy with Strict Causal Execution
     print("  [3/4] Constructing Textbook Placeholder Alpha Signal for Engine Verification...")
