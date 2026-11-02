@@ -26,6 +26,9 @@ from engine.ml_alpha_combiner import generate_five_alphas, orthogonalize_factor_
 
 parquet_path = "data/vn30_production.parquet"
 df_market = pl.read_parquet(parquet_path)
+m_status, m_content_sha = dp.manifest_status(df_market, os.path.join(ROOT_DIR, "experiments", "data_manifest.json"))
+content_sha_str = m_content_sha[:16] if m_content_sha else "unavailable"
+print(f"[DATA] {parquet_path}: content_sha256={content_sha_str} manifest={m_status}")
 df_masked = dp.build_tradable_mask(df_market, min_adv=1.0e10, window=20)
 
 raw_close, dates, syms = dp.pivot_to_matrix(df_masked, "raw_close")

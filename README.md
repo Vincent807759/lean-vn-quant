@@ -381,16 +381,18 @@ Historical market bars can be freshly ingested directly via the data pipeline:
 ```python
 from engine.data_pipeline import fetch_vn_ohlcv
 
-# Ingest 30 VN30 tickers and persist to Parquet format
+# Ingest 30 VN30 tickers; save under a new name so the snapshot file is not overwritten
 df = fetch_vn_ohlcv(
     start_date="2023-01-01",
     end_date="2026-10-24",
-    save_parquet="data/vn30_production.parquet"
+    save_parquet="data/vn30_refetch.parquet"
 )
 ```
 *Note:* Ingested figures may exhibit minor variations across different retrieval dates due to upstream Entrade API backward adjustments when corporate stock dividends or cash distributions occur.
 
 **Data snapshot.** The tables in this section were generated from one parquet snapshot (`data/vn30_production.parquet`, 947 sessions, 2023-01-03 to 2026-10-23, SHA256 `8a3bd271d5fab5750d427712c0ba5715fdc9a9f638f1195661cc5e18996eb0cb`). The file is not part of the repository, so a fresh download can differ: in one local re-download the same script returned a Single-Alpha ADV20 NAV of 2,056,822,248 VND instead of 2,057,898,443 VND. Compare the SHA256 of your file with the value above before comparing any table.
+
+**Data verification.** `experiments/data_manifest.json` records a content fingerprint of that snapshot: row count, date range, and SHA256 hashes of the 12 columns that feed the simulation (`date`, `symbol`, `raw_open`, `raw_high`, `raw_low`, `raw_close`, `adj_close`, `volume`, `adv`, `ceiling_price`, `floor_price`, `is_listed`), per column and per symbol. The fingerprint ignores file metadata and compression, row order, and any other column (`sector`, `ref_price`, `data_source`, `price_basis`). `python scripts/verify_data.py [PATH]` compares a parquet file with the manifest (default path `data/vn30_production.parquet`, relative to the current directory) and prints MATCH or MISMATCH; on a mismatch it lists the differing columns and symbols. A MISMATCH means the tables in this section are not expected to be reproduced digit for digit on that file. `scripts/compare_backtest_b6_b11.py` always reads `data/vn30_production.parquet` and prints the same status for that file before its results; if you re-downloaded the data and do not hold the snapshot, copy the re-downloaded file to that name to run the pipeline and expect a MISMATCH. The snapshot itself is not distributed with this repository.
 
 #### 2. Alpha Signal Lineage in Verification Tables
 - All results in Tables 5.1, 5.2, and 5.3 are generated completely endogenously from public open-source code without `private_alphas/`.
@@ -399,6 +401,9 @@ df = fetch_vn_ohlcv(
 
 #### 3. Execution Commands for Verification & Benchmarking
 ```bash
+# Check a data file against the recorded snapshot fingerprint (default: data/vn30_production.parquet):
+python scripts/verify_data.py
+
 # Compare realistic simulation vs Naive baseline (generates Table 5.1):
 python scripts/compare_backtest_b6_b11.py
 
