@@ -15,6 +15,25 @@ import polars as pl
 from engine import data_pipeline as dp
 
 
+def format_display_path(path: str) -> str:
+    """Format path for display: relative with forward slashes if inside ROOT_DIR,
+    otherwise basename only. Catches ValueError from relpath/commonpath (e.g. cross-drive on Windows).
+    """
+    if not path:
+        return ""
+    try:
+        abs_path = os.path.abspath(path)
+        abs_root = os.path.abspath(ROOT_DIR)
+        common = os.path.commonpath([abs_root, abs_path])
+        if common == abs_root:
+            rel = os.path.relpath(abs_path, abs_root)
+            return rel.replace("\\", "/")
+        else:
+            return os.path.basename(path)
+    except (ValueError, Exception):
+        return os.path.basename(path)
+
+
 def compute_file_sha256(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -23,7 +42,7 @@ def compute_file_sha256(path: str) -> str:
     return h.hexdigest().lower()
 
 
-def main():
+def _main_impl():
     parser = argparse.ArgumentParser(description="Verify Parquet data against recorded content fingerprint manifest.")
     parser.add_argument("parquet", nargs="?", default="data/vn30_production.parquet", help="Path to Parquet file")
     parser.add_argument("--manifest", default=os.path.join(ROOT_DIR, "experiments", "data_manifest.json"), help="Path to manifest JSON")
@@ -35,10 +54,10 @@ def main():
     # Mode 1: Write manifest
     if args.write_manifest:
         if os.path.exists(args.write_manifest):
-            print(f"Error: manifest already exists at {args.write_manifest}, refusing to overwrite", file=sys.stderr)
+            print(f"Error: manifest already exists at {format_display_path(args.write_manifest)}, refusing to overwrite", file=sys.stderr)
             sys.exit(2)
         if not os.path.isfile(parquet_path):
-            print(f"Error: Parquet file not found: {parquet_path}", file=sys.stderr)
+            print(f"Error: Parquet file not found: {format_display_path(parquet_path)}", file=sys.stderr)
             sys.exit(2)
         try:
             file_sha = compute_file_sha256(parquet_path)
@@ -48,7 +67,7 @@ def main():
             print(f"Error computing dataset fingerprint: {e}", file=sys.stderr)
             sys.exit(2)
         except Exception as e:
-            print(f"Error reading Parquet file: {e}", file=sys.stderr)
+            print(f"Error reading Parquet file: {type(e).__name__}", file=sys.stderr)
             sys.exit(2)
 
         manifest = {
@@ -73,20 +92,20 @@ def main():
         content = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
         with open(args.write_manifest, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
-        print(f"Manifest successfully written to: {args.write_manifest}")
+        print(f"Manifest successfully written to: {format_display_path(args.write_manifest)}")
         sys.exit(0)
 
     # Mode 2: Verify against manifest
     # Validate manifest first
     if not os.path.isfile(args.manifest):
-        print(f"manifest invalid: file not found at {args.manifest}", file=sys.stderr)
+        print(f"manifest invalid: file not found at {format_display_path(args.manifest)}", file=sys.stderr)
         sys.exit(2)
 
     try:
         with open(args.manifest, "r", encoding="utf-8") as f:
             manifest = json.load(f)
     except Exception as e:
-        print(f"manifest invalid: JSON error: {e}", file=sys.stderr)
+        print(f"manifest invalid: JSON error: {type(e).__name__}", file=sys.stderr)
         sys.exit(2)
 
     if not isinstance(manifest, dict):
@@ -106,9 +125,14 @@ def main():
         print("manifest invalid: fingerprint_columns do not match expected columns", file=sys.stderr)
         sys.exit(2)
 
+    for dk in ["per_column_content_sha256", "per_symbol_rows", "per_symbol_content_sha256"]:
+        if not isinstance(manifest.get(dk), dict):
+            print(f"manifest invalid: '{dk}' must be a dict", file=sys.stderr)
+            sys.exit(2)
+
     # Read and fingerprint parquet
     if not os.path.isfile(parquet_path):
-        print(f"Error: Parquet file not found: {parquet_path}", file=sys.stderr)
+        print(f"Error: Parquet file not found: {format_display_path(parquet_path)}", file=sys.stderr)
         sys.exit(2)
 
     try:
@@ -119,15 +143,15 @@ def main():
         print(f"Error computing dataset fingerprint: {e}", file=sys.stderr)
         sys.exit(2)
     except Exception as e:
-        print(f"Error reading Parquet file: {e}", file=sys.stderr)
+        print(f"Error reading Parquet file: {type(e).__name__}", file=sys.stderr)
         sys.exit(2)
 
     manifest_file_sha = str(manifest.get("file_sha256", "")).lower()
     file_sha_cmp = "same" if file_sha == manifest_file_sha else "different"
 
     # Print summary (ASCII only)
-    print(f"Parquet Path : {parquet_path}")
-    print(f"Manifest Path: {args.manifest}")
+    print(f"Parquet Path : {format_display_path(parquet_path)}")
+    print(f"Manifest Path: {format_display_path(args.manifest)}")
     print(f"File SHA256  : file={file_sha} manifest={manifest_file_sha} ({file_sha_cmp})")
     print(f"Rows         : file={fp['rows']} manifest={manifest['rows']}")
     print(f"Sessions     : file={fp['sessions']} manifest={manifest['sessions']}")
@@ -179,6 +203,16 @@ def main():
             print(f"  Symbols with different row count ({len(diff_sym_rows)}): {', '.join(row_diff_strs)}")
 
         sys.exit(1)
+
+
+def main():
+    try:
+        _main_impl()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"Error: {type(e).__name__}", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

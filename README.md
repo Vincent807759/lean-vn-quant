@@ -381,7 +381,7 @@ Historical market bars can be freshly ingested directly via the data pipeline:
 ```python
 from engine.data_pipeline import fetch_vn_ohlcv
 
-# Ingest 30 VN30 tickers; save under a new name so an existing snapshot is never overwritten
+# Ingest 30 VN30 tickers; save under a new name so the snapshot file is not overwritten
 df = fetch_vn_ohlcv(
     start_date="2023-01-01",
     end_date="2026-10-24",
