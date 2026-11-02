@@ -19,6 +19,10 @@ import numpy as np
 from scipy import stats
 from scipy.signal import lfilter
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from engine import alpha_ops as ops, data_pipeline as dp, vn_simulator as sim
 
 CONSTRUCTIONS: Dict[str, Tuple[int, int, int, float]] = {
@@ -823,7 +827,7 @@ def format_markdown_table(data: Dict[str, Any]) -> str:
     """Format power test results into a GitHub-Flavored Markdown table."""
     cells = data["cells"]
     lines = []
-    lines.append("| Block | Construction | $\\rho$ | Seeds | Sharpe Net (mean±std) | Sharpe Gross | Daily TO | Real IC | Latent IC | Size-Adj Power (Wilson 95%) | Nominal Power | DSR Power | $t_{NW}^{excess}$ |")
+    lines.append("| Block | Construction | rho | Seeds | Sharpe Net (mean+/-std) | Sharpe Gross | Daily TO | Real IC | Latent IC | Size-Adj Power (Wilson 95%) | Nominal Power | DSR Power | t_NW Excess |")
     lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
 
     for key, cell in cells.items():
@@ -849,7 +853,7 @@ def format_markdown_table(data: Dict[str, Any]) -> str:
         dsr_str = f"{dsr_p:.2f} [{dsr_ci[0]:.2f}, {dsr_ci[1]:.2f}]"
 
         lines.append(
-            f"| {blk} | {c_name} | {rho:.3f} | {n_runs} | {sn_m:+.2f} ± {sn_s:.2f} | {sg_m:+.2f} | {to_m*100:.2f}% | {ic_r:.4f} | {ic_l:.4f} | {sa_str} | {nom_str} | {dsr_str} | {tnw_ex:+.2f} |"
+            f"| {blk} | {c_name} | {rho:.3f} | {n_runs} | {sn_m:+.2f} +/- {sn_s:.2f} | {sg_m:+.2f} | {to_m*100:.2f}% | {ic_r:.4f} | {ic_l:.4f} | {sa_str} | {nom_str} | {dsr_str} | {tnw_ex:+.2f} |"
         )
 
     return "\n".join(lines)
@@ -866,6 +870,19 @@ def save_results_json(data: Dict[str, Any], out_path: Path) -> None:
     out_path.write_text(json_str, encoding="utf-8")
 
 
+def format_gates_text(gates: Dict[str, Any]) -> str:
+    """Format gate evaluation results into human-readable text."""
+    lines = ["=== PLANTED-ALPHA POWER TEST GATE VERIFICATION REPORT ==="]
+    for gate_name in ["G1a", "G1b", "G2", "G3", "G4", "G5", "G6"]:
+        info = gates.get(gate_name, {})
+        status = "PASSED" if info.get("passed", False) else "FAILED"
+        lines.append(f"\n[{gate_name}] Status: {status}")
+        for k, v in info.items():
+            if k != "passed":
+                lines.append(f"  - {k}: {v}")
+    return "\n".join(lines) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Planted-alpha power test grid runner.")
     parser.add_argument("--blocks", type=str, default="main,phi05", help="Comma-separated blocks (e.g. main,phi05).")
@@ -874,6 +891,7 @@ def main() -> None:
     parser.add_argument("--T", type=int, default=947, help="Number of trading sessions.")
     parser.add_argument("--N", type=int, default=30, help="Number of symbols.")
     parser.add_argument("--out", type=str, default="experiments/power_test_r18.json", help="Output JSON path.")
+    parser.add_argument("--gates-out", type=str, default="audit_tmp/r18/gates.txt", help="Output path for raw gates report.")
     parser.add_argument("--print-table", action="store_true", help="Print Markdown table to stdout.")
     parser.add_argument("--quick", action="store_true", help="Run quick smoke grid (R=2, R0=4, T=200).")
 
@@ -896,6 +914,12 @@ def main() -> None:
         out_p = Path(args.out)
         save_results_json(data, out_p)
         print(f"Results saved to: {out_p.name}")
+
+    if args.gates_out:
+        gates_p = Path(args.gates_out)
+        gates_p.parent.mkdir(parents=True, exist_ok=True)
+        gates_p.write_text(format_gates_text(data["gates"]), encoding="utf-8")
+        print(f"Gates report saved to: {gates_p.name}")
 
     if args.print_table:
         print("\n" + format_markdown_table(data) + "\n")
