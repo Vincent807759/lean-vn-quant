@@ -13,7 +13,13 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from scipy.signal import lfilter
 
-from engine import data_pipeline as dp
+from engine import alpha_ops as ops, data_pipeline as dp, vn_simulator as sim
+
+CONSTRUCTIONS: Dict[str, Tuple[int, int, int, float]] = {
+    "C1": (2, 4, 20, 0.015),
+    "C2": (10, 18, 10, 0.05),
+    "C3": (2, 4, 10, 0.05),
+}
 
 
 def round_tick_np(prices: np.ndarray) -> np.ndarray:
@@ -226,4 +232,216 @@ def generate_planted_market(
         "dates": dates,
         "symbols": symbols,
         "mask": mask,
+    }
+
+
+def nw_se(returns: np.ndarray, rf: float = 0.04 / 252.0, lags: int = 5) -> float:
+    """Newey-West standard error for annualized Sharpe ratio (lags=5).
+
+    Matches implementation in scripts/compare_backtest_b6_b11.py.
+    """
+    returns_arr = np.asarray(returns, dtype=np.float64)
+    ex = returns_arr - rf
+    mu = float(np.mean(ex))
+    sig = float(np.std(ex, ddof=1)) if len(ex) > 1 else float(np.std(ex))
+    sr = mu / sig if sig > 1e-12 else 0.0
+    u = (ex - mu) / sig if sig > 1e-12 else np.zeros_like(ex)
+    g = u - 0.5 * sr * (u**2 - 1.0)
+    n = len(g)
+    lr_var = float(np.var(g))
+    for l in range(1, lags + 1):
+        if l >= n:
+            break
+        w_l = 1.0 - l / (lags + 1.0)
+        lr_var += 2.0 * w_l * float(np.mean(g[l:] * g[:-l]))
+    return float(np.sqrt(max(lr_var, 1e-12) / n) * np.sqrt(252.0))
+
+
+def run_one(
+    seed: int,
+    rho: float,
+    construction: Union[str, Tuple[int, int, int, float]],
+    T: int = 947,
+    N: int = 30,
+    phi: float = 0.9,
+    base_prices: Optional[Union[Dict[str, float], List[float], np.ndarray]] = None,
+    dates: Optional[List[datetime.date]] = None,
+) -> Dict[str, Any]:
+    """Execute one full planted-alpha simulation under production HOSE pipeline."""
+    if isinstance(construction, str):
+        c_name = construction
+        if c_name not in CONSTRUCTIONS:
+            raise ValueError(f"Unknown construction '{c_name}', must be one of {list(CONSTRUCTIONS.keys())}")
+        top_k_in, top_k_out, ema_span, max_daily_turnover = CONSTRUCTIONS[c_name]
+    else:
+        top_k_in, top_k_out, ema_span, max_daily_turnover = construction
+        c_name = f"custom({top_k_in},{top_k_out},{ema_span},{max_daily_turnover})"
+
+    market = generate_planted_market(
+        seed=seed,
+        rho=rho,
+        T=T,
+        N=N,
+        phi=phi,
+        base_prices=base_prices,
+        dates=dates,
+    )
+
+    open_p = market["open"]
+    close_p = market["close"]
+    ceil_p = market["ceiling"]
+    flr_p = market["floor"]
+    adv20 = market["adv20"]
+    adv20_shares = market["adv20_shares"]
+    s = market["s"]
+    u = market["u"]
+    mask = market["mask"]
+    market_dates = market["dates"]
+
+    w = ops.dampen_turnover(
+        s,
+        top_k_in=top_k_in,
+        top_k_out=top_k_out,
+        ema_span=ema_span,
+        max_daily_turnover=max_daily_turnover,
+        mask=mask,
+        tie_break_key=adv20,
+        invalid_below=None,
+    )
+
+    w_exec = np.zeros_like(w)
+    w_exec[1:] = w[:-1]
+
+    res = sim.simulate_vietnam(
+        open_p,
+        close_p,
+        ceil_p,
+        flr_p,
+        adv20_shares,
+        w_exec,
+        dates=market_dates,
+        penalty_rate_per_day=0.0,
+        strict_t25_ato_lock=False,
+    )
+
+    naive = sim.simulate_naive(close_p, w_exec, raw_open=open_p)
+
+    m = sim.evaluate_strategy(res["equity"], w_exec, naive)
+    mg = sim.evaluate_strategy(naive, w_exec)
+
+    sharpe_net = float(m.get("sharpe_ratio", 0.0))
+    sharpe_gross = float(mg.get("sharpe_ratio", 0.0))
+    daily_turnover = float(m.get("daily_turnover", 0.0))
+    dsr_p_value = float(m.get("dsr_p_value", 1.0))
+
+    eq = res["equity"]
+    returns = (eq[1:] - eq[:-1]) / np.maximum(eq[:-1], 1e-6)
+    se = nw_se(returns, rf=0.04 / 252.0, lags=5)
+    t_nw = sharpe_net / se if se > 1e-12 else 0.0
+
+    ic_real = cross_sectional_ic(s[:-1], close_p[1:] / open_p[1:] - 1.0)
+    ic_latent = cross_sectional_ic(s[:-1], u[1:])
+
+    # Excess return vs EW30 benchmark
+    r_ew30 = np.mean(close_p[1:] / close_p[:-1] - 1.0, axis=1)
+    a = returns - r_ew30
+    mean_a = float(np.mean(a) * 252.0)
+    vol_a = float(np.std(a) * np.sqrt(252.0))
+    sr_a = mean_a / vol_a if vol_a > 1e-12 else 0.0
+    se_a = nw_se(a, rf=0.0, lags=5)
+    t_nw_excess = sr_a / se_a if se_a > 1e-12 else 0.0
+
+    return {
+        "sharpe_net": sharpe_net,
+        "sharpe_gross": sharpe_gross,
+        "t_nw": t_nw,
+        "dsr_p_value": dsr_p_value,
+        "daily_turnover": daily_turnover,
+        "ic_real": ic_real,
+        "ic_latent": ic_latent,
+        "t_nw_excess": t_nw_excess,
+        "seed": seed,
+        "rho": rho,
+        "construction": c_name,
+        "phi": phi,
+    }
+
+
+def run_g2_timing_control(
+    seeds: Optional[List[int]] = None,
+    T: int = 947,
+    N: int = 30,
+) -> Dict[str, Any]:
+    """Gate 2 timing control check (simulate_naive only, direct weights without dampener).
+
+    (i) Clairvoyant signal s_pf[t-1, i] = close[t, i]/open[t, i] - 1: mean sharpe_gross > 5
+    (ii) Signal lagged 1 additional day: |mean sharpe_gross| < 1.0 and each |sharpe_gross| < 2.5
+    (iii) Negated clairvoyant signal: mean sharpe_gross < -5
+    """
+    if seeds is None:
+        seeds = [1000, 1001, 1002, 1003, 1004]
+
+    sharpes_i: List[float] = []
+    sharpes_ii: List[float] = []
+    sharpes_iii: List[float] = []
+
+    for s in seeds:
+        market = generate_planted_market(seed=s, rho=0.0, T=T, N=N)
+        op = market["open"]
+        cl = market["close"]
+
+        # Clairvoyant signal: s_pf[t-1, i] = cl[t, i] / op[t, i] - 1
+        s_pf = np.zeros((T, N), dtype=np.float64)
+        s_pf[:-1] = cl[1:] / op[1:] - 1.0
+
+        # Direct weights: top 5 equal weight (0.2 each)
+        w_pf = np.zeros((T, N), dtype=np.float64)
+        w_neg = np.zeros((T, N), dtype=np.float64)
+        for t in range(T - 1):
+            top5 = np.argsort(s_pf[t])[-5:]
+            w_pf[t, top5] = 0.2
+            bot5 = np.argsort(-s_pf[t])[-5:]
+            w_neg[t, bot5] = 0.2
+
+        # (i) Clairvoyant execution w_exec[1:] = w_pf[:-1]
+        w_exec_i = np.zeros((T, N), dtype=np.float64)
+        w_exec_i[1:] = w_pf[:-1]
+        naive_i = sim.simulate_naive(cl, w_exec_i, raw_open=op)
+        eval_i = sim.evaluate_strategy(naive_i, w_exec_i)
+        sharpes_i.append(float(eval_i.get("sharpe_ratio", 0.0)))
+
+        # (iii) Negated clairvoyant execution
+        w_exec_iii = np.zeros((T, N), dtype=np.float64)
+        w_exec_iii[1:] = w_neg[:-1]
+        naive_iii = sim.simulate_naive(cl, w_exec_iii, raw_open=op)
+        eval_iii = sim.evaluate_strategy(naive_iii, w_exec_iii)
+        sharpes_iii.append(float(eval_iii.get("sharpe_ratio", 0.0)))
+
+        # (ii) Lagged 1 additional day: w_exec lagged by 2 steps
+        w_exec_ii = np.zeros((T, N), dtype=np.float64)
+        if T > 2:
+            w_exec_ii[2:] = w_pf[:-2]
+        naive_ii = sim.simulate_naive(cl, w_exec_ii, raw_open=op)
+        eval_ii = sim.evaluate_strategy(naive_ii, w_exec_ii)
+        sharpes_ii.append(float(eval_ii.get("sharpe_ratio", 0.0)))
+
+    mean_i = float(np.mean(sharpes_i))
+    mean_ii = float(np.mean(sharpes_ii))
+    mean_iii = float(np.mean(sharpes_iii))
+
+    passed = (
+        mean_i > 5.0
+        and abs(mean_ii) < 1.0
+        and all(abs(x) < 2.5 for x in sharpes_ii)
+        and mean_iii < -5.0
+    )
+
+    return {
+        "passed": passed,
+        "mean_clairvoyant": mean_i,
+        "sharpes_clairvoyant": sharpes_i,
+        "mean_lagged": mean_ii,
+        "sharpes_lagged": sharpes_ii,
+        "mean_negated": mean_iii,
+        "sharpes_negated": sharpes_iii,
     }
