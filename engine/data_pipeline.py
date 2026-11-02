@@ -455,7 +455,7 @@ def _column_segment(frame: pl.DataFrame, name: str) -> bytes:
 
 def dataset_fingerprint(df: pl.DataFrame) -> dict:
     """Compute deterministic content fingerprint of a VN30 dataset.
-    
+
     Validates input schema and data integrity, sorts by (date, symbol),
     and computes SHA256 hashes per column, per symbol, and overall content.
     """
@@ -484,10 +484,10 @@ def dataset_fingerprint(df: pl.DataFrame) -> dict:
     if date_col.null_count() > 0:
         raise ValueError("date column contains null values after casting")
 
-    if df.select(["date", "symbol"]).is_duplicated().any():
-        raise ValueError("Duplicate (date, symbol) pairs detected")
-
     df_sorted = df.with_columns(date=date_col).sort(["date", "symbol"])
+
+    if df_sorted.select(["date", "symbol"]).is_duplicated().any():
+        raise ValueError("Duplicate (date, symbol) pairs detected")
 
     segments = [_column_segment(df_sorted, name) for name in FINGERPRINT_COLUMNS]
     content_sha256 = hashlib.sha256(b"".join(segments)).hexdigest()
@@ -540,6 +540,9 @@ def manifest_status(df: pl.DataFrame, manifest_path: str) -> Tuple[str, Optional
             return ("UNAVAILABLE", None)
         if manifest.get("fingerprint_columns") != FINGERPRINT_COLUMNS:
             return ("UNAVAILABLE", None)
+        for dk in ["per_column_content_sha256", "per_symbol_rows", "per_symbol_content_sha256"]:
+            if not isinstance(manifest.get(dk), dict):
+                return ("UNAVAILABLE", None)
 
         fp = dataset_fingerprint(df)
         content_sha = fp["content_sha256"]

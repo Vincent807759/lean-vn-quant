@@ -1,4 +1,5 @@
 import json
+import datetime
 import pytest
 import numpy as np
 import polars as pl
@@ -115,6 +116,21 @@ def test_dataset_fingerprint_validation_errors(sample_df):
     with pytest.raises(ValueError, match="Duplicate"):
         dataset_fingerprint(pl.concat([sample_df, sample_df.slice(0, 1)]))
 
+    # Datetime with 2 different hours on same day and same symbol
+    dt_series = pl.Series(
+        "date",
+        [
+            datetime.datetime(2026, 1, 1, 9, 0, 0),
+            datetime.datetime(2026, 1, 1, 15, 0, 0),
+        ],
+    )
+    df_dt_dup = sample_df.slice(0, 2).with_columns(
+        date=dt_series,
+        symbol=pl.lit("HPG"),
+    )
+    with pytest.raises(ValueError, match="Duplicate"):
+        dataset_fingerprint(df_dt_dup)
+
 
 def test_dataset_fingerprint_normalization(sample_df):
     # -0.0 vs +0.0
@@ -191,6 +207,13 @@ def test_manifest_status_states(sample_df, tmp_path):
     m_cols["fingerprint_columns"] = ["date", "symbol"]
     p_bad_cols.write_text(json.dumps(m_cols), encoding="utf-8")
     assert manifest_status(sample_df, str(p_bad_cols)) == ("UNAVAILABLE", None)
+
+    # Invalid per_symbol_rows type (list instead of dict)
+    p_bad_dict = tmp_path / "bad_dict.json"
+    m_dict = dict(manifest_data)
+    m_dict["per_symbol_rows"] = [947, 947]
+    p_bad_dict.write_text(json.dumps(m_dict), encoding="utf-8")
+    assert manifest_status(sample_df, str(p_bad_dict)) == ("UNAVAILABLE", None)
 
     # dataset_fingerprint raises exception on invalid DataFrame
     assert manifest_status(pl.DataFrame(), str(p_match)) == ("UNAVAILABLE", None)
