@@ -7,9 +7,11 @@ under realistic HOSE microstructure constraints (fees, taxes, T+2.5, tick sizes,
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -241,6 +243,7 @@ def run_one(
     phi: float = 0.9,
     base_prices: Optional[Union[Dict[str, float], List[float], np.ndarray]] = None,
     dates: Optional[List[datetime.date]] = None,
+    market: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Execute one full planted-alpha simulation under production HOSE pipeline."""
     if isinstance(construction, str):
@@ -252,15 +255,16 @@ def run_one(
         top_k_in, top_k_out, ema_span, max_daily_turnover = construction
         c_name = f"custom({top_k_in},{top_k_out},{ema_span},{max_daily_turnover})"
 
-    market = generate_planted_market(
-        seed=seed,
-        rho=rho,
-        T=T,
-        N=N,
-        phi=phi,
-        base_prices=base_prices,
-        dates=dates,
-    )
+    if market is None:
+        market = generate_planted_market(
+            seed=seed,
+            rho=rho,
+            T=T,
+            N=N,
+            phi=phi,
+            base_prices=base_prices,
+            dates=dates,
+        )
 
     open_p = market["open"]
     close_p = market["close"]
@@ -458,23 +462,77 @@ def interpolate_rho_star(
     return "chưa đạt trong lưới"
 
 
+def _eval_seed_task(
+    task_args: Tuple[str, int, float, float, int, int]
+) -> Tuple[str, int, float, Dict[str, Dict[str, Any]]]:
+    """Worker task evaluating all constructions for a single (seed, rho) market."""
+    block, seed, rho, phi, T, N = task_args
+    market = generate_planted_market(seed=seed, rho=rho, T=T, N=N, phi=phi)
+    results: Dict[str, Dict[str, Any]] = {}
+    for c_name in CONSTRUCTIONS:
+        results[c_name] = run_one(
+            seed=seed,
+            rho=rho,
+            construction=c_name,
+            T=T,
+            N=N,
+            phi=phi,
+            market=market,
+        )
+    return block, seed, rho, results
+
+
 def run_grid(
     blocks: List[str],
     R: int = 100,
     R0: int = 400,
     T: int = 947,
     N: int = 30,
+    max_workers: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Execute complete planted-alpha simulation grid and aggregate results."""
-    # Seed ranges
-    seed_base = 1000
-    seeds_null = list(range(seed_base, seed_base + R0))
-    seeds_paired = list(range(seed_base, seed_base + R))
+    if max_workers is None:
+        max_workers = min(os.cpu_count() or 1, 8)
 
+    seed_base = 1000
+
+    # Build unique (block, seed, rho, phi, T, N) tasks
+    tasks: List[Tuple[str, int, float, float, int, int]] = []
+    for block in blocks:
+        phi = 0.9 if block == "main" else 0.5
+        r0_count = R0 if block == "main" else R
+        seeds_for_null = list(range(seed_base, seed_base + r0_count))
+        for s in seeds_for_null:
+            tasks.append((block, s, 0.0, phi, T, N))
+
+        rho_list = MAIN_RHO_GRID if block == "main" else PHI05_RHO_GRID
+        seeds_paired = list(range(seed_base, seed_base + R))
+        for rho in rho_list:
+            if rho == 0.0:
+                continue
+            for s in seeds_paired:
+                tasks.append((block, s, rho, phi, T, N))
+
+    raw_results_by_block_rho: Dict[Tuple[str, float], Dict[int, Dict[str, Dict[str, Any]]]] = {}
+    if max_workers > 1:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for blk, s_val, r_val, res_dict in executor.map(_eval_seed_task, tasks):
+                key = (blk, r_val)
+                if key not in raw_results_by_block_rho:
+                    raw_results_by_block_rho[key] = {}
+                raw_results_by_block_rho[key][s_val] = res_dict
+    else:
+        for t in tasks:
+            blk, s_val, r_val, res_dict = _eval_seed_task(t)
+            key = (blk, r_val)
+            if key not in raw_results_by_block_rho:
+                raw_results_by_block_rho[key] = {}
+            raw_results_by_block_rho[key][s_val] = res_dict
+
+    # Reconstruct raw_cells in exact seed order
     raw_cells: Dict[str, List[Dict[str, Any]]] = {}
     q95_map: Dict[str, float] = {}
 
-    # 1. Run null cells first to establish q95
     for block in blocks:
         phi = 0.9 if block == "main" else 0.5
         r0_count = R0 if block == "main" else R
@@ -483,7 +541,7 @@ def run_grid(
         for c_name in CONSTRUCTIONS:
             cell_key = f"{block}:{c_name}:rho_0.0"
             results_null = [
-                run_one(seed=s, rho=0.0, construction=c_name, T=T, N=N, phi=phi)
+                raw_results_by_block_rho[(block, 0.0)][s][c_name]
                 for s in seeds_for_null
             ]
             raw_cells[cell_key] = results_null
@@ -491,18 +549,15 @@ def run_grid(
             q95_val = float(np.percentile(t_nw_null, 95.0))
             q95_map[f"{block}:{c_name}"] = q95_val
 
-    # 2. Run remaining rho cells
-    for block in blocks:
-        phi = 0.9 if block == "main" else 0.5
         rho_list = MAIN_RHO_GRID if block == "main" else PHI05_RHO_GRID
-
-        for c_name in CONSTRUCTIONS:
-            for rho in rho_list:
-                if rho == 0.0:
-                    continue
+        seeds_paired = list(range(seed_base, seed_base + R))
+        for rho in rho_list:
+            if rho == 0.0:
+                continue
+            for c_name in CONSTRUCTIONS:
                 cell_key = f"{block}:{c_name}:rho_{rho}"
                 results_rho = [
-                    run_one(seed=s, rho=rho, construction=c_name, T=T, N=N, phi=phi)
+                    raw_results_by_block_rho[(block, rho)][s][c_name]
                     for s in seeds_paired
                 ]
                 raw_cells[cell_key] = results_rho
@@ -867,7 +922,7 @@ def save_results_json(data: Dict[str, Any], out_path: Path) -> None:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     json_str = json.dumps(data, indent=2) + "\n"
-    out_path.write_text(json_str, encoding="utf-8")
+    out_path.write_text(json_str, encoding="utf-8", newline="\n")
 
 
 def format_gates_text(gates: Dict[str, Any]) -> str:
@@ -892,6 +947,7 @@ def main() -> None:
     parser.add_argument("--N", type=int, default=30, help="Number of symbols.")
     parser.add_argument("--out", type=str, default="experiments/power_test_r18.json", help="Output JSON path.")
     parser.add_argument("--gates-out", type=str, default="audit_tmp/r18/gates.txt", help="Output path for raw gates report.")
+    parser.add_argument("--workers", type=int, default=None, help="Number of worker processes (default: min(CPU, 8)).")
     parser.add_argument("--print-table", action="store_true", help="Print Markdown table to stdout.")
     parser.add_argument("--quick", action="store_true", help="Run quick smoke grid (R=2, R0=4, T=200).")
 
@@ -908,7 +964,7 @@ def main() -> None:
         r0_val = args.R0
         t_val = args.T
 
-    data = run_grid(blocks=blocks, R=r_val, R0=r0_val, T=t_val, N=args.N)
+    data = run_grid(blocks=blocks, R=r_val, R0=r0_val, T=t_val, N=args.N, max_workers=args.workers)
 
     if args.out:
         out_p = Path(args.out)
