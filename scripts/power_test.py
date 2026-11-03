@@ -217,21 +217,7 @@ def generate_planted_market(
 
 def nw_se(returns: np.ndarray, rf: float = 0.04 / 252.0, lags: int = 5) -> float:
     """Newey-West standard error for annualized Sharpe ratio (lags=5)."""
-    returns_arr = np.asarray(returns, dtype=np.float64)
-    ex = returns_arr - rf
-    mu = float(np.mean(ex))
-    sig = float(np.std(ex, ddof=1)) if len(ex) > 1 else float(np.std(ex))
-    sr = mu / sig if sig > 1e-12 else 0.0
-    u = (ex - mu) / sig if sig > 1e-12 else np.zeros_like(ex)
-    g = u - 0.5 * sr * (u**2 - 1.0)
-    n = len(g)
-    lr_var = float(np.var(g))
-    for l in range(1, lags + 1):
-        if l >= n:
-            break
-        w_l = 1.0 - l / (lags + 1.0)
-        lr_var += 2.0 * w_l * float(np.mean(g[l:] * g[:-l]))
-    return float(np.sqrt(max(lr_var, 1e-12) / n) * np.sqrt(252.0))
+    return sim.compute_newey_west_sharpe_se(returns, rf=rf, lags=lags)
 
 
 def run_one(

@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from engine import vn_simulator as sim
 from scripts.power_test import nw_se, run_g2_timing_control, run_one
 
 
@@ -24,6 +25,15 @@ def test_nw_se_fixed_vector():
     # se = sqrt(0.1627916 / 8) * sqrt(252) = 2.26087033
     se_val = nw_se(r, rf=0.04 / 252.0, lags=2)
     assert abs(se_val - 2.26087033) < 1e-6
+    assert sim.compute_newey_west_sharpe_se(r, rf=0.04 / 252.0, lags=2) == se_val
+
+    # Verify delegation in all 3 script files
+    f_pt = Path("scripts/power_test.py").read_text(encoding="utf-8")
+    f_cb = Path("scripts/compare_backtest_b6_b11.py").read_text(encoding="utf-8")
+    f_ar = Path("scripts/audit_argon_revisions.py").read_text(encoding="utf-8")
+    assert "sim.compute_newey_west_sharpe_se" in f_pt
+    assert "sim.compute_newey_west_sharpe_se" in f_cb
+    assert "sim.compute_newey_west_sharpe_se" in f_ar
 
 
 def test_run_one_finite_metrics_and_invariants():
