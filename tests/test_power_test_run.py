@@ -75,6 +75,8 @@ def test_run_one_finite_metrics_and_invariants():
 def test_g2_timing_control_relaxed():
     """Verify Gate 2 timing control with relaxed thresholds (|Sharpe| < 3) at T=300."""
     g2 = run_g2_timing_control(seeds=[1000, 1001, 1002], T=300, N=30)
+    g2_quicksort = run_g2_timing_control(seeds=[1000, 1001, 1002], T=300, N=30, sort_kind="quicksort")
+    assert g2 == g2_quicksort
 
     # (i) Clairvoyant mean > 5
     assert g2["mean_clairvoyant"] > 5.0
@@ -86,3 +88,10 @@ def test_g2_timing_control_relaxed():
     assert abs(g2["mean_lagged"]) < 1.5
     for s_val in g2["sharpes_lagged"]:
         assert abs(s_val) < 3.0, f"Lagged Sharpe {s_val} exceeds relaxed threshold 3.0"
+
+    # Test sort_kind="stable" option
+    g2_stable = run_g2_timing_control(seeds=[1000, 1001, 1002], T=300, N=30, sort_kind="stable")
+    assert g2_stable["passed"] is True
+    assert g2_stable["mean_clairvoyant"] > 5.0
+    assert g2_stable["mean_negated"] < -5.0
+    assert abs(g2_stable["mean_lagged"]) < 1.5
