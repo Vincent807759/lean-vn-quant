@@ -417,6 +417,68 @@ python -m pytest tests/ -v
 python run_verification.py
 ```
 
+### 5.6. Statistical Power Under a Stated Model
+
+We model a synthetic 30-stock market with an AR(1) signal possessing daily cross-sectional predictive correlation rho against intraday open-to-close returns. Daily returns incorporate common market drift, stock-specific volatility, overnight gap shocks, and Ito-adjusted log returns ensuring single-period arithmetic expectations equal the risk-free rate. Sequential HOSE trading rules (tick rounding, +/-7% price limits, ADV market impact, broker fee, sell tax, and T+2.5 settlement) are enforced across the production turnover-dampening portfolio pipeline.
+
+#### Planted-Alpha Power Test Results
+
+| Block | Construction | rho | Seeds | Sharpe Net (mean+/-std) | Sharpe Gross | Daily TO | Real IC | Latent IC | Size-Adj Power (Wilson 95%) | Nominal Power | DSR Power | t_NW Excess |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| main | C1 | 0.000 | 400 | -0.26 +/- 0.50 | -0.04 | 1.55% | -0.0006 | -0.0005 | 0.05 [0.03, 0.08] | 0.01 [0.00, 0.02] | 0.00 [0.00, 0.01] | -1.08 |
+| main | C1 | 0.010 | 100 | -0.17 +/- 0.48 | +0.05 | 1.55% | 0.0087 | 0.0089 | 0.06 [0.03, 0.12] | 0.03 [0.01, 0.08] | 0.00 [0.00, 0.04] | -0.74 |
+| main | C1 | 0.020 | 100 | -0.09 +/- 0.48 | +0.12 | 1.55% | 0.0185 | 0.0187 | 0.07 [0.03, 0.14] | 0.03 [0.01, 0.08] | 0.00 [0.00, 0.04] | -0.36 |
+| main | C1 | 0.030 | 100 | -0.02 +/- 0.48 | +0.19 | 1.55% | 0.0284 | 0.0285 | 0.08 [0.04, 0.15] | 0.05 [0.02, 0.11] | 0.00 [0.00, 0.04] | +0.02 |
+| main | C1 | 0.050 | 100 | +0.13 +/- 0.47 | +0.33 | 1.55% | 0.0479 | 0.0482 | 0.16 [0.10, 0.24] | 0.06 [0.03, 0.12] | 0.00 [0.00, 0.04] | +0.75 |
+| main | C1 | 0.075 | 100 | +0.31 +/- 0.47 | +0.51 | 1.55% | 0.0724 | 0.0728 | 0.28 [0.20, 0.37] | 0.12 [0.07, 0.20] | 0.00 [0.00, 0.04] | +1.70 |
+| main | C1 | 0.100 | 100 | +0.49 +/- 0.47 | +0.68 | 1.55% | 0.0968 | 0.0974 | 0.45 [0.36, 0.55] | 0.22 [0.15, 0.31] | 0.00 [0.00, 0.04] | +2.63 |
+| main | C1 | 0.150 | 100 | +0.86 +/- 0.47 | +1.03 | 1.55% | 0.1458 | 0.1466 | 0.74 [0.65, 0.82] | 0.50 [0.40, 0.60] | 0.03 [0.01, 0.08] | +4.42 |
+| main | C2 | 0.000 | 400 | -1.07 +/- 0.55 | -0.05 | 4.46% | -0.0006 | -0.0005 | 0.05 [0.03, 0.08] | 0.00 [0.00, 0.01] | 0.00 [0.00, 0.01] | -6.68 |
+| main | C2 | 0.010 | 100 | -0.92 +/- 0.54 | +0.11 | 4.47% | 0.0087 | 0.0089 | 0.06 [0.03, 0.12] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -5.91 |
+| main | C2 | 0.020 | 100 | -0.80 +/- 0.54 | +0.25 | 4.47% | 0.0185 | 0.0187 | 0.12 [0.07, 0.20] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -5.11 |
+| main | C2 | 0.030 | 100 | -0.67 +/- 0.54 | +0.39 | 4.47% | 0.0284 | 0.0285 | 0.20 [0.13, 0.29] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -4.28 |
+| main | C2 | 0.050 | 100 | -0.41 +/- 0.54 | +0.67 | 4.47% | 0.0479 | 0.0482 | 0.35 [0.26, 0.45] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -2.56 |
+| main | C2 | 0.075 | 100 | -0.08 +/- 0.55 | +1.02 | 4.47% | 0.0724 | 0.0728 | 0.58 [0.48, 0.67] | 0.05 [0.02, 0.11] | 0.00 [0.00, 0.04] | -0.31 |
+| main | C2 | 0.100 | 100 | +0.27 +/- 0.55 | +1.37 | 4.47% | 0.0968 | 0.0974 | 0.82 [0.73, 0.88] | 0.14 [0.09, 0.22] | 0.00 [0.00, 0.04] | +2.03 |
+| main | C2 | 0.150 | 100 | +1.01 +/- 0.55 | +2.07 | 4.47% | 0.1458 | 0.1466 | 0.98 [0.93, 0.99] | 0.64 [0.54, 0.73] | 0.05 [0.02, 0.11] | +7.00 |
+| main | C3 | 0.000 | 400 | -0.90 +/- 0.55 | -0.03 | 5.04% | -0.0006 | -0.0005 | 0.05 [0.03, 0.08] | 0.00 [0.00, 0.01] | 0.00 [0.00, 0.01] | -3.15 |
+| main | C3 | 0.010 | 100 | -0.69 +/- 0.49 | +0.17 | 5.04% | 0.0087 | 0.0089 | 0.10 [0.06, 0.17] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -2.46 |
+| main | C3 | 0.020 | 100 | -0.50 +/- 0.49 | +0.34 | 5.04% | 0.0185 | 0.0187 | 0.19 [0.13, 0.28] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -1.77 |
+| main | C3 | 0.030 | 100 | -0.31 +/- 0.49 | +0.52 | 5.04% | 0.0284 | 0.0285 | 0.26 [0.18, 0.35] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -1.07 |
+| main | C3 | 0.050 | 100 | +0.07 +/- 0.49 | +0.88 | 5.04% | 0.0479 | 0.0482 | 0.53 [0.43, 0.62] | 0.05 [0.02, 0.11] | 0.00 [0.00, 0.04] | +0.34 |
+| main | C3 | 0.075 | 100 | +0.54 +/- 0.49 | +1.32 | 5.04% | 0.0724 | 0.0728 | 0.85 [0.77, 0.91] | 0.29 [0.21, 0.39] | 0.00 [0.00, 0.04] | +2.12 |
+| main | C3 | 0.100 | 100 | +1.01 +/- 0.49 | +1.76 | 5.04% | 0.0968 | 0.0974 | 0.97 [0.92, 0.99] | 0.58 [0.48, 0.67] | 0.04 [0.02, 0.10] | +3.87 |
+| main | C3 | 0.150 | 100 | +1.94 +/- 0.48 | +2.64 | 5.04% | 0.1458 | 0.1466 | 1.00 [0.96, 1.00] | 0.99 [0.95, 1.00] | 0.50 [0.40, 0.60] | +7.26 |
+| phi05 | C1 | 0.000 | 100 | -0.25 +/- 0.49 | -0.02 | 1.55% | -0.0012 | -0.0012 | 0.05 [0.02, 0.11] | 0.01 [0.00, 0.05] | 0.00 [0.00, 0.04] | -1.54 |
+| phi05 | C1 | 0.050 | 100 | -0.16 +/- 0.49 | +0.06 | 1.55% | 0.0477 | 0.0480 | 0.08 [0.04, 0.15] | 0.02 [0.01, 0.07] | 0.00 [0.00, 0.04] | -0.95 |
+| phi05 | C1 | 0.100 | 100 | -0.08 +/- 0.49 | +0.14 | 1.55% | 0.0966 | 0.0972 | 0.09 [0.05, 0.16] | 0.03 [0.01, 0.08] | 0.00 [0.00, 0.04] | -0.35 |
+| phi05 | C2 | 0.000 | 100 | -1.15 +/- 0.53 | -0.03 | 5.05% | -0.0012 | -0.0012 | 0.05 [0.02, 0.11] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -10.85 |
+| phi05 | C2 | 0.050 | 100 | -0.98 +/- 0.53 | +0.18 | 5.05% | 0.0477 | 0.0480 | 0.13 [0.08, 0.21] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -9.38 |
+| phi05 | C2 | 0.100 | 100 | -0.81 +/- 0.54 | +0.37 | 5.05% | 0.0966 | 0.0972 | 0.19 [0.13, 0.28] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -7.84 |
+| phi05 | C3 | 0.000 | 100 | -0.87 +/- 0.52 | -0.02 | 5.05% | -0.0012 | -0.0012 | 0.05 [0.02, 0.11] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -4.91 |
+| phi05 | C3 | 0.050 | 100 | -0.61 +/- 0.52 | +0.23 | 5.05% | 0.0477 | 0.0480 | 0.12 [0.07, 0.20] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -3.47 |
+| phi05 | C3 | 0.100 | 100 | -0.36 +/- 0.52 | +0.47 | 5.05% | 0.0966 | 0.0972 | 0.22 [0.15, 0.31] | 0.00 [0.00, 0.04] | 0.00 [0.00, 0.04] | -1.97 |
+
+#### Interpretation and Known Limitations
+
+- **Production decision rule findings:** Under the standard production decision rule requiring a statistically significant positive net excess return over the risk-free rate (positive net Sharpe with one-sided Newey-West t_NW > 1.645), observed detection rates at rho <= 0.05 do not exceed 0.06 across R = 100 seeds (C1: 0.06 [0.03, 0.12], C2: 0.00 [0.00, 0.04], C3: 0.05 [0.02, 0.11]; with R0 = 400 at rho = 0 showing 0.01 [0.00, 0.02] for C1 and 0.00 [0.00, 0.01] for C2/C3). Under this nominal rule, C1 and C2 do not reach power 0.8 within the evaluated grid (rho <= 0.15), and only C3 achieves power >= 0.8 at an interpolated threshold rho* = 0.127 (95% Wilson interval [0.120, 0.134]).
+- **Reframing size-adjusted power:** The "Size-Adj Power" column benchmarks against empirical 95th-percentile thresholds estimated at rho = 0 (q95 is 1.14 for C1, -0.36 for C2, and 0.00 for C3). Trading frictions and turnover drag pull the null distribution downward (into negative territory for C2 and near zero for C3); consequently, the criterion `t_NW > q95` measures ability to separate rho > 0 from the null rho = 0, but does NOT require positive net returns after costs. For example, C2 at rho = 0.05 yields size-adjusted power of 0.35 even though its mean net Sharpe remains negative at -0.41. Size-adjusted rho* thresholds (0.098 for C2, 0.071 for C3) should not be presented in isolation without the nominal rule.
+- **Sensitivity block (phi = 0.50):** When signal persistence drops from phi = 0.90 to phi = 0.50, no portfolio construction achieves power 0.8 within the evaluated grid (rho <= 0.10; maximum nominal power observed is 0.03 for C1, 0.00 for C2/C3). Note that `q95` for this sensitivity block was estimated from 100 null seeds rather than 400, resulting in higher sampling noise.
+- **Magnitude of rho = 0.15:** An intraday execution correlation of rho = 0.15 is exceptionally large relative to typical real-world equity alphas. The high end of the grid is evaluated strictly to identify pipeline boundaries, not under an assumption that alphas of this magnitude exist in live trading.
+- **Stated synthetic model only:** This simulation operates under an explicitly stated Gaussian factor model and does not constitute market evidence or prove that any real alpha is effective. The interpolated detection threshold rho* = 0.127 (C3) indicates detection capability only if a signal with that level of predictive correlation exists under the stated data-generating process, not evidence that existing alphas attain that threshold.
+- **Thin-tail Gaussian friction:** Under thin-tail Gaussian returns, the +/-7% ceiling and floor price limit locks are rarely triggered, and `invalid_below=None` is passed so the -999.0 trend filter is not tested. This benchmark isolates broker commissions, sell tax, ADV market impact, tick rounding, T+2.5 settlement, and turnover dampener smoothing lag.
+- **Universe and portfolio concentration:** The universe is N = 30 tickers; the production portfolio (C1) holds only 2 names with a 1.5%/day turnover ceiling.
+- **Autocorrelation amplification:** Signals possess AR(1) autocorrelation phi. For phi = 0.90 and a holding horizon H = 20 days, cumulative multi-day predictive correlation scales as `IC(H) = rho * (1 - phi^H) / (1 - phi) / sqrt(H) ~= 1.96 * rho`. The sensitivity block with phi = 0.50 highlights the strong dependence on persistence.
+- **Intraday vs. full-session IC:** The parameter rho represents execution IC within the trading session (`open[t] -> close[t]`). Close-to-close IC (`close[t-1] -> close[t]`) corresponds to approximately `0.928 * rho`.
+- **Environment and reproducibility:** The reference dataset in `experiments/power_test_r18.json` was generated under Python 3.11.9 with numpy 2.4.6, scipy 1.17.1, and numba 0.68.0. Re-running the full grid in a clean virtual environment pinned strictly to `requirements.txt` (numpy 1.26.4, scipy 1.11.4, numba 0.59.1) reproduces all aggregate cell metrics and primary answers identically, and all gates G1a-G6 give the same pass result, while the numerical G2 control Sharpe values differ slightly (absolute difference up to 0.07; cause not investigated).
+- **Continuous Integration:** CI workflows (Python 3.10 and 3.11 on Linux) execute `security_scan.py` and `pytest` (including fast-path small-grid tests) to guard against regressions, but do not re-run the full 4,200-simulation grid on each push; the full grid is executed out-of-band via the command below.
+
+#### Reproduction Command
+
+```bash
+python scripts/power_test.py --blocks main,phi05 --R 100 --R0 400 --T 947 --N 30 --out experiments/power_test_r18.json --gates-out audit_tmp/r18/gates.txt --print-table
+```
+
 ---
 
 ## 6. Security & Pre-Commit Protection
