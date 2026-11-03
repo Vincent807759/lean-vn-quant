@@ -114,17 +114,7 @@ is_ann_m_a = (cagr_naive_m_a - m_m_a["cagr"]) * 100.0
 
 # Newey-West standard error for Sharpe
 def nw_se(returns, rf=0.04/252.0, lags=5):
-    ex = returns - rf
-    mu, sig = np.mean(ex), np.std(ex, ddof=1)
-    sr = mu / sig if sig > 1e-12 else 0.0
-    u = (ex - mu) / sig
-    g = u - 0.5 * sr * (u**2 - 1.0)
-    n = len(g)
-    lr_var = np.var(g)
-    for l in range(1, lags + 1):
-        w_l = 1.0 - l / (lags + 1.0)
-        lr_var += 2.0 * w_l * np.mean(g[l:] * g[:-l])
-    return float(np.sqrt(max(lr_var, 1e-12) / n) * np.sqrt(252.0))
+    return sim.compute_newey_west_sharpe_se(returns, rf=rf, lags=lags)
 
 ret_s_b = np.diff(res_s_b["equity"]) / np.maximum(res_s_b["equity"][:-1], 1e-6)
 ret_s_a = np.diff(res_s_a["equity"]) / np.maximum(res_s_a["equity"][:-1], 1e-6)

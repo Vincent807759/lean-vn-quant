@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from engine import vn_simulator as sim
 from scripts.power_test import nw_se, run_g2_timing_control, run_one
 
 
@@ -24,6 +25,15 @@ def test_nw_se_fixed_vector():
     # se = sqrt(0.1627916 / 8) * sqrt(252) = 2.26087033
     se_val = nw_se(r, rf=0.04 / 252.0, lags=2)
     assert abs(se_val - 2.26087033) < 1e-6
+    assert sim.compute_newey_west_sharpe_se(r, rf=0.04 / 252.0, lags=2) == se_val
+
+    # Verify delegation in all 3 script files
+    f_pt = Path("scripts/power_test.py").read_text(encoding="utf-8")
+    f_cb = Path("scripts/compare_backtest_b6_b11.py").read_text(encoding="utf-8")
+    f_ar = Path("scripts/audit_argon_revisions.py").read_text(encoding="utf-8")
+    assert "sim.compute_newey_west_sharpe_se" in f_pt
+    assert "sim.compute_newey_west_sharpe_se" in f_cb
+    assert "sim.compute_newey_west_sharpe_se" in f_ar
 
 
 def test_run_one_finite_metrics_and_invariants():
@@ -65,6 +75,8 @@ def test_run_one_finite_metrics_and_invariants():
 def test_g2_timing_control_relaxed():
     """Verify Gate 2 timing control with relaxed thresholds (|Sharpe| < 3) at T=300."""
     g2 = run_g2_timing_control(seeds=[1000, 1001, 1002], T=300, N=30)
+    g2_quicksort = run_g2_timing_control(seeds=[1000, 1001, 1002], T=300, N=30, sort_kind="quicksort")
+    assert g2 == g2_quicksort
 
     # (i) Clairvoyant mean > 5
     assert g2["mean_clairvoyant"] > 5.0
@@ -76,3 +88,10 @@ def test_g2_timing_control_relaxed():
     assert abs(g2["mean_lagged"]) < 1.5
     for s_val in g2["sharpes_lagged"]:
         assert abs(s_val) < 3.0, f"Lagged Sharpe {s_val} exceeds relaxed threshold 3.0"
+
+    # Test sort_kind="stable" option
+    g2_stable = run_g2_timing_control(seeds=[1000, 1001, 1002], T=300, N=30, sort_kind="stable")
+    assert g2_stable["passed"] is True
+    assert g2_stable["mean_clairvoyant"] > 5.0
+    assert g2_stable["mean_negated"] < -5.0
+    assert abs(g2_stable["mean_lagged"]) < 1.5
