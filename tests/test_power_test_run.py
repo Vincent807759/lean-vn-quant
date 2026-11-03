@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from engine import vn_simulator as sim
-from scripts.power_test import nw_se, run_g2_timing_control, run_one
+from engine import alpha_ops as ops, vn_simulator as sim
+from scripts.power_test import generate_planted_market, nw_se, run_g2_timing_control, run_one
 
 
 def test_nw_se_fixed_vector():
@@ -95,3 +95,64 @@ def test_g2_timing_control_relaxed():
     assert g2_stable["mean_clairvoyant"] > 5.0
     assert g2_stable["mean_negated"] < -5.0
     assert abs(g2_stable["mean_lagged"]) < 1.5
+
+def test_run_one_heavy_tail_and_trend_filter_burn_in():
+    """Verify run_one with df_t and trend_filter, and check 49 burn-in sessions of SMA50."""
+    # 1. run_one execution with heavy-tail and trend filter
+    res_ex = run_one(
+        seed=1001,
+        rho=0.10,
+        construction="C3",
+        T=300,
+        N=30,
+        df_t=3.5,
+        trend_filter=True,
+        invalid_below=-900.0,
+    )
+    res_leg = run_one(
+        seed=1001,
+        rho=0.10,
+        construction="C3",
+        T=300,
+        N=30,
+        df_t=3.5,
+        trend_filter=True,
+        invalid_below=None,
+    )
+    res_base = run_one(
+        seed=1001,
+        rho=0.10,
+        construction="C3",
+        T=300,
+        N=30,
+        df_t=None,
+        trend_filter=False,
+    )
+
+    for r in [res_ex, res_leg]:
+        for k in ["sharpe_net", "sharpe_gross", "t_nw", "daily_turnover", "ic_real", "ic_latent", "bound_hit_rate"]:
+            assert k in r
+            assert np.isfinite(r[k])
+        assert r["bound_hit_rate"] > 0.0
+
+    # Latent IC matches bit-for-bit between base and heavy
+    assert res_ex["ic_latent"] == res_base["ic_latent"]
+
+    # 2. Check 49 burn-in sessions behavior of SMA50 (PB finding #3)
+    mkt = generate_planted_market(seed=1001, rho=0.10, T=300, N=30)
+    sma50 = ops.ts_mean(mkt["close"], 50)
+    sig = np.where(mkt["close"] > sma50, mkt["s"], -999.0)
+    w = ops.dampen_turnover(
+        sig,
+        top_k_in=5,
+        top_k_out=10,
+        ema_span=1,
+        max_daily_turnover=1.0,
+        mask=mkt["mask"],
+        tie_break_key=mkt["adv20"],
+        invalid_below=-900.0,
+    )
+    # Must hold 100% cash during first 49 sessions where SMA50 is NaN
+    assert np.all(w[:49] == 0.0), f"Expected 0.0 weights in burn-in, got max: {np.max(np.abs(w[:49]))}"
+    assert np.all(np.isfinite(w)), "Found non-finite weights in dampen_turnover with invalid_below"
+
