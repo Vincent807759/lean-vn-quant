@@ -340,6 +340,7 @@ def run_g2_timing_control(
     seeds: Optional[List[int]] = None,
     T: int = 947,
     N: int = 30,
+    sort_kind: str = "quicksort",
 ) -> Dict[str, Any]:
     """Gate 2 timing control check (simulate_naive only, direct weights without dampener)."""
     if seeds is None:
@@ -362,9 +363,9 @@ def run_g2_timing_control(
         w_pf = np.zeros((T, N), dtype=np.float64)
         w_neg = np.zeros((T, N), dtype=np.float64)
         for t in range(T - 1):
-            top5 = np.argsort(s_pf[t])[-5:]
+            top5 = np.argsort(s_pf[t], kind=sort_kind)[-5:]
             w_pf[t, top5] = 0.2
-            bot5 = np.argsort(-s_pf[t])[-5:]
+            bot5 = np.argsort(-s_pf[t], kind=sort_kind)[-5:]
             w_neg[t, bot5] = 0.2
 
         # (i) Clairvoyant execution w_exec[1:] = w_pf[:-1]
