@@ -2,7 +2,8 @@ import os
 import pytest
 import requests
 from unittest.mock import MagicMock
-from services.daily_paper_trader import send_telegram_alert
+from services.daily_paper_trader import send_telegram_alert, mask_token as daily_mask_token
+from services.telegram_bot_service import mask_token, mask_chat_id
 
 
 def test_send_telegram_alert_connection_error_masks_token(monkeypatch, capsys):
@@ -95,3 +96,49 @@ def test_send_telegram_alert_success_no_token_leak(monkeypatch, capsys):
     assert fake_token not in all_output
     assert "ABC-FAKE-TOKEN" not in all_output
     assert "[TELEGRAM] Daily report successfully dispatched" in all_output
+
+
+def test_mask_token_hides_prefix_and_bare_token_without_false_positive():
+    # 1. Bare token without 'bot' prefix
+    raw_bare = "Error connecting with 123456789:ABCdefGHI_123 in request."
+    masked_bare = mask_token(raw_bare)
+    assert "123456789:ABCdefGHI_123" not in masked_bare
+    assert "[MASKED_TOKEN]" in masked_bare
+    assert "1234" not in masked_bare
+
+    # 2. Token with special characters / suffix when passing explicit token
+    custom_token = "123456789:special!secret?value"
+    msg = f"Failed to send to bot{custom_token} or token {custom_token}"
+    masked_custom = mask_token(msg, token=custom_token)
+    assert custom_token not in masked_custom
+    assert f"bot{custom_token}" not in masked_custom
+    assert "bot[MASKED_TOKEN]" in masked_custom
+    assert "[MASKED_TOKEN]" in masked_custom
+
+    # 3. Negative test: do not mask timestamps or large integer pairs
+    timestamp_msg = "Session timestamp 20261103:180530 and coordinate 1000000:2000000 recorded."
+    assert mask_token(timestamp_msg) == timestamp_msg
+
+
+def test_daily_paper_trader_fallback_mask_token():
+    # Test with bot prefix
+    msg_with_bot = "Connection error to https://api.telegram.org/bot123456789:ABCdefGHI_123/sendMessage"
+    masked1 = daily_mask_token(msg_with_bot)
+    assert "123456789:ABCdefGHI_123" not in masked1
+    assert "bot[MASKED_TOKEN]" in masked1
+
+    # Test without bot prefix (bare token)
+    msg_bare = "Unauthorized: 123456789:ABCdefGHI_123"
+    masked2 = daily_mask_token(msg_bare)
+    assert "123456789:ABCdefGHI_123" not in masked2
+    assert "[MASKED_TOKEN]" in masked2
+
+
+def test_mask_chat_id_hides_raw_id():
+    raw_id = "987654321"
+    masked = mask_chat_id(raw_id)
+    assert masked == "[MASKED_CHAT_ID]"
+    assert raw_id not in masked
+    assert mask_chat_id("") == ""
+    assert mask_chat_id(None) == ""
+

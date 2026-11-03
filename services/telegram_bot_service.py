@@ -73,11 +73,25 @@ def mask_token(text: str, token: Optional[str] = None) -> str:
     if not text:
         return ""
     import re
-    # First mask any bot token pattern bot<digits>:<secret>
-    text = re.sub(r'bot\d+:[A-Za-z0-9_-]+', 'bot[MASKED_TOKEN]', text)
-    if token and len(token) > 6:
-        text = text.replace(token, f"{token[:4]}...***")
-    return text
+    cleaned = str(text)
+    if token and len(token) > 4:
+        cleaned = cleaned.replace(f"bot{token}", "bot[MASKED_TOKEN]")
+        cleaned = cleaned.replace(token, "[MASKED_TOKEN]")
+    cleaned = re.sub(r"bot\d+:[A-Za-z0-9_-]+", "bot[MASKED_TOKEN]", cleaned)
+    cleaned = re.sub(
+        r"\b\d{6,12}:(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{10,}\b",
+        "[MASKED_TOKEN]",
+        cleaned,
+    )
+    return cleaned
+
+
+def mask_chat_id(chat_id: Any) -> str:
+    """Masks Telegram chat_id values before printing to console logs."""
+    s = str(chat_id or "").strip()
+    if not s:
+        return ""
+    return "[MASKED_CHAT_ID]"
 
 
 def sanitize_error_message(text: str, token: Optional[str] = None) -> str:
@@ -377,7 +391,7 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
         print("[FATAL ERROR] TELEGRAM_ADMIN_CHAT_ID not configured! Auto-discovery is disabled for security.")
         sys.exit(1)
 
-    print(f"-> Authorized Admin Chat ID: {admin_chat_id}")
+    print(f"-> Authorized Admin Chat ID: {mask_chat_id(admin_chat_id)}")
     print(f"-> Bot daemon is listening for incoming commands (/status, /holdings, /orders, /sync)...")
     print("=" * 80 + "\n")
     
@@ -413,7 +427,7 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
                     
                     # Strict Authorization Check
                     if sender_chat_id != str(admin_chat_id):
-                        print(f"[SECURITY WARNING] Rejected command from unauthorized chat_id {sender_chat_id}: {text}")
+                        print(f"[SECURITY WARNING] Rejected command from unauthorized chat_id {mask_chat_id(sender_chat_id)}: {mask_token(text, token)}")
                         continue
                         
                     if text.startswith("/"):
