@@ -73,24 +73,7 @@ def run_all_argon_audits():
 
     # Calculate Newey-West standard error for Sharpe
     def newey_west_sharpe_se(returns, rf_daily=0.04/252.0, max_lags=5):
-        excess = returns - rf_daily
-        mu = np.mean(excess)
-        sigma = np.std(excess, ddof=1)
-        sr_daily = mu / sigma if sigma > 1e-12 else 0.0
-        # GMM influence function: g_t = (R_t - mu)/sigma - 0.5 * sr_daily * ((R_t - mu)^2 / sigma^2 - 1)
-        u_t = (excess - mu) / sigma
-        g_t = u_t - 0.5 * sr_daily * (u_t**2 - 1.0)
-        n = len(g_t)
-        gamma_0 = np.var(g_t)
-        gamma_sum = 0.0
-        for l in range(1, max_lags + 1):
-            w_l = 1.0 - l / (max_lags + 1.0)
-            cov_l = np.mean(g_t[l:] * g_t[:-l])
-            gamma_sum += 2.0 * w_l * cov_l
-        lr_var = gamma_0 + gamma_sum
-        se_daily = np.sqrt(max(lr_var, 1e-12) / n)
-        se_ann = se_daily * np.sqrt(252.0)
-        return se_ann
+        return sim.compute_newey_west_sharpe_se(returns, rf=rf_daily, lags=max_lags)
 
     ret_bm = np.diff(res_bm["equity"]) / np.maximum(res_bm["equity"][:-1], 1e-6)
     se_bm = newey_west_sharpe_se(ret_bm)

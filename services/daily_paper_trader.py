@@ -61,7 +61,20 @@ except ImportError:
         from telegram_bot_service import mask_token
     except ImportError:
         def mask_token(text: str, token: Optional[str] = None) -> str:
-            return text
+            if not text:
+                return ""
+            import re
+            cleaned = str(text)
+            if token and len(token) > 4:
+                cleaned = cleaned.replace(f"bot{token}", "bot[MASKED_TOKEN]")
+                cleaned = cleaned.replace(token, "[MASKED_TOKEN]")
+            cleaned = re.sub(r"bot\d+:[A-Za-z0-9_-]+", "bot[MASKED_TOKEN]", cleaned)
+            cleaned = re.sub(
+                r"\b\d{6,12}:(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{10,}\b",
+                "[MASKED_TOKEN]",
+                cleaned,
+            )
+            return cleaned
 
 # ==============================================================================
 # CONFIGURATION CONSTANTS
