@@ -137,3 +137,59 @@ def test_adv20_shares_magnitude():
     res = generate_planted_market(seed=999, rho=0.05, T=947, N=30)
     adv_mean = float(res["adv20_shares"].mean())
     assert 1e5 <= adv_mean <= 5e7, f"adv20_shares.mean={adv_mean:.1f} out of range"
+
+def test_draw_latents_df_t_backward_compat_and_validation():
+    """Verify df_t=None matches default call bit-for-bit and df_t <= 2 raises ValueError."""
+    # 1. Backward compatibility: df_t=None bit-for-bit identical to default
+    m_default = generate_planted_market(seed=1001, rho=0.05, T=300, N=30)
+    m_none = generate_planted_market(seed=1001, rho=0.05, T=300, N=30, df_t=None)
+    for k in ["open", "close", "ceiling", "floor", "adv20", "s", "u", "gap", "r_oc"]:
+        np.testing.assert_array_equal(m_default[k], m_none[k])
+
+    # 2. Validation: df_t <= 2.0 raises ValueError
+    with pytest.raises(ValueError, match="df_t must be > 2.0"):
+        draw_latents(seed=1001, rho=0.05, T=100, N=10, df_t=2.0)
+    with pytest.raises(ValueError, match="df_t must be > 2.0"):
+        draw_latents(seed=1001, rho=0.05, T=100, N=10, df_t=1.5)
+
+
+def test_heavy_tail_df_t_preserves_latent_ic_and_increases_bound_hits():
+    """Verify df_t=3.5 preserves latent IC bit-for-bit and significantly increases boundary hits."""
+    seed = 1001
+    rho = 0.10
+    T, N = 947, 30
+
+    lat_gauss = draw_latents(seed=seed, rho=rho, T=T, N=N, df_t=None)
+    lat_heavy = draw_latents(seed=seed, rho=rho, T=T, N=N, df_t=3.5)
+
+    # s, u, sigma, adv must match bit-for-bit (CRN property from ss.spawn(5)[:4])
+    np.testing.assert_array_equal(lat_gauss[0], lat_heavy[0])  # s
+    np.testing.assert_array_equal(lat_gauss[1], lat_heavy[1])  # u
+    np.testing.assert_array_equal(lat_gauss[5], lat_heavy[5])  # sigma
+    np.testing.assert_array_equal(lat_gauss[6], lat_heavy[6])  # adv
+
+    ic_gauss = cross_sectional_ic(lat_gauss[0][:-1], lat_gauss[1][1:])
+    ic_heavy = cross_sectional_ic(lat_heavy[0][:-1], lat_heavy[1][1:])
+    assert ic_gauss == ic_heavy
+
+    # Market generation
+    m_gauss = generate_planted_market(seed=seed, rho=rho, T=T, N=N, latents=lat_gauss)
+    m_heavy = generate_planted_market(seed=seed, rho=rho, T=T, N=N, latents=lat_heavy)
+
+    # Prices finite and respect limits & tick
+    for m in [m_gauss, m_heavy]:
+        assert np.all(np.isfinite(m["open"]))
+        assert np.all(np.isfinite(m["close"]))
+        assert np.all(m["floor"] <= m["open"] + 1e-9)
+        assert np.all(m["open"] <= m["ceiling"] + 1e-9)
+        assert np.all(m["floor"] <= m["close"] + 1e-9)
+        assert np.all(m["close"] <= m["ceiling"] + 1e-9)
+        np.testing.assert_array_equal(m["open"], round_tick_np(m["open"]))
+        np.testing.assert_array_equal(m["close"], round_tick_np(m["close"]))
+
+    # Bound hit rate for df_t=3.5 must be significantly higher than Gaussian
+    hit_rate_gauss = float(np.mean((m_gauss["close"][1:] >= m_gauss["ceiling"][1:]) | (m_gauss["close"][1:] <= m_gauss["floor"][1:])))
+    hit_rate_heavy = float(np.mean((m_heavy["close"][1:] >= m_heavy["ceiling"][1:]) | (m_heavy["close"][1:] <= m_heavy["floor"][1:])))
+    assert hit_rate_heavy > hit_rate_gauss
+    assert hit_rate_heavy > 0.002
+

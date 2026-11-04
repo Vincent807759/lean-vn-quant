@@ -78,12 +78,24 @@ def draw_latents(
     T: int = 947,
     N: int = 30,
     phi: float = 0.9,
+    df_t: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Draw latent market processes using 4 independent RNG streams from SeedSequence."""
+    """Draw latent market processes using 4 (or 5 if df_t is given) independent RNG streams."""
+    if df_t is not None and df_t <= 2.0:
+        raise ValueError("df_t must be > 2.0")
+
     ss = np.random.SeedSequence(seed)
-    rng_signal, rng_eps, rng_market, rng_gap = [
-        np.random.default_rng(s) for s in ss.spawn(4)
-    ]
+    if df_t is None:
+        rng_signal, rng_eps, rng_market, rng_gap = [
+            np.random.default_rng(s) for s in ss.spawn(4)
+        ]
+        rng_vol = None
+    else:
+        spawned = ss.spawn(5)
+        rng_signal, rng_eps, rng_market, rng_gap = [
+            np.random.default_rng(s) for s in spawned[:4]
+        ]
+        rng_vol = np.random.default_rng(spawned[4])
 
     # 1. Signal AR(1): s[0] ~ N(0, 1), s[t] = phi*s[t-1] + sqrt(1 - phi^2)*z[t]
     s0 = rng_signal.standard_normal(N)
@@ -110,14 +122,22 @@ def draw_latents(
     sigma_m = 0.008
     mu_f = 0.04 / 252.0
     m_raw = rng_market.standard_normal(size=T)
-    m = (mu_f - 0.5 * sigma_m**2) + sigma_m * m_raw
-
-    # 4. Overnight gap
     xi = rng_gap.standard_normal((T, N))
-    gap = -0.5 * ((0.4 * sigma) ** 2) + (0.4 * sigma) * xi
 
-    # Intraday open-to-close log return
-    r_oc = m[:, None] - 0.5 * (sigma**2) + sigma * u
+    if df_t is None:
+        m = (mu_f - 0.5 * sigma_m**2) + sigma_m * m_raw
+        gap = -0.5 * ((0.4 * sigma) ** 2) + (0.4 * sigma) * xi
+        r_oc = m[:, None] - 0.5 * (sigma**2) + sigma * u
+    else:
+        # Daily inverse-gamma volatility scale factor (clipped at 4.5 to prevent exp overflow;
+        # conditional Ito drift -0.5*sigma_t^2 remains exact for every realized g_t)
+        g_t = np.sqrt((df_t - 2.0) / rng_vol.chisquare(df_t, size=(T, 1)))
+        g_t = np.clip(g_t, 0.0, 4.5)
+        sigma_m_t = sigma_m * g_t[:, 0]
+        sigma_t = sigma[None, :] * g_t
+        m = (mu_f - 0.5 * sigma_m_t**2) + sigma_m_t * m_raw
+        gap = -0.5 * ((0.4 * sigma_t) ** 2) + (0.4 * sigma_t) * xi
+        r_oc = m[:, None] - 0.5 * (sigma_t**2) + sigma_t * u
 
     return s, u, m, gap, r_oc, sigma, adv
 
@@ -146,10 +166,11 @@ def generate_planted_market(
     base_prices: Optional[Union[Dict[str, float], List[float], np.ndarray]] = None,
     dates: Optional[List[datetime.date]] = None,
     latents: Optional[Tuple[np.ndarray, ...]] = None,
+    df_t: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Generate synthetic market prices with planted alpha under HOSE constraints."""
     if latents is None:
-        s, u, m, gap, r_oc, sigma, adv = draw_latents(seed, rho, T=T, N=N, phi=phi)
+        s, u, m, gap, r_oc, sigma, adv = draw_latents(seed, rho, T=T, N=N, phi=phi, df_t=df_t)
     else:
         s, u, m, gap, r_oc, sigma, adv = latents
 
@@ -230,6 +251,9 @@ def run_one(
     base_prices: Optional[Union[Dict[str, float], List[float], np.ndarray]] = None,
     dates: Optional[List[datetime.date]] = None,
     market: Optional[Dict[str, Any]] = None,
+    df_t: Optional[float] = None,
+    trend_filter: bool = False,
+    invalid_below: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Execute one full planted-alpha simulation under production HOSE pipeline."""
     if isinstance(construction, str):
@@ -250,6 +274,7 @@ def run_one(
             phi=phi,
             base_prices=base_prices,
             dates=dates,
+            df_t=df_t,
         )
 
     open_p = market["open"]
@@ -263,15 +288,21 @@ def run_one(
     mask = market["mask"]
     market_dates = market["dates"]
 
+    if trend_filter:
+        sma50 = ops.ts_mean(close_p, 50)
+        signal_in = np.where(close_p > sma50, s, -999.0)
+    else:
+        signal_in = s
+
     w = ops.dampen_turnover(
-        s,
+        signal_in,
         top_k_in=top_k_in,
         top_k_out=top_k_out,
         ema_span=ema_span,
         max_daily_turnover=max_daily_turnover,
         mask=mask,
         tie_break_key=adv20,
-        invalid_below=None,
+        invalid_below=invalid_below,
     )
 
     w_exec = np.zeros_like(w)
@@ -319,6 +350,12 @@ def run_one(
     # EW30 arithmetic return for G6
     ew30_annualized = float(np.mean(r_ew30) * 252.0)
 
+    bound_hit_rate = (
+        float(np.mean((close_p[1:] >= ceil_p[1:]) | (close_p[1:] <= flr_p[1:])))
+        if close_p.shape[0] > 1
+        else 0.0
+    )
+
     return {
         "sharpe_net": sharpe_net,
         "sharpe_gross": sharpe_gross,
@@ -329,6 +366,7 @@ def run_one(
         "ic_latent": ic_latent,
         "t_nw_excess": t_nw_excess,
         "ew30_annualized": ew30_annualized,
+        "bound_hit_rate": bound_hit_rate,
         "seed": seed,
         "rho": rho,
         "construction": c_name,
@@ -450,11 +488,16 @@ def interpolate_rho_star(
 
 
 def _eval_seed_task(
-    task_args: Tuple[str, int, float, float, int, int]
+    task_args: Tuple[Any, ...]
 ) -> Tuple[str, int, float, Dict[str, Dict[str, Any]]]:
     """Worker task evaluating all constructions for a single (seed, rho) market."""
-    block, seed, rho, phi, T, N = task_args
-    market = generate_planted_market(seed=seed, rho=rho, T=T, N=N, phi=phi)
+    if len(task_args) == 6:
+        block, seed, rho, phi, T, N = task_args
+        df_t, trend_filter, invalid_below = None, False, None
+    else:
+        block, seed, rho, phi, T, N, df_t, trend_filter, invalid_below = task_args
+
+    market = generate_planted_market(seed=seed, rho=rho, T=T, N=N, phi=phi, df_t=df_t)
     results: Dict[str, Dict[str, Any]] = {}
     for c_name in CONSTRUCTIONS:
         results[c_name] = run_one(
@@ -465,6 +508,9 @@ def _eval_seed_task(
             N=N,
             phi=phi,
             market=market,
+            df_t=df_t,
+            trend_filter=trend_filter,
+            invalid_below=invalid_below,
         )
     return block, seed, rho, results
 
@@ -476,6 +522,9 @@ def run_grid(
     T: int = 947,
     N: int = 30,
     max_workers: Optional[int] = None,
+    df_t: Optional[float] = None,
+    trend_filter: bool = False,
+    invalid_below: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Execute complete planted-alpha simulation grid and aggregate results."""
     if max_workers is None:
@@ -483,14 +532,14 @@ def run_grid(
 
     seed_base = 1000
 
-    # Build unique (block, seed, rho, phi, T, N) tasks
-    tasks: List[Tuple[str, int, float, float, int, int]] = []
+    # Build unique (block, seed, rho, phi, T, N, df_t, trend_filter, invalid_below) tasks
+    tasks: List[Tuple[Any, ...]] = []
     for block in blocks:
         phi = 0.9 if block == "main" else 0.5
         r0_count = R0 if block == "main" else R
         seeds_for_null = list(range(seed_base, seed_base + r0_count))
         for s in seeds_for_null:
-            tasks.append((block, s, 0.0, phi, T, N))
+            tasks.append((block, s, 0.0, phi, T, N, df_t, trend_filter, invalid_below))
 
         rho_list = MAIN_RHO_GRID if block == "main" else PHI05_RHO_GRID
         seeds_paired = list(range(seed_base, seed_base + R))
@@ -498,7 +547,7 @@ def run_grid(
             if rho == 0.0:
                 continue
             for s in seeds_paired:
-                tasks.append((block, s, rho, phi, T, N))
+                tasks.append((block, s, rho, phi, T, N, df_t, trend_filter, invalid_below))
 
     raw_results_by_block_rho: Dict[Tuple[str, float], Dict[int, Dict[str, Dict[str, Any]]]] = {}
     if max_workers > 1:
@@ -570,6 +619,7 @@ def run_grid(
                 to_arr = np.array([r["daily_turnover"] for r in runs])
                 tnw_excess_arr = np.array([r["t_nw_excess"] for r in runs])
                 ew30_arr = np.array([r["ew30_annualized"] for r in runs])
+                bhr_arr = np.array([r.get("bound_hit_rate", 0.0) for r in runs])
 
                 # Detections
                 k_nom = sum(1 for r in runs if r["t_nw"] > 1.645)
@@ -603,6 +653,7 @@ def run_grid(
                     "daily_turnover_mean": float(np.mean(to_arr)),
                     "t_nw_excess_mean": float(np.mean(tnw_excess_arr)),
                     "ew30_annualized_mean": float(np.mean(ew30_arr)),
+                    "bound_hit_rate_mean": float(np.mean(bhr_arr)),
                     "nominal_power": {
                         "rate": nom_rate,
                         "wilson_ci_95": list(nom_ci),
@@ -937,6 +988,9 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=None, help="Number of worker processes (default: min(CPU, 8)).")
     parser.add_argument("--print-table", action="store_true", help="Print Markdown table to stdout.")
     parser.add_argument("--quick", action="store_true", help="Run quick smoke grid (R=2, R0=4, T=200).")
+    parser.add_argument("--df-t", type=float, default=None, help="Degrees of freedom for Student-t daily volatility regime (default: None for Gaussian).")
+    parser.add_argument("--trend-filter", action="store_true", help="Apply SMA50 trend filter (-999.0 for close <= SMA50).")
+    parser.add_argument("--invalid-below", type=float, default=None, help="Disqualify trend-filtered stocks below this threshold in dampener (e.g. -900.0).")
 
     args = parser.parse_args()
 
@@ -951,7 +1005,17 @@ def main() -> None:
         r0_val = args.R0
         t_val = args.T
 
-    data = run_grid(blocks=blocks, R=r_val, R0=r0_val, T=t_val, N=args.N, max_workers=args.workers)
+    data = run_grid(
+        blocks=blocks,
+        R=r_val,
+        R0=r0_val,
+        T=t_val,
+        N=args.N,
+        max_workers=args.workers,
+        df_t=args.df_t,
+        trend_filter=args.trend_filter,
+        invalid_below=args.invalid_below,
+    )
 
     if args.out:
         out_p = Path(args.out)
