@@ -154,3 +154,144 @@ def test_telegram_handle_sync_masks_token_on_failure_without_name_error():
     assert "123456789:ABCdefGHI" not in result
     assert "test_user" not in result
     assert "⚠️ <b>SYNC ERROR:</b>" in result
+
+
+def test_dashboard_html_escapes_xss_and_neutralizes_header():
+    """
+    M1.1: Verifies that generate_html_content escapes HTML special characters in
+    symbols, order reasons, session dates, and inline script JSON, and uses the neutral header.
+    """
+    state = {
+        "initial_capital": 100_000_000.0,
+        "last_real_nav": 100_000_000.0,
+        "available_cash": 50_000_000.0,
+        "receivable_cash_t1": 0.0,
+        "receivable_cash_t2": 0.0,
+        "last_updated_date": "2026-10-23<img src=x onerror=alert(1)>",
+        "holdings": {
+            "HPG<script>alert(1)</script>": {
+                "sellable_qty": 100,
+                "locked_t1": 0,
+                "locked_t2": 0,
+                "avg_cost": 25000.0,
+            }
+        },
+        "pending_orders": [
+            {
+                "action": "BUY<script>",
+                "symbol": "VCB<b>",
+                "qty": 100,
+                "est_price": 60000.0,
+                "est_value": 6_000_000.0,
+                "target_weight": 0.06,
+                "reason": "Signal <script>evil()</script> & filter",
+            }
+        ],
+    }
+    history = [
+        {
+            "date": "2026-10-23</script><script>evil()</script>",
+            "real_nav": 100_000_000.0,
+            "naive_nav": 100_000_000.0,
+        }
+    ]
+    html = generate_html_content({"state": state, "history": history, "prev_close_map": {}})
+
+    assert "<script>alert(1)</script>" not in html
+    assert "<img src=x onerror=alert(1)>" not in html
+    assert "</script><script>evil()</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "&lt;script&gt;evil()&lt;/script&gt;" in html
+    assert r"<\/script>" in html
+    assert "Institutional Mathematical Standard" not in html
+    assert "Vietnam T+2.5 Microstructure Simulation &amp; Paper Trading Monitor" in html
+
+
+def test_dashboard_single_file_handler_blocks_other_files(tmp_path):
+    """
+    M1.1: Verifies that create_single_file_handler serves only / and /dashboard.html
+    and returns 403 Forbidden for any sibling file or traversal path.
+    """
+    import http.client
+    import socketserver
+    import threading
+    from services.dashboard import create_single_file_handler
+
+    html_file = tmp_path / "dashboard.html"
+    secret_file = tmp_path / "secret.txt"
+    html_file.write_text("<html><body>Dashboard OK</body></html>", encoding="utf-8")
+    secret_file.write_text("TOP_SECRET_TOKEN", encoding="utf-8")
+
+    handler_cls = create_single_file_handler(str(html_file))
+    server = socketserver.TCPServer(("127.0.0.1", 0), handler_cls)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        for ok_path in ("/", "/dashboard.html", "/dashboard.html?refresh=1#top"):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", ok_path)
+            resp = conn.getresponse()
+            body = resp.read().decode("utf-8")
+            conn.close()
+            assert resp.status == 200
+            assert "Dashboard OK" in body
+
+        for blocked_path in ("/secret.txt", "/../secret.txt", "/secret.txt?foo=1#bar", "/.env"):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", blocked_path)
+            resp = conn.getresponse()
+            body = resp.read().decode("utf-8")
+            conn.close()
+            assert resp.status == 403
+            assert "TOP_SECRET_TOKEN" not in body
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_telegram_process_command_and_sync_escape_html():
+    """
+    M1.2: Verifies that unrecognized commands and /sync error messages escape HTML tags
+    so Telegram HTML parse_mode cannot fail or inject tags.
+    """
+    from unittest.mock import patch, MagicMock
+    import services.telegram_bot_service as tg
+
+    reply = tg.process_command("/unknown_<script>&<b>")
+    assert "<script>" not in reply
+    assert "&lt;script&gt;&amp;&lt;b&gt;" in reply
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stderr = 'File "<stdin>", line 1, in <module> & ValueError'
+
+    with patch.object(tg, "_last_sync_timestamp", 0.0), patch("subprocess.run", return_value=mock_proc):
+        sync_reply = tg.handle_sync()
+
+    assert "<stdin>" not in sync_reply
+    assert "<module>" not in sync_reply
+    assert "&lt;stdin&gt;" in sync_reply
+    assert "&lt;module&gt;" in sync_reply
+
+
+def test_telegram_unauthorized_log_masks_token_straddling_64_char_boundary():
+    """
+    M1.2 (PB finding): Verifies that masking happens BEFORE the 64-character slice
+    when formatting unauthorized command logs, preventing partial token leakage across index 64,
+    and that repr() escapes newline characters.
+    """
+    token_p1 = "1234567890"
+    token_p2 = "ABCdefGHIjklMNOpqrSTUvwxYZ123456789"
+    token = f"{token_p1}:{token_p2}"
+    # Prefix of length 45 so token starts at index 45 and straddles index 64
+    prefix = "/cmd_" + ("x" * 40) + " "
+    assert 40 < len(prefix) < 60
+    malicious_text = prefix + token + "\nFAKE_LOG_LINE"
+
+    logged_snippet = repr(mask_token(malicious_text[:512], token)[:64])
+    assert token_p1 not in logged_snippet
+    assert "ABCdef" not in logged_snippet
+    assert "[MASKED_TOKEN]" in logged_snippet
+    assert "\n" not in logged_snippet

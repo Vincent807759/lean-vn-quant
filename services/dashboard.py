@@ -20,6 +20,7 @@ Professional real-time visualization module for the Lean VN-Quant execution engi
 import os
 import sys
 import json
+import html as html_lib
 import argparse
 import datetime
 from typing import Dict, Any, List, Optional
@@ -189,9 +190,10 @@ def generate_html_content(data: Dict[str, Any]) -> str:
         weight = (cur_val / real_nav * 100.0) if real_nav > 0 else 0.0
 
         badge_class = "badge-success" if sellable > 0 else "badge-warning"
+        sym_esc = html_lib.escape(str(sym), quote=True)
         holdings_rows.append(f"""
         <tr>
-            <td><strong class="symbol">{sym}</strong></td>
+            <td><strong class="symbol">{sym_esc}</strong></td>
             <td><span class="badge {badge_class}">{sellable:,}</span></td>
             <td><span class="badge badge-info">{t1:,}</span></td>
             <td><span class="badge badge-secondary">{t2:,}</span></td>
@@ -215,19 +217,25 @@ def generate_html_content(data: Dict[str, Any]) -> str:
         val = o.get("est_value", 0.0)
         weight = o.get("target_weight", 0.0) * 100.0
         reason = o.get("reason", "Top Factor Allocation")
+        sym_esc = html_lib.escape(str(sym), quote=True)
+        act_icon_esc = html_lib.escape(str(act_icon), quote=True)
+        reason_esc = html_lib.escape(str(reason), quote=True)
 
         orders_rows.append(f"""
         <tr>
-            <td><strong class="symbol">{sym}</strong></td>
-            <td><span class="badge {act_class}">{act_icon}</span></td>
+            <td><strong class="symbol">{sym_esc}</strong></td>
+            <td><span class="badge {act_class}">{act_icon_esc}</span></td>
             <td><strong>{qty:,} shs</strong></td>
             <td>{price:,.0f} VND</td>
             <td><strong>{val:,.0f} VND</strong></td>
             <td>{weight:.1f}%</td>
-            <td><small>{reason}</small></td>
+            <td><small>{reason_esc}</small></td>
         </tr>
         """)
     orders_table_html = "".join(orders_rows) if orders_rows else "<tr><td colspan='7' class='text-center'>No pending orders. Maintaining current positions (No-Trade Buffer).</td></tr>"
+
+    dates_json = json.dumps(dates_list).replace("</", "<\\/")
+    chart_datasets_json = json.dumps(chart_datasets).replace("</", "<\\/")
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -440,11 +448,11 @@ def generate_html_content(data: Dict[str, Any]) -> str:
     <div class="header">
         <div>
             <h1><span>LEAN VN-QUANT</span> | Production Paper Trading Dashboard</h1>
-            <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Institutional Mathematical Standard & Realistic Vietnam T+2.5 Microstructure Engine</p>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Vietnam T+2.5 Microstructure Simulation &amp; Paper Trading Monitor</p>
         </div>
         <div class="live-badge">
             <span class="live-dot"></span>
-            SESSION: {last_date}
+            SESSION: {html_lib.escape(str(last_date), quote=True)}
         </div>
     </div>
 
@@ -558,8 +566,8 @@ def generate_html_content(data: Dict[str, Any]) -> str:
         new Chart(ctxEquity, {{
             type: 'line',
             data: {{
-                labels: {json.dumps(dates_list)},
-                datasets: {json.dumps(chart_datasets)}
+                labels: {dates_json},
+                datasets: {chart_datasets_json}
             }},
             options: {{
                 responsive: true,
@@ -616,17 +624,47 @@ def export_html_dashboard(
     return output_html
 
 
+def create_single_file_handler(html_file: str):
+    """Creates an HTTP request handler restricted strictly to the generated dashboard file."""
+    import http.server
+
+    abs_html = os.path.abspath(html_file)
+    target_name = os.path.basename(abs_html)
+    allowed_paths = {"/", "/" + target_name}
+
+    class SingleFileDashboardHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            req_path = self.path.split("?", 1)[0].split("#", 1)[0]
+            if req_path not in allowed_paths or not os.path.isfile(abs_html):
+                body = b"403 Forbidden: Single-file dashboard server."
+                self.send_response(403)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            with open(abs_html, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+        def log_message(self, format, *args):
+            return
+
+    return SingleFileDashboardHandler
+
+
 def serve_dashboard(port: int = 8050, html_file: str = DEFAULT_OUTPUT_HTML) -> None:
     """Runs local HTTP server serving Web Dashboard."""
-    import http.server
     import socketserver
     
     export_html_dashboard(html_file)
-    directory = os.path.dirname(os.path.abspath(html_file)) or os.getcwd()
-
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=directory, **kwargs)
+    Handler = create_single_file_handler(html_file)
 
     print("\n" + "=" * 70)
     print(f"  🚀 LEAN VN-QUANT WEB DASHBOARD SERVING LOCALLY AT:")
