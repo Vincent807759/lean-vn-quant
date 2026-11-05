@@ -154,3 +154,98 @@ def test_telegram_handle_sync_masks_token_on_failure_without_name_error():
     assert "123456789:ABCdefGHI" not in result
     assert "test_user" not in result
     assert "⚠️ <b>SYNC ERROR:</b>" in result
+
+
+def test_dashboard_html_escapes_xss_and_neutralizes_header():
+    """
+    M1.1: Verifies that generate_html_content escapes HTML special characters in
+    symbols, order reasons, session dates, and inline script JSON, and uses the neutral header.
+    """
+    state = {
+        "initial_capital": 100_000_000.0,
+        "last_real_nav": 100_000_000.0,
+        "available_cash": 50_000_000.0,
+        "receivable_cash_t1": 0.0,
+        "receivable_cash_t2": 0.0,
+        "last_updated_date": "2026-10-23<img src=x onerror=alert(1)>",
+        "holdings": {
+            "HPG<script>alert(1)</script>": {
+                "sellable_qty": 100,
+                "locked_t1": 0,
+                "locked_t2": 0,
+                "avg_cost": 25000.0,
+            }
+        },
+        "pending_orders": [
+            {
+                "action": "BUY<script>",
+                "symbol": "VCB<b>",
+                "qty": 100,
+                "est_price": 60000.0,
+                "est_value": 6_000_000.0,
+                "target_weight": 0.06,
+                "reason": "Signal <script>evil()</script> & filter",
+            }
+        ],
+    }
+    history = [
+        {
+            "date": "2026-10-23</script><script>evil()</script>",
+            "real_nav": 100_000_000.0,
+            "naive_nav": 100_000_000.0,
+        }
+    ]
+    html = generate_html_content({"state": state, "history": history, "prev_close_map": {}})
+
+    assert "<script>alert(1)</script>" not in html
+    assert "<img src=x onerror=alert(1)>" not in html
+    assert "</script><script>evil()</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "&lt;script&gt;evil()&lt;/script&gt;" in html
+    assert r"<\/script>" in html
+    assert "Institutional Mathematical Standard" not in html
+    assert "Vietnam T+2.5 Microstructure Simulation &amp; Paper Trading Monitor" in html
+
+
+def test_dashboard_single_file_handler_blocks_other_files(tmp_path):
+    """
+    M1.1: Verifies that create_single_file_handler serves only / and /dashboard.html
+    and returns 403 Forbidden for any sibling file or traversal path.
+    """
+    import http.client
+    import socketserver
+    import threading
+    from services.dashboard import create_single_file_handler
+
+    html_file = tmp_path / "dashboard.html"
+    secret_file = tmp_path / "secret.txt"
+    html_file.write_text("<html><body>Dashboard OK</body></html>", encoding="utf-8")
+    secret_file.write_text("TOP_SECRET_TOKEN", encoding="utf-8")
+
+    handler_cls = create_single_file_handler(str(html_file))
+    server = socketserver.TCPServer(("127.0.0.1", 0), handler_cls)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        for ok_path in ("/", "/dashboard.html", "/dashboard.html?refresh=1#top"):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", ok_path)
+            resp = conn.getresponse()
+            body = resp.read().decode("utf-8")
+            conn.close()
+            assert resp.status == 200
+            assert "Dashboard OK" in body
+
+        for blocked_path in ("/secret.txt", "/../secret.txt", "/secret.txt?foo=1#bar", "/.env"):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", blocked_path)
+            resp = conn.getresponse()
+            body = resp.read().decode("utf-8")
+            conn.close()
+            assert resp.status == 403
+            assert "TOP_SECRET_TOKEN" not in body
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
