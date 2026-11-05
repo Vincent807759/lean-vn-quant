@@ -249,3 +249,49 @@ def test_dashboard_single_file_handler_blocks_other_files(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_telegram_process_command_and_sync_escape_html():
+    """
+    M1.2: Verifies that unrecognized commands and /sync error messages escape HTML tags
+    so Telegram HTML parse_mode cannot fail or inject tags.
+    """
+    from unittest.mock import patch, MagicMock
+    import services.telegram_bot_service as tg
+
+    reply = tg.process_command("/unknown_<script>&<b>")
+    assert "<script>" not in reply
+    assert "&lt;script&gt;&amp;&lt;b&gt;" in reply
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stderr = 'File "<stdin>", line 1, in <module> & ValueError'
+
+    with patch.object(tg, "_last_sync_timestamp", 0.0), patch("subprocess.run", return_value=mock_proc):
+        sync_reply = tg.handle_sync()
+
+    assert "<stdin>" not in sync_reply
+    assert "<module>" not in sync_reply
+    assert "&lt;stdin&gt;" in sync_reply
+    assert "&lt;module&gt;" in sync_reply
+
+
+def test_telegram_unauthorized_log_masks_token_straddling_64_char_boundary():
+    """
+    M1.2 (PB finding): Verifies that masking happens BEFORE the 64-character slice
+    when formatting unauthorized command logs, preventing partial token leakage across index 64,
+    and that repr() escapes newline characters.
+    """
+    token_p1 = "1234567890"
+    token_p2 = "ABCdefGHIjklMNOpqrSTUvwxYZ123456789"
+    token = f"{token_p1}:{token_p2}"
+    # Prefix of length 45 so token starts at index 45 and straddles index 64
+    prefix = "/cmd_" + ("x" * 40) + " "
+    assert 40 < len(prefix) < 60
+    malicious_text = prefix + token + "\nFAKE_LOG_LINE"
+
+    logged_snippet = repr(mask_token(malicious_text[:512], token)[:64])
+    assert token_p1 not in logged_snippet
+    assert "ABCdef" not in logged_snippet
+    assert "[MASKED_TOKEN]" in logged_snippet
+    assert "\n" not in logged_snippet
