@@ -90,3 +90,66 @@ def test_b1_api_failure_raises_runtime_error_no_silent_fallback():
         with pytest.raises(RuntimeError) as excinfo:
             fetch_vn_ohlcv(symbols=["HPG", "VCB"], start_date="2026-01-01", end_date="2026-01-05")
         assert "Failed to fetch market data from Entrade API" in str(excinfo.value)
+
+
+def test_query_parquet_duckdb_blocks_external_file_access(tmp_path):
+    """
+    M1.3: Verifies that query_parquet_duckdb queries the registered ohlcv_table
+    while blocking external file reads (read_csv_auto) via enable_external_access=false.
+    """
+    import duckdb
+    from engine.data_pipeline import query_parquet_duckdb
+
+    parquet_path = tmp_path / "sample.parquet"
+    csv_path = tmp_path / "secret.csv"
+    pl.DataFrame({"symbol": ["HPG", "VCB"], "raw_close": [28000.0, 85000.0]}).write_parquet(parquet_path)
+    csv_path.write_text("secret_col\nTOP_SECRET_VALUE\n", encoding="utf-8")
+
+    res = query_parquet_duckdb(
+        str(parquet_path),
+        "SELECT symbol, raw_close FROM ohlcv_table WHERE symbol = 'HPG'",
+    )
+    assert res.height == 1
+    assert res["symbol"][0] == "HPG"
+
+    with pytest.raises(duckdb.PermissionException) as excinfo:
+        query_parquet_duckdb(
+            str(parquet_path),
+            f"SELECT * FROM read_csv_auto('{csv_path.as_posix()}')",
+        )
+    err_text = str(excinfo.value)
+    assert "Permission Error" in err_text or "disabled through configuration" in err_text
+
+
+def test_fetch_vn_ohlcv_passes_query_params_to_requests_get():
+    """
+    M1.3: Verifies that fetch_vn_ohlcv passes symbol/resolution/from/to via the
+    requests.get params= dictionary rather than raw URL string concatenation.
+    """
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "t": [1704153600],
+        "o": [28.0],
+        "h": [28.5],
+        "l": [27.8],
+        "c": [28.2],
+        "v": [1000000.0],
+    }
+    with patch("requests.get", return_value=mock_resp) as mock_get:
+        df = fetch_vn_ohlcv(
+            symbols=["HPG"],
+            start_date="2024-01-01",
+            end_date="2024-01-05",
+            save_parquet=None,
+            force_fallback=False,
+        )
+    assert df.height == 1
+    mock_get.assert_called_once()
+    args, kwargs = mock_get.call_args
+    assert args[0] == "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
+    assert "params" in kwargs
+    assert kwargs["params"]["symbol"] == "HPG"
+    assert kwargs["params"]["resolution"] == "1D"
+    assert isinstance(kwargs["params"]["from"], int)
+    assert isinstance(kwargs["params"]["to"], int)

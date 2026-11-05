@@ -309,9 +309,13 @@ def fetch_vn_ohlcv(
     successful_symbols = set()
     
     for symbol in symbols:
-        url = f"https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?symbol={symbol}&resolution=1D&from={from_ts}&to={to_ts}"
+        url = "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
         try:
-            resp = requests.get(url, timeout=4)
+            resp = requests.get(
+                url,
+                params={"symbol": symbol, "resolution": "1D", "from": from_ts, "to": to_ts},
+                timeout=4,
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 t_arr = data.get("t", [])
@@ -557,12 +561,14 @@ def manifest_status(df: pl.DataFrame, manifest_path: str) -> Tuple[str, Optional
 def query_parquet_duckdb(parquet_path: str, sql_query: str) -> pl.DataFrame:
     """
     Executes a high-speed SQL query on the Parquet file using DuckDB,
-    registering the parquet relation safely to prevent SQL injection (H2),
+    registering the in-memory Polars DataFrame and disabling external file access (H2/M1.3),
     returning a Polars DataFrame.
     """
+    df_mem = pl.read_parquet(str(parquet_path))
     con = duckdb.connect(database=":memory:")
     try:
-        con.register("ohlcv_table", con.read_parquet(str(parquet_path)))
+        con.register("ohlcv_table", df_mem)
+        con.execute("SET enable_external_access = false")
         res_df = con.query(sql_query).pl()
     finally:
         con.close()
