@@ -78,6 +78,8 @@ valid_alpha_mask = in_index_pit & (adv_20d_lag1 >= 10_000_000_000.0)
 ```
 Setting `min_samples=15` guarantees newly listed or transferred stocks cannot bypass the 20-day liquidity filter during initial IPO/listing spikes until stable multi-week volume is established. Non-constituents receive `null` masked values, ensuring complete perturbation invariance ($\Delta \text{Signal} \equiv 0.000000$).
 
+> **Fixed-Basket Backtest Note:** The helper `apply_pit_universe_mask` (`engine/alpha_ops.py:860-960`) requires an external constituent schedule (`membership_df`). In the default fixed-basket evaluation scripts (`scripts/compare_backtest_b6_b11.py` and `run_verification.py`), liquidity filtering is performed via `build_tradable_mask` (`engine/data_pipeline.py:658-700`, `adv20 >= 10_000_000_000.0` at end of session `t` with `min_samples=20`), whose rolling liquidity threshold is temporally causal with respect to session-`t` OHLCV at next-morning (`t+1` open) order execution (within the fixed 30-stock basket, subject to the survivorship bias noted in Section 9.1) because target portfolio weights `w[t]` are lagged by one full session (`w_exec[t+1] = w[t]`).
+
 ### 2.3. Market Impact Modeling & Standalone Execution Utilities
 #### Historical Simulation Engine Model:
 In backtest simulations (`engine/vn_simulator.py`), execution slippage is modeled via `_calc_dynamic_slippage` combining a 12 bps half-spread floor with temporary and permanent volume impact:
@@ -111,6 +113,8 @@ This achieves mathematical permutation invariance ($\Delta = 4.44 \times 10^{-16
 $$
 F_{\text{Löwdin}}(t) = F_t (F_t^T W_t F_t)^{-1/2}
 $$
+
+> **Note on Multi-Alpha Pipeline Orthogonalization:** While `ridge_factor_projection` and `lowdin_symmetric_orthogonalization` (`engine/alpha_ops.py:484-715`) provide order-invariant cross-sectional orthogonalization, the 5-factor combiner in `orthogonalize_factor_library` (`engine/ml_alpha_combiner.py:127-167`) invokes sequential Gram-Schmidt projection via `ops.check_and_orthogonalize` (`engine/alpha_ops.py:345-481`, `threshold=0.25`). In `check_and_orthogonalize`, the OLS projection loop (`for t in range(T)`) operates strictly cross-sectionally per session `t`, whereas the preliminary skip gate `max_corr_before < threshold` evaluates `np.corrcoef` pooled across all valid `(T, N)` pairs. On the canonical 947-session VN30 dataset, Factors 2 and 5 consistently exhibit pooled `max_corr_before` in `0.43–0.63` (`>= 0.25`, always projected per session `t`) and Factors 3 and 4 consistently fall in `0.16–0.22` (`< 0.25`, always skipped) across all truncation horizons `t0 in {250, 500, 750, 947}`, yielding `0.0` truncation difference on VN30 data; however, for general or synthetic series (or extended sample horizons) whose pooled correlation crosses `0.25` mid-sample, the whole-sample gate can flip the skip decision retroactively.
 
 ---
 
@@ -186,7 +190,7 @@ All empirical metrics below are evaluated directly on the complete 947-session h
 | **Cumulative Return** | **+105.79%** | **+77.17%** | +61.12% | +130.83% | +64.63% | Fully net of 0.15% brokerage commission, 0.10% sales tax, T+2 advance loan interest, 5% cash dividend PIT tax, and dynamic square-root volume impact (_calc_dynamic_slippage, 12 bps floor). |
 | **Realized CAGR (%/yr)** | **21.17%** | **16.44%** | 13.53% | 24.93% | 14.19% | Single-Alpha CAGR adjusted after eliminating ATO look-ahead bias; Multi-Alpha CAGR reaches 16.44% post-fix. |
 | **Theoretical Naive CAGR** | **24.87%** | **20.36%** | N/A | 28.85% | 18.12% | Theoretical compound annual growth rate without microstructural penalties. |
-| **Annualized Sharpe (Newey-West)** | **0.85 (±0.53)** | **0.68 (±0.53)** | 0.59 (±0.54) | 1.00 (±0.53) | 0.58 (±0.53) | Newey-West HAC standard error indicates confidence intervals of ~ ±0.53 across all strategies. |
+| **Annualized Sharpe (Newey-West)** | **0.85 (±0.53)** | **0.68 (±0.53)** | 0.59 (±0.54) | 1.00 (±0.53) | 0.58 (±0.53) | Parentheses report ±1 Newey-West HAC standard error (~ ±0.53 to ±0.54 across all columns); ±2 SE confidence intervals span ~ ±1.06 to ±1.08. |
 | **Sortino Ratio** | **1.10** | **0.85** | 0.70 | 1.29 | 0.73 | Downside risk-adjusted return ratio. |
 | **Annualized Volatility** | **20.28%** | **19.40%** | 17.28% | 20.30% | 19.35% | Realized strategy annualized volatility is well-controlled under 21%. |
 | **Maximum Drawdown (MaxDD)** | **18.11%** | **18.87%** | 17.78% | 17.96% | 19.53% | Single-Alpha MaxDD is 18.11% (comparable to benchmark 17.78%); Multi-Alpha MaxDD is 18.87%. |
@@ -276,7 +280,7 @@ To evaluate portfolio behavior free from tie-induced allocation distortions, two
 > - **Multi-Alpha Residual Sensitivity:** In Multi-Alpha, symmetric average ranking (`--rank-ic-ties average`) reduces locked permutation standard deviation from 50.9M VND (2.94%) to 3.9M VND (0.22%). However, when unlocked (no tie key), configuration (iv) still exhibits a 97.6M VND (5.52%) standard deviation and a +109.6M VND (+6.37%) ADV20-vs-column delta. This residual variance is concentrated entirely in 2023 (+7.89 percentage points) during the 123-session walk-forward combiner warmup ($W_0 = 120 + 3$), where `composite_alpha` defaults to `a1` (already ranked into $[0, 1]$, bypassing `invalid_below`). When suppressing this warmup window ($W \ge 123$), unlocked permutation standard deviation drops to 21.6M VND (1.34%) and the ADV20 gap reverses to -36.9M VND (-2.26%).
 > - **Baseline Preservation:** Both `--exclude-filtered` and `--rank-ic-ties average` remain optional flags with defaults disabled, ensuring all historical registry entries and canonical figures in Table 5.1 remain bit-identical. The configuration with both flags is recommended as the clean reference baseline specifically for Single-Alpha, while Multi-Alpha requires addressing the walk-forward warmup initialization for full permutation invariance.
 
-#### 4. Performance Post Walk-Forward Initialization Window ($W=0$ vs. $W=123$):
+#### 4. Table 5.1f — Performance Post Walk-Forward Initialization Window ($W=0$ vs. $W=123$):
 
 | Configuration | $W$ | Tie-Break Key | Real NAV (VND) | Strategy / Benchmark NAV | Strategy Sharpe (±NW SE) | Benchmark Sharpe (±NW SE) | Active Sharpe (±NW SE) | $\pm 2$ SE Contains 0? | MaxDD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
