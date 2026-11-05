@@ -18,6 +18,7 @@ import os
 import sys
 import time
 import json
+import html
 import datetime
 import subprocess
 import requests
@@ -209,7 +210,7 @@ def handle_status() -> str:
         cash_pct = ((avail_cash + tot_rec) / real_nav * 100.0) if real_nav > 0 else 0.0
         
         msg = f"""📊 <b>PORTFOLIO STATUS REPORT (MARK-TO-MARKET)</b>
-📅 Last Session: <b>{last_date}</b>
+📅 Last Session: <b>{html.escape(str(last_date))}</b>
 
 💰 <b>CAPITAL & PERFORMANCE:</b>
 • <b>Real NAV:</b> <code>{real_nav:,.0f} VND</code> (<b>{tot_ret:+.2f}%</b>)
@@ -228,7 +229,7 @@ def handle_status() -> str:
 • T+2 Advance Interest Cost: <code>{adv_fees:,.0f} VND</code>"""
         return msg
     except Exception as e:
-        return f"⚠️ Error reading portfolio state: {e}"
+        return f"⚠️ Error reading portfolio state: {html.escape(sanitize_error_message(str(e)))}"
 
 
 def handle_holdings() -> str:
@@ -260,14 +261,14 @@ def handle_holdings() -> str:
             pos_val = tot_qty * cost
             tot_val += pos_val
             
-            lines.append(f"• <b>{sym}</b>: <b>{tot_qty:,}</b> shares (Avg: <code>{cost:,.0f} VND</code>)")
+            lines.append(f"• <b>{html.escape(str(sym))}</b>: <b>{tot_qty:,}</b> shares (Avg: <code>{cost:,.0f} VND</code>)")
             lines.append(f"  └ Tradable: <code>{sellable:,}</code> | Locked T+1: <code>{t1:,}</code> | Locked T+2: <code>{t2:,}</code>")
             lines.append(f"  └ Position Value: <code>{pos_val:,.0f} VND</code>")
             
         lines.append(f"\n<b>Total Market Exposure:</b> <code>{tot_val:,.0f} VND</code>")
         return "\n".join(lines)
     except Exception as e:
-        return f"⚠️ Error reading holdings: {e}"
+        return f"⚠️ Error reading holdings: {html.escape(sanitize_error_message(str(e)))}"
 
 
 def handle_orders() -> str:
@@ -298,14 +299,14 @@ def handle_orders() -> str:
             v = o["est_value"]
             w = o.get("target_weight", 0.0) * 100.0
             tot_val += v
-            lines.append(f"• {act} <b>{q:,} shs {sym}</b> @ {p:,.0f} VND")
+            lines.append(f"• {act} <b>{q:,} shs {html.escape(str(sym))}</b> @ {p:,.0f} VND")
             lines.append(f"  └ Est Value: <code>{v:,.0f} VND</code> (Target: {w:.1f}%)")
             
         lines.append(f"\n<b>Total Estimated Outlay:</b> <code>{tot_val:,.0f} VND</code>")
         lines.append("<i>Status: Queued in pending_orders ready for morning ATO session.</i>")
         return "\n".join(lines)
     except Exception as e:
-        return f"⚠️ Error reading orders: {e}"
+        return f"⚠️ Error reading orders: {html.escape(sanitize_error_message(str(e)))}"
 
 
 _last_sync_timestamp: float = 0.0
@@ -338,10 +339,10 @@ def handle_sync() -> str:
         if proc.returncode == 0:
             return "⚡ <b>SYNCHRONIZATION COMPLETED!</b>\nMarket data updated and T+2.5 ledger settled.\nFull report dispatched via Telegram."
         else:
-            clean_err = sanitize_error_message(proc.stderr[:400], token=bot_token)
+            clean_err = html.escape(sanitize_error_message(proc.stderr[:400], token=bot_token))
             return f"⚠️ <b>SYNC ERROR:</b>\n{clean_err}"
     except Exception as e:
-        clean_err = sanitize_error_message(str(e), token=bot_token)
+        clean_err = html.escape(sanitize_error_message(str(e), token=bot_token))
         return f"⚠️ Sync execution error: {clean_err}"
 
 
@@ -359,7 +360,7 @@ def process_command(cmd: str) -> str:
     elif cmd_clean == "/sync":
         return handle_sync()
     else:
-        return f"❓ Unrecognized command <code>{cmd}</code>. Send <b>/help</b> for available command list."
+        return f"❓ Unrecognized command <code>{html.escape(cmd)}</code>. Send <b>/help</b> for available command list."
 
 
 # ==============================================================================
@@ -427,7 +428,7 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
                     
                     # Strict Authorization Check
                     if sender_chat_id != str(admin_chat_id):
-                        print(f"[SECURITY WARNING] Rejected command from unauthorized chat_id {mask_chat_id(sender_chat_id)}: {mask_token(text, token)}")
+                        print(f"[SECURITY WARNING] Rejected command from unauthorized chat_id {mask_chat_id(sender_chat_id)}: {repr(mask_token(text[:512], token)[:64])}")
                         continue
                         
                     if text.startswith("/"):
