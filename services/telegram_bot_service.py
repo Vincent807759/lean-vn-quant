@@ -3,7 +3,7 @@
 LEAN VN-QUANT: TELEGRAM BOT 2-WAY INTERACTIVE SERVICE (TELEGRAM_BOT_SERVICE.PY)
 ================================================================================
 Interactive 2-way Telegram Bot service daemon (zero-dependency):
-1. Auto-Discovery of TELEGRAM_CHAT_ID via getUpdates API.
+1. Mandatory admin_chat_id authentication check on all incoming commands.
 2. Two-way commands from smartphone:
    - /start, /help: Instructions and available command list.
    - /status, /nav: Real NAV, cash balance, T+1/T+2 receivables & Implementation Shortfall.

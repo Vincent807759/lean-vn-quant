@@ -142,3 +142,8 @@ def test_mask_chat_id_hides_raw_id():
     assert mask_chat_id("") == ""
     assert mask_chat_id(None) == ""
 
+def test_telegram_bot_docstring_no_auto_discovery_claim():
+    import services.telegram_bot_service as tbs
+    doc = tbs.__doc__ or ""
+    assert "Auto-Discovery" not in doc
+    assert "Mandatory admin_chat_id authentication check on all incoming commands." in doc
