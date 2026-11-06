@@ -191,7 +191,8 @@ def test_corporate_action_nav_preservation():
         sell_tax=0.0,
         corp_action_div_cash=div_cash,
         corp_action_div_pay_t=div_pay,
-        dividend_tax_rate=0.0
+        dividend_tax_rate=0.0,
+        warn_unlagged=False
     )
 
     eq = res["equity"]
@@ -316,7 +317,8 @@ def test_cash_dividend_5pct_pit_tax():
         corp_action_div_pay_t=div_pay,
         daily_vol=np.zeros((T, N)),
         dividend_tax_rate=0.05,
-        half_spread_floor=0.0
+        half_spread_floor=0.0,
+        warn_unlagged=False
     )
 
     # 1.0e9 / 50k = 20,000 shares * 10,000 * 0.95 = 190,000,000 VND
