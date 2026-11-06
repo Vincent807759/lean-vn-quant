@@ -299,8 +299,11 @@ def test_telegram_unauthorized_log_masks_token_straddling_64_char_boundary():
 
 def test_telegram_status_and_holdings_mark_to_market_consistency(tmp_path, monkeypatch):
     import json
+    import os
+    import polars as pl
     from services import telegram_bot_service as tbs
 
+    # 1. Priority 1: last_close = 30000.0
     state = {
         "initial_capital": 100_000_000.0,
         "last_real_nav": 120_000_000.0,
@@ -332,6 +335,50 @@ def test_telegram_status_and_holdings_mark_to_market_consistency(tmp_path, monke
     holdings_msg = tbs.handle_holdings()
     assert "Position Value: <code>90,000,000 VND</code>" in holdings_msg
     assert "Total Market Exposure:</b> <code>90,000,000 VND</code>" in holdings_msg
+
+    # 2. Priority 2: prev_close_map = {"HPG": 28000.0} when last_close is missing
+    del state["holdings"]["HPG"]["last_close"]
+    state["prev_close_map"] = {"HPG": 28000.0}
+    state_file.write_text(json.dumps(state), encoding="utf-8")
+
+    status_msg2 = tbs.handle_status()
+    assert "84,000,000 VND" in status_msg2
+    holdings_msg2 = tbs.handle_holdings()
+    assert "Position Value: <code>84,000,000 VND</code>" in holdings_msg2
+
+    # 3. Priority 3: Parquet fallback ("date", "symbol", "raw_close") when prev_close_map is missing
+    del state["prev_close_map"]
+    state_file.write_text(json.dumps(state), encoding="utf-8")
+
+    pq_file = tmp_path / "vn30_mock.parquet"
+    df_mock = pl.DataFrame({
+        "date": ["2024-01-04", "2024-01-05"],
+        "symbol": ["HPG", "HPG"],
+        "raw_close": [25000.0, 32000.0]
+    })
+    df_mock.write_parquet(pq_file)
+    monkeypatch.setattr(tbs, "get_parquet_file_path", lambda: str(pq_file))
+
+    status_msg3 = tbs.handle_status()
+    assert "96,000,000 VND" in status_msg3
+    holdings_msg3 = tbs.handle_holdings()
+    assert "Position Value: <code>96,000,000 VND</code>" in holdings_msg3
+
+    # 4. Check against canonical parquet schema if file exists
+    canonical_pq = os.path.join(tbs.ROOT_DIR, "data", "vn30_production.parquet")
+    if os.path.exists(canonical_pq):
+        monkeypatch.setattr(tbs, "get_parquet_file_path", lambda: canonical_pq)
+        state_can = {
+            "holdings": {
+                "HPG": {
+                    "sellable_qty": 1000,
+                    "avg_cost": 12345.0
+                }
+            }
+        }
+        res_map = tbs._resolve_latest_close_map(state_can)
+        assert res_map["HPG"] > 0
+        assert res_map["HPG"] != 12345.0
 
 
 def test_paper_trader_exec_price_clamping_and_t25_next_day_sellable():
