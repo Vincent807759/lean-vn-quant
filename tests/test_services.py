@@ -295,3 +295,121 @@ def test_telegram_unauthorized_log_masks_token_straddling_64_char_boundary():
     assert "ABCdef" not in logged_snippet
     assert "[MASKED_TOKEN]" in logged_snippet
     assert "\n" not in logged_snippet
+
+
+def test_telegram_status_and_holdings_mark_to_market_consistency(tmp_path, monkeypatch):
+    import json
+    from services import telegram_bot_service as tbs
+
+    state = {
+        "initial_capital": 100_000_000.0,
+        "last_real_nav": 120_000_000.0,
+        "available_cash": 20_000_000.0,
+        "receivable_cash_t1": 10_000_000.0,
+        "receivable_cash_t2": 0.0,
+        "total_brokerage_tax": 150_000.0,
+        "total_advance_fees": 50_000.0,
+        "last_updated_date": "2024-01-05",
+        "holdings": {
+            "HPG": {
+                "sellable_qty": 3000,
+                "locked_t1": 0,
+                "locked_t2": 0,
+                "avg_cost": 20000.0,
+                "last_close": 30000.0
+            }
+        }
+    }
+    state_file = tmp_path / "paper_portfolio_state.json"
+    state_file.write_text(json.dumps(state), encoding="utf-8")
+    monkeypatch.setattr(tbs, "get_state_file_path", lambda: str(state_file))
+
+    status_msg = tbs.handle_status()
+    assert "90,000,000 VND" in status_msg
+    assert "75.0%" in status_msg
+    assert "25.0%" in status_msg
+
+    holdings_msg = tbs.handle_holdings()
+    assert "Position Value: <code>90,000,000 VND</code>" in holdings_msg
+    assert "Total Market Exposure:</b> <code>90,000,000 VND</code>" in holdings_msg
+
+
+def test_paper_trader_exec_price_clamping_and_t25_next_day_sellable():
+    from services import daily_paper_trader as dpt
+
+    # 1. Floor trapped penalty clamp
+    state = dpt.init_empty_state(100_000_000.0)
+    state["holdings"]["VNM"] = {
+        "sellable_qty": 1000,
+        "locked_t1": 0,
+        "locked_t2": 0,
+        "avg_cost": 50000.0
+    }
+    pending = [{
+        "action": "SELL",
+        "symbol": "VNM",
+        "qty": 1000,
+        "trapped_days": 5
+    }]
+    state["pending_orders"] = pending
+
+    mkt_slice = {
+        "VNM": {
+            "raw_open": 50000.0,
+            "floor_price": 46500.0,
+            "ceiling_price": 53500.0,
+            "raw_close": 48000.0,
+            "adv20": 1e11
+        }
+    }
+    st_res, reps = dpt.execute_pending_orders_and_settle(state, mkt_slice, "2024-01-02", clamp_and_round=True)
+    assert len(reps) == 1
+    assert reps[0]["status"] == "FILLED"
+    assert reps[0]["fill_price"] == 46500.0
+
+    # 2. T+2.5 Next day sellable check
+    st2 = dpt.init_empty_state(100_000_000.0)
+    # Day T buy
+    st2["holdings"]["HPG"] = {
+        "sellable_qty": 0,
+        "locked_t1": 0,
+        "locked_t2": 1000,
+        "avg_cost": 25000.0
+    }
+    st2["last_ledger_advance_date"] = "2024-01-01"
+
+    # Morning Day T+1
+    dpt.advance_t25_settlement(st2, "2024-01-02")
+    assert st2["holdings"]["HPG"]["locked_t1"] == 1000
+    assert st2["holdings"]["HPG"]["sellable_qty"] == 0
+
+        # Evening Day T+1: generate orders for morning T+2
+    st2["last_real_nav"] = 100_000_000.0
+    from engine import data_pipeline as dp
+
+    df_hist = dp.generate_fallback_data(
+        symbols=["ACB", "FPT", "HPG", "VCB", "MBB", "TCB"],
+        start_date="2023-01-01",
+        end_date="2023-05-15",
+        seed=42
+    )
+    last_date = str(df_hist["date"].max())
+
+    # Under strict_t25_ato_lock=True, locked_t1 is NOT sellable
+    orders_strict = dpt.generate_next_day_orders(st2, df_hist, last_date, strict_t25_ato_lock=True)
+    sell_orders_strict = [o for o in orders_strict if o["action"] == "SELL" and o["symbol"] == "HPG"]
+    assert len(sell_orders_strict) == 0
+
+    # Under default strict_t25_ato_lock=False, locked_t1 is included in sellable for morning T+2
+    orders_def = dpt.generate_next_day_orders(st2, df_hist, last_date, strict_t25_ato_lock=False)
+    assert isinstance(orders_def, list)
+
+    # Morning Day T+2: advance settlement unlocks locked_t1 -> sellable_qty
+    dpt.advance_t25_settlement(st2, "2024-01-03")
+    assert st2["holdings"]["HPG"]["sellable_qty"] == 1000
+
+    pending_sell = [{"action": "SELL", "symbol": "HPG", "qty": 1000, "trapped_days": 0}]
+    st2["pending_orders"] = pending_sell
+    mkt_slice2 = {"HPG": {"raw_open": 25000.0, "floor_price": 23250.0, "ceiling_price": 26750.0, "raw_close": 25000.0, "adv20": 1e11}}
+    _, rep2 = dpt.execute_pending_orders_and_settle(st2, mkt_slice2, "2024-01-03")
+    assert rep2[0]["status"] == "FILLED" 
