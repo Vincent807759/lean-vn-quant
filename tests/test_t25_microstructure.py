@@ -418,3 +418,79 @@ def test_strict_t25_ato_lock_earliest_sell_day():
     assert ratios_str[3] == 1.1
     assert ratios_str[4] == 1.1
     assert ratios_str[5] == 1.0
+
+
+def test_exec_price_clamp_and_hose_tick_rounding():
+    # 1. Floor trapped exit 5 sessions with 35% penalty
+    T_syn, N_syn = 10, 1
+    ro_syn = np.full((T_syn, N_syn), 50000.0)
+    rc_syn = np.full((T_syn, N_syn), 50000.0)
+    ceil_syn, flr_syn = sim.compute_bands_and_ticks(ro_syn, "HOSE")
+    for t_trap in range(3, 8):
+        ro_syn[t_trap, 0] = flr_syn[t_trap, 0]
+        rc_syn[t_trap, 0] = flr_syn[t_trap, 0]
+    adv_syn = np.full((T_syn, N_syn), 10_000_000.0)
+    w_syn = np.zeros((T_syn, N_syn))
+    w_syn[1:3, 0] = 0.5
+    dates_syn = [datetime.date(2024, 1, 1) + datetime.timedelta(days=i) for i in range(T_syn)]
+
+    # Raw execution (clamp_and_round_exec_price=False) breaches floor on exit
+    r_raw = sim.simulate_vietnam(
+        ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
+        dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=False,
+        warn_unlagged=False
+    )
+    assert r_raw["equity"][-1] < 820_000_000.0
+
+    # Clamped execution preserves floor price (46,500 VND)
+    r_clamped = sim.simulate_vietnam(
+        ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
+        dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=True,
+        round_exec_adverse=False, warn_unlagged=False
+    )
+    assert r_clamped["equity"][-1] == 958_037_000.0
+    assert np.all(r_clamped["cash_history"] >= -1e-6)
+
+    # Adverse rounding mode
+    r_adv = sim.simulate_vietnam(
+        ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
+        dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=True,
+        round_exec_adverse=True, warn_unlagged=False
+    )
+    assert r_adv["equity"][-1] == 958_037_000.0
+    assert np.all(r_adv["cash_history"] >= -1e-6)
+
+    # 2. Test off-tick boundaries clamping and rounding
+    ro_off = np.array([[30000.0], [30870.0], [26840.0], [30000.0]], dtype=np.float64)
+    rc_off = ro_off.copy()
+    ceil_off = np.full((4, 1), 30874.85)  # non-tick ceiling
+    flr_off = np.full((4, 1), 26835.15)   # non-tick floor
+    adv_off = np.full((4, 1), 1000.0)     # small ADV triggers dynamic slippage
+    w_off = np.zeros((4, 1))
+    w_off[1, 0] = 0.8
+    w_off[2, 0] = 0.0
+
+    r_off = sim.simulate_vietnam(
+        ro_off, rc_off, ceil_off, flr_off, adv_off, w_off,
+        clamp_and_round_exec_price=True, round_exec_adverse=False,
+        warn_unlagged=False
+    )
+    assert np.all(r_off["cash_history"] >= -1e-6)
+
+    r_off_adv = sim.simulate_vietnam(
+        ro_off, rc_off, ceil_off, flr_off, adv_off, w_off,
+        clamp_and_round_exec_price=True, round_exec_adverse=True,
+        warn_unlagged=False
+    )
+    assert np.all(r_off_adv["cash_history"] >= -1e-6)
+
+
+def test_sanitize_market_matrices_ffill_respects_hose_ticks():
+    ro_na = np.array([[28855.0], [np.nan]], dtype=np.float64)
+    rc_na = np.array([[28855.0], [np.nan]], dtype=np.float64)
+    c_na, f_na = sim.compute_bands_and_ticks(np.array([[28855.0], [28855.0]]), "HOSE")
+    _, _, c_clean, f_clean, _, _, _ = sim.sanitize_market_matrices(
+        ro_na, rc_na, c_na, f_na, np.full((2, 1), 1e6), np.zeros((2, 1))
+    )
+    assert c_clean[1, 0] == 30850.0
+    assert f_clean[1, 0] == 26850.0
