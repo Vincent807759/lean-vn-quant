@@ -44,7 +44,8 @@ def test_fee_accounting_identity_zero_notional():
             daily_vol=daily_vol,
             max_adv_participation=1.0,
             penalty_rate_per_day=0.0,
-            min_advance_notional=0.0
+            min_advance_notional=0.0,
+            warn_unlagged=False
         )
 
         eq_loss = init_cash - res["equity"][-1]
@@ -94,7 +95,8 @@ def test_fee_accounting_identity_smart_sweep_leakage():
             daily_vol=daily_vol,
             max_adv_participation=1.0,
             penalty_rate_per_day=0.0,
-            min_advance_notional=71428571.0
+            min_advance_notional=71428571.0,
+            warn_unlagged=False
         )
 
         eq_loss = init_cash - res["equity"][-1]

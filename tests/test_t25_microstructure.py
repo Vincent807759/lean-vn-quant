@@ -191,7 +191,8 @@ def test_corporate_action_nav_preservation():
         sell_tax=0.0,
         corp_action_div_cash=div_cash,
         corp_action_div_pay_t=div_pay,
-        dividend_tax_rate=0.0
+        dividend_tax_rate=0.0,
+        warn_unlagged=False
     )
 
     eq = res["equity"]
@@ -316,7 +317,8 @@ def test_cash_dividend_5pct_pit_tax():
         corp_action_div_pay_t=div_pay,
         daily_vol=np.zeros((T, N)),
         dividend_tax_rate=0.05,
-        half_spread_floor=0.0
+        half_spread_floor=0.0,
+        warn_unlagged=False
     )
 
     # 1.0e9 / 50k = 20,000 shares * 10,000 * 0.95 = 190,000,000 VND
@@ -418,3 +420,132 @@ def test_strict_t25_ato_lock_earliest_sell_day():
     assert ratios_str[3] == 1.1
     assert ratios_str[4] == 1.1
     assert ratios_str[5] == 1.0
+
+
+def test_exec_price_clamp_and_hose_tick_rounding():
+    # 1. Floor trapped exit 5 sessions with 35% penalty
+    T_syn, N_syn = 10, 1
+    ro_syn = np.full((T_syn, N_syn), 50000.0)
+    rc_syn = np.full((T_syn, N_syn), 50000.0)
+    ceil_syn, flr_syn = sim.compute_bands_and_ticks(ro_syn, "HOSE")
+    for t_trap in range(3, 8):
+        ro_syn[t_trap, 0] = flr_syn[t_trap, 0]
+        rc_syn[t_trap, 0] = flr_syn[t_trap, 0]
+    adv_syn = np.full((T_syn, N_syn), 10_000_000.0)
+    w_syn = np.zeros((T_syn, N_syn))
+    w_syn[1:3, 0] = 0.5
+    dates_syn = [datetime.date(2024, 1, 1) + datetime.timedelta(days=i) for i in range(T_syn)]
+
+    # Raw execution (clamp_and_round_exec_price=False) breaches floor on exit
+    r_raw = sim.simulate_vietnam(
+        ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
+        dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=False,
+        warn_unlagged=False
+    )
+    assert r_raw["equity"][-1] < 820_000_000.0
+
+    # Clamped execution preserves floor price (46,500 VND)
+    r_clamped = sim.simulate_vietnam(
+        ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
+        dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=True,
+        round_exec_adverse=False, warn_unlagged=False
+    )
+    assert r_clamped["equity"][-1] == 958_037_000.0
+    assert np.all(r_clamped["cash_history"] >= -1e-6)
+
+    # Adverse rounding mode
+    r_adv = sim.simulate_vietnam(
+        ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
+        dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=True,
+        round_exec_adverse=True, warn_unlagged=False
+    )
+    assert r_adv["equity"][-1] == 958_037_000.0
+    assert np.all(r_adv["cash_history"] >= -1e-6)
+
+    # 2. Test off-tick boundaries clamping and rounding
+    ro_off = np.array([[30000.0], [30870.0], [26840.0], [30000.0]], dtype=np.float64)
+    rc_off = ro_off.copy()
+    ceil_off = np.full((4, 1), 30874.85)  # non-tick ceiling
+    flr_off = np.full((4, 1), 26835.15)   # non-tick floor
+    adv_off = np.full((4, 1), 1000.0)     # small ADV triggers dynamic slippage
+    w_off = np.zeros((4, 1))
+    w_off[1, 0] = 0.8
+    w_off[2, 0] = 0.0
+
+    r_off = sim.simulate_vietnam(
+        ro_off, rc_off, ceil_off, flr_off, adv_off, w_off,
+        clamp_and_round_exec_price=True, round_exec_adverse=False,
+        warn_unlagged=False
+    )
+    assert np.all(r_off["cash_history"] >= -1e-6)
+
+    r_off_adv = sim.simulate_vietnam(
+        ro_off, rc_off, ceil_off, flr_off, adv_off, w_off,
+        clamp_and_round_exec_price=True, round_exec_adverse=True,
+        warn_unlagged=False
+    )
+    assert np.all(r_off_adv["cash_history"] >= -1e-6)
+
+    # 3. Test Step D max_budget and cash_avail scaling branches with while-loop backoff
+    # Scenario A: Off-tick slippage rounding in scaling branch (raw 50,025 -> 50,000 in M2 vs 50,100 in M3)
+    ro_a = np.full((3, 1), 50000.0)
+    rc_a = np.full((3, 1), 50000.0)
+    c_a, f_a = sim.compute_bands_and_ticks(ro_a, "HOSE")
+    adv_a = np.full((3, 1), 10_000_000.0)
+    w_a = np.zeros((3, 1))
+    w_a[1, 0] = 1.0
+
+    r_scen_a_m2 = sim.simulate_vietnam(
+        ro_a, rc_a, c_a, f_a, adv_a, w_a,
+        initial_cash=60_000_000.0, broker_fee=0.0015, slippage=0.0005,
+        half_spread_floor=0.0, clamp_and_round_exec_price=True,
+        round_exec_adverse=False, warn_unlagged=False
+    )
+    r_scen_a_m3 = sim.simulate_vietnam(
+        ro_a, rc_a, c_a, f_a, adv_a, w_a,
+        initial_cash=60_000_000.0, broker_fee=0.0015, slippage=0.0005,
+        half_spread_floor=0.0, clamp_and_round_exec_price=True,
+        round_exec_adverse=True, warn_unlagged=False
+    )
+    exec_p_m2 = r_scen_a_m2["broker_fees"][1] / (0.0015 * 1100.0)
+    exec_p_m3 = r_scen_a_m3["broker_fees"][1] / (0.0015 * 1100.0)
+    assert np.isclose(exec_p_m2, 50000.0)
+    assert np.isclose(exec_p_m3, 50100.0)
+    assert round(exec_p_m2) % 100 == 0
+    assert round(exec_p_m3) % 100 == 0
+    assert np.all(r_scen_a_m2["cash_history"] >= -1e-6)
+    assert np.all(r_scen_a_m3["cash_history"] >= -1e-6)
+
+    # Scenario B: Multiple-lot backoff in while-loop under max_budget (Step D branch 3)
+    # p_open is below floor, so exec_price is clamped upwards to flr_p
+    ro_b = np.full((5, 2), 50000.0)
+    rc_b = np.full((5, 2), 50000.0)
+    c_b, f_b = sim.compute_bands_and_ticks(ro_b, "HOSE")
+    adv_b = np.full((5, 2), 10_000_000.0)
+    w_b = np.zeros((5, 2))
+    w_b[1, 0] = 0.5
+    w_b[3, 0] = 0.0
+    w_b[3, 1] = 1.0
+    ro_b[3, 1] = 45000.0
+    rc_b[3, 1] = 45000.0
+    f_b[3, 1] = 46500.0
+
+    r_scen_b = sim.simulate_vietnam(
+        ro_b, rc_b, c_b, f_b, adv_b, w_b,
+        initial_cash=100_000_000.0, broker_fee=0.0015, slippage=0.0,
+        sell_tax=0.001, advance_fee_rate=0.00035,
+        clamp_and_round_exec_price=True, round_exec_adverse=False,
+        warn_unlagged=False
+    )
+    assert np.all(r_scen_b["cash_history"] >= -1e-6)
+
+
+def test_sanitize_market_matrices_ffill_respects_hose_ticks():
+    ro_na = np.array([[28855.0], [np.nan]], dtype=np.float64)
+    rc_na = np.array([[28855.0], [np.nan]], dtype=np.float64)
+    c_na, f_na = sim.compute_bands_and_ticks(np.array([[28855.0], [28855.0]]), "HOSE")
+    _, _, c_clean, f_clean, _, _, _ = sim.sanitize_market_matrices(
+        ro_na, rc_na, c_na, f_na, np.full((2, 1), 1e6), np.zeros((2, 1))
+    )
+    assert c_clean[1, 0] == 30850.0
+    assert f_clean[1, 0] == 26850.0

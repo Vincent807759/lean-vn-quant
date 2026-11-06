@@ -51,10 +51,12 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 try:
+    from engine import vn_simulator as sim
     from engine import alpha_ops as ops
     from engine import data_pipeline as dp
     from services.telegram_bot_service import mask_token
 except ImportError:
+    import vn_simulator as sim
     import alpha_ops as ops
     import data_pipeline as dp
     try:
@@ -355,6 +357,54 @@ def fetch_or_update_data(
 # 3. STEP 2: ATO ORDER EXECUTION & T+2 SETTLEMENT ROLL
 # ==============================================================================
 
+def get_hose_tick_size(price: float) -> float:
+    """Returns standard HOSE tick size (10, 50, or 100 VND) for a given price in VND."""
+    if price < 10000.0:
+        return 10.0
+    elif price < 50000.0:
+        return 50.0
+    else:
+        return 100.0
+
+
+def round_and_clamp_exec_price(
+    raw_exec: float,
+    side: str,
+    floor_p: float,
+    ceil_p: float,
+    clamp_and_round: bool = True,
+    round_adverse: bool = False
+) -> float:
+    """
+    Clamps execution price within [floor_p, ceil_p] (inward tick-aligned)
+    and rounds to valid HOSE tick size.
+    """
+    if not clamp_and_round:
+        return float(raw_exec)
+    p = float(raw_exec)
+    eff_flr = float(floor_p)
+    eff_ceil = float(ceil_p)
+    if eff_flr > 0.0 and np.isfinite(eff_flr):
+        flr_tk = get_hose_tick_size(eff_flr)
+        eff_flr = float(np.ceil(eff_flr / flr_tk - 1e-12) * flr_tk)
+    if eff_ceil > 0.0 and np.isfinite(eff_ceil):
+        ceil_tk = get_hose_tick_size(eff_ceil)
+        eff_ceil = float(np.floor(eff_ceil / ceil_tk + 1e-12) * ceil_tk)
+    if eff_flr > 0.0 and eff_ceil >= eff_flr:
+        p = min(max(p, eff_flr), eff_ceil)
+    tk = get_hose_tick_size(p)
+    if round_adverse:
+        if side.upper() == "BUY":
+            p = float(np.ceil(p / tk - 1e-12) * tk)
+        else:
+            p = float(np.floor(p / tk + 1e-12) * tk)
+    else:
+        p = float(np.round(p / tk) * tk)
+    if eff_flr > 0.0 and eff_ceil >= eff_flr:
+        p = min(max(p, eff_flr), eff_ceil)
+    return p
+
+
 def advance_t25_settlement(state: Dict[str, Any], session_date: str) -> bool:
     """
     Idempotent T+2.5 settlement ledger roll for HOSE equity microstructure:
@@ -382,7 +432,10 @@ def advance_t25_settlement(state: Dict[str, Any], session_date: str) -> bool:
 def execute_pending_orders_and_settle(
     state: Dict[str, Any],
     today_market_slice: Dict[str, Dict[str, float]],
-    session_date: str
+    session_date: str,
+    use_dynamic_slippage: bool = False,
+    clamp_and_round: bool = True,
+    round_adverse: bool = False
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
     Executes morning ATO session workflow:
@@ -445,9 +498,18 @@ def execute_pending_orders_and_settle(
             executed_reports.append(rep)
             continue
             
+        ceil_p = mkt.get("ceiling_price", raw_open * 1.07)
+        if use_dynamic_slippage or "daily_vol" in mkt:
+            adv20_val = float(mkt.get("adv20", mkt.get("adv", 0.0)))
+            adv20_sh = adv20_val / max(raw_open, 1.0) if adv20_val > 1e7 else adv20_val
+            vol_val = float(mkt.get("daily_vol", 0.015))
+            slip_rate = float(sim._calc_dynamic_slippage(float(fill_qty), adv20_sh, vol_val, base_slippage=SLIPPAGE))
+        else:
+            slip_rate = SLIPPAGE
         trapped_days = o.get("trapped_days", 0)
         penalty_slippage = min(0.40, 0.07 * trapped_days)
-        exec_price = raw_open * (1.0 - SLIPPAGE - penalty_slippage)
+        raw_exec = raw_open * (1.0 - slip_rate - penalty_slippage)
+        exec_price = round_and_clamp_exec_price(raw_exec, "SELL", floor_p, ceil_p, clamp_and_round=clamp_and_round, round_adverse=round_adverse)
         gross_val = fill_qty * exec_price
         broker_fee_val = gross_val * BROKER_FEE
         tax_val = gross_val * SELL_TAX
@@ -518,14 +580,23 @@ def execute_pending_orders_and_settle(
             executed_reports.append(rep)
             continue
             
-        exec_price = raw_open * (1.0 + SLIPPAGE)
-        cost_per_share = exec_price * (1.0 + BROKER_FEE)
-        
-        # Liquidity cap: <= 5% ADV20
+        floor_p = mkt.get("floor_price", raw_open * 0.93)
         adv20 = mkt.get("adv20", 1e11)
         max_shares_adv = int((adv20 * MAX_ADV_PARTICIPATION) / max(raw_open, 1.0))
         max_shares_adv = max(LOT_SIZE, (max_shares_adv // LOT_SIZE) * LOT_SIZE)
         capped_qty = min(qty_requested, max_shares_adv)
+
+        adv20_val = float(mkt.get("adv20", mkt.get("adv", 0.0)))
+        adv20_sh = adv20_val / max(raw_open, 1.0) if adv20_val > 1e7 else adv20_val
+        vol_val = float(mkt.get("daily_vol", 0.015))
+
+        if use_dynamic_slippage or "daily_vol" in mkt:
+            slip_rate = float(sim._calc_dynamic_slippage(float(capped_qty), adv20_sh, vol_val, base_slippage=SLIPPAGE))
+        else:
+            slip_rate = SLIPPAGE
+
+        exec_price = round_and_clamp_exec_price(raw_open * (1.0 + slip_rate), "BUY", floor_p, ceil_p, clamp_and_round=clamp_and_round, round_adverse=round_adverse)
+        cost_per_share = exec_price * (1.0 + BROKER_FEE)
         
         # Check cash purchasing power
         avail_cash = state["available_cash"]
@@ -536,6 +607,13 @@ def execute_pending_orders_and_settle(
         shares_afford = int(total_purchasing_power // cost_per_share)
         shares_afford = (shares_afford // LOT_SIZE) * LOT_SIZE
         fill_qty = min(capped_qty, shares_afford)
+
+        if (use_dynamic_slippage or "daily_vol" in mkt) and fill_qty != capped_qty and fill_qty > 0:
+            slip_rate = float(sim._calc_dynamic_slippage(float(fill_qty), adv20_sh, vol_val, base_slippage=SLIPPAGE))
+            exec_price = round_and_clamp_exec_price(raw_open * (1.0 + slip_rate), "BUY", floor_p, ceil_p, clamp_and_round=clamp_and_round, round_adverse=round_adverse)
+            cost_per_share = exec_price * (1.0 + BROKER_FEE)
+            if fill_qty * cost_per_share > total_purchasing_power + 1e-6:
+                fill_qty -= LOT_SIZE
         
         if fill_qty <= 0:
             rep = dict(o)
@@ -621,6 +699,8 @@ def mark_to_market(
         tot_qty = hold["sellable_qty"] + hold["locked_t1"] + hold["locked_t2"]
         close_p = today_market_slice.get(sym, {}).get("raw_close", hold["avg_cost"])
         total_stock_value += (tot_qty * close_p)
+        hold["last_close"] = float(close_p)
+        hold["market_value"] = float(tot_qty * close_p)
         
     div_cash_rec = state.get("dividend_cash_receivable", 0.0)
     locked_corp_val = 0.0
@@ -636,6 +716,7 @@ def mark_to_market(
         + total_stock_value
         + locked_corp_val
     )
+    state["prev_close_map"] = {sym: float(info.get("raw_close", 0.0)) for sym, info in today_market_slice.items() if info.get("raw_close", 0.0) > 0}
     
     # Compute Naive T+0 Benchmark NAV
     prev_naive_nav = state.get("naive_nav", state["initial_capital"])
@@ -722,7 +803,8 @@ def compute_strategy_signal(
 def generate_next_day_orders(
     state: Dict[str, Any],
     df_market_history: pl.DataFrame,
-    session_date: str
+    session_date: str,
+    strict_t25_ato_lock: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Computes Alpha signals at session close and generates morning ATO order ticket:
@@ -730,6 +812,11 @@ def generate_next_day_orders(
     2. Rank Hysteresis + Turnover Dampening (Daily turnover <= 1.5%/day).
     3. Rebalancing & Odd-lot 100 rounding.
     4. Sells strictly capped at current sellable_qty.
+       Note on T+2.5 timing: this function runs at the end of session T (after MTM of T,
+       prior to advance_t25_settlement of morning T+1). Under default T+2.5 (strict_t25_ato_lock=False),
+       shares in locked_t1 at end of T will be unlocked to sellable_qty on morning T+1 by
+       advance_t25_settlement before ATO match, so current_sellable includes locked_t1.
+       When strict_t25_ato_lock=True, shares in locked_t1 cannot be sold at morning T+1 ATO.
     5. Greedy Cash Sweep: Allocates idle cash (> 15% NAV) across Top 4 Alpha stocks.
     """
     df_masked = dp.build_tradable_mask(df_market_history, min_adv=1.0e10, window=20)
@@ -786,7 +873,7 @@ def generate_next_day_orders(
             h = state["holdings"][s]
             tot = h["sellable_qty"] + h["locked_t1"] + h["locked_t2"]
             current_shares[s] = tot
-            current_sellable[s] = h["sellable_qty"]
+            current_sellable[s] = h["sellable_qty"] + (0 if strict_t25_ato_lock else h.get("locked_t1", 0))
         else:
             current_shares[s] = 0
             current_sellable[s] = 0

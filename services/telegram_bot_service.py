@@ -174,6 +174,63 @@ Quantitative portfolio execution & monitoring engine for VN30.
 <i>Automated reports are dispatched daily after 15:15 Mon-Fri.</i>"""
 
 
+def get_parquet_file_path() -> str:
+    return os.path.join(ROOT_DIR, "data", "vn30_production.parquet")
+
+
+def _resolve_latest_close_map(state: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Resolves the latest close price per symbol using strict priority:
+    1. hold.get("last_close") > 0
+    2. state.get("prev_close_map", {}).get(sym) > 0
+    3. Latest close from data/vn30_production.parquet for missing symbols
+    4. Fallback to hold.get("avg_cost", 0.0)
+    """
+    import math
+    close_map: Dict[str, float] = {}
+    holdings = state.get("holdings", {})
+    missing_syms = []
+    prev_map = state.get("prev_close_map", {})
+
+    for sym, h in holdings.items():
+        lc = h.get("last_close")
+        if lc is not None and math.isfinite(float(lc)) and float(lc) > 0:
+            close_map[sym] = float(lc)
+        elif prev_map.get(sym) is not None and math.isfinite(float(prev_map.get(sym, 0.0))) and float(prev_map.get(sym, 0.0)) > 0:
+            close_map[sym] = float(prev_map[sym])
+        else:
+            missing_syms.append(sym)
+
+    if missing_syms:
+        try:
+            pq_path = get_parquet_file_path()
+            if os.path.exists(pq_path):
+                import polars as pl
+                df = pl.read_parquet(pq_path)
+                sym_col = "symbol" if "symbol" in df.columns else ("ticker" if "ticker" in df.columns else None)
+                date_col = "date" if "date" in df.columns else ("time" if "time" in df.columns else None)
+                close_col = "raw_close" if "raw_close" in df.columns else ("close" if "close" in df.columns else None)
+                if sym_col and date_col and close_col:
+                    df_sub = df.filter(pl.col(sym_col).is_in(missing_syms))
+                    if len(df_sub) > 0:
+                        df_sorted = df_sub.sort(date_col)
+                        df_latest = df_sorted.group_by(sym_col, maintain_order=True).last()
+                        for row in df_latest.iter_rows(named=True):
+                            val = row.get(close_col)
+                            if val is not None:
+                                val_f = float(val)
+                                if math.isfinite(val_f) and val_f > 0.0:
+                                    close_map[str(row[sym_col])] = val_f
+        except Exception:
+            pass
+
+    for sym, h in holdings.items():
+        if sym not in close_map or close_map[sym] <= 0:
+            close_map[sym] = float(h.get("avg_cost", 0.0))
+
+    return close_map
+
+
 def handle_status() -> str:
     """Handles /status and /nav commands."""
     state_file = get_state_file_path()
@@ -201,13 +258,17 @@ def handle_status() -> str:
         last_date = state.get("last_updated_date", "Pending initial run")
         holdings = state.get("holdings", {})
         
+        close_map = _resolve_latest_close_map(state)
         stock_val = 0.0
         for sym, h in holdings.items():
             tot_s = h.get("sellable_qty", 0) + h.get("locked_t1", 0) + h.get("locked_t2", 0)
-            stock_val += (tot_s * h.get("avg_cost", 0.0))
-            
-        invested_pct = (stock_val / real_nav * 100.0) if real_nav > 0 else 0.0
-        cash_pct = ((avail_cash + tot_rec) / real_nav * 100.0) if real_nav > 0 else 0.0
+            mkt_p = close_map.get(sym, float(h.get("avg_cost", 0.0)))
+            stock_val += (tot_s * mkt_p)
+
+        comp_nav = stock_val + avail_cash + tot_rec
+        eff_nav = comp_nav if comp_nav > 0 else real_nav
+        invested_pct = (stock_val / eff_nav * 100.0) if eff_nav > 0 else 0.0
+        cash_pct = ((avail_cash + tot_rec) / eff_nav * 100.0) if eff_nav > 0 else 0.0
         
         msg = f"""📊 <b>PORTFOLIO STATUS REPORT (MARK-TO-MARKET)</b>
 📅 Last Session: <b>{html.escape(str(last_date))}</b>
@@ -251,6 +312,7 @@ def handle_holdings() -> str:
             f"<i>Settlement Breakdown: Sellable | T+1 | T+2</i>\n"
         ]
         
+        close_map = _resolve_latest_close_map(state)
         tot_val = 0.0
         for sym, h in sorted(holdings.items()):
             sellable = h.get("sellable_qty", 0)
@@ -258,7 +320,8 @@ def handle_holdings() -> str:
             t2 = h.get("locked_t2", 0)
             tot_qty = sellable + t1 + t2
             cost = h.get("avg_cost", 0.0)
-            pos_val = tot_qty * cost
+            mkt_p = close_map.get(sym, float(cost))
+            pos_val = tot_qty * mkt_p
             tot_val += pos_val
             
             lines.append(f"• <b>{html.escape(str(sym))}</b>: <b>{tot_qty:,}</b> shares (Avg: <code>{cost:,.0f} VND</code>)")
