@@ -976,7 +976,7 @@ def compute_hose_market_impact(
     gamma_perm: float = 0.30
 ) -> float:
     """
-    Computes expected relative slippage IS(Q) on HOSE:
+    Computes expected relative slippage IS(Q) on HOSE [Standalone Overlay - Not active in Table 5.1 baseline]:
     - 3-tier limit order book sweep (if depths & prices provided)
     - Latent tail square-root market impact: eta * sigma * (Q_tail / ADV20)^delta + gamma_perm * sigma * (Q / ADV20)
     - If daily OHLCV only: applies half_spread_floor (12 bps) + square root impact.
@@ -1028,7 +1028,7 @@ def slice_intraday_order(
     max_participation_pct: float = 0.03
 ) -> Dict[str, Any]:
     """
-    Applies HOSE liquidity constraints and intraday order slicing:
+    Applies HOSE liquidity constraints and intraday order slicing [Standalone Overlay - Not active in Table 5.1 baseline]:
     - Max participation cap: Q_max <= 0.03 * ADV20 (3% ADV)
     - If Q > 0.005 * ADV20 (0.5% ADV), slices order into 3 tranches:
         * 25% at ATO (09:00 - 09:15)
@@ -1072,7 +1072,7 @@ def apply_hawkes_ou_decay(
     initial_state: Optional[np.ndarray] = None
 ) -> np.ndarray:
     """
-    Continuous-time Hawkes process / Ornstein-Uhlenbeck exponential decay filter:
+    Continuous-time Hawkes process / Ornstein-Uhlenbeck exponential decay filter [Standalone Overlay - Not active in Table 5.1 baseline]:
     S(i, t) = exp(-ln(2) / tau) * S(i, t-1) + event_impulses(i, t)
     
     Parameters:
@@ -1111,7 +1111,7 @@ def van_der_waerden_transform(
     clip_limit: float = 3.0
 ) -> np.ndarray:
     """
-    Cross-Sectional Inverse Normal Rank Transform (Van der Waerden normal scores):
+    Cross-Sectional Inverse Normal Rank Transform (Van der Waerden normal scores) [Standalone Overlay - Not active in Table 5.1 baseline]:
     S_tilde(i, t) = Phi^(-1)( (rank(S(i, t)) - 0.5) / N_t )
     
     Ensures exact stationary normal distribution across the cross-section
@@ -1141,3 +1141,24 @@ def van_der_waerden_transform(
             out[t] = np.nan
             
     return out
+
+
+def default_textbook_placeholder_signal(
+    raw_close: np.ndarray,
+    tradable_mask: Optional[np.ndarray] = None
+) -> np.ndarray:
+    """
+    Standard textbook educational placeholder signal (SMA-40 / SMA-50 Breakout Z-Score).
+    Single source of truth shared by run_verification.py and services/daily_paper_trader.py
+    when private_alphas/ is absent. Does NOT contain proprietary live trading weights.
+    """
+    close_arr = np.asarray(raw_close, dtype=np.float64)
+    mask_arr = None if tradable_mask is None else np.asarray(tradable_mask, dtype=bool)
+    hh = ts_mean(close_arr, 40)
+    dev = ts_std_dev(close_arr, 40)
+    with np.errstate(invalid="ignore"):
+        z = (close_arr - hh) / np.maximum(dev, 1e-4)
+        sma50 = ts_mean(close_arr, 50)
+        in_uptrend = close_arr > sma50
+    z_filtered = np.where(in_uptrend, z, -999.0)
+    return rank(z_filtered, mask=mask_arr)

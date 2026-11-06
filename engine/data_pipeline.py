@@ -337,7 +337,7 @@ def fetch_vn_ohlcv(
                         l_val = float(l_arr[i]) * 1000.0
                         v_val = float(v_arr[i])
                         
-                        ref_p = last_c if last_c is not None else o_val
+                        ref_p = last_c if last_c is not None else o_val  # At i==0 (warmup t<49, w=0), prior close precedes slice so ref_p uses o_val
                         ceil_p, flr_p = compute_hose_limits(ref_p)
                         last_c = c_val
                         
