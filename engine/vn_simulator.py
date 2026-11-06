@@ -19,6 +19,7 @@ from typing import Dict, Any, Optional, Tuple, Union, List
 import os
 import json
 import datetime
+import warnings
 import numpy as np
 import bottleneck as bn
 import numba
@@ -160,22 +161,65 @@ def record_trial(
     trial_name: str,
     daily_returns: np.ndarray,
     metadata: Optional[Dict[str, Any]] = None,
-    registry_file: str = "experiments/trial_registry.jsonl"
+    registry_file: str = "experiments/trial_registry.jsonl",
+    overwrite: bool = False
 ) -> Dict[str, Any]:
     """
     Appends a quantitative backtest trial to the persistent JSONL trial registry.
+    When overwrite=False (default), if an entry with the same trial_name and n_bars
+    already exists in registry_file, returns the existing entry without modifying
+    the file on disk (preventing duplicate lines on repeated audit runs).
+    When overwrite=True, replaces matching (trial_name, n_bars) entries in-place
+    to preserve registry line order without swallowing read/parse errors.
     """
     os.makedirs(os.path.dirname(os.path.abspath(registry_file)), exist_ok=True)
     r_arr = np.asarray(daily_returns, dtype=np.float64)
+    n_bars = len(r_arr)
+
     entry = {
         "timestamp": datetime.datetime.now().isoformat(),
         "trial_name": trial_name,
-        "n_bars": len(r_arr),
+        "n_bars": n_bars,
         "mean_daily_return": float(np.mean(r_arr)),
-        "vol_annualized": float(np.std(r_arr, ddof=1) * np.sqrt(252.0)) if len(r_arr) > 1 else 0.0,
+        "vol_annualized": float(np.std(r_arr, ddof=1) * np.sqrt(252.0)) if n_bars > 1 else 0.0,
         "metadata": metadata or {},
         "returns": [float(x) for x in r_arr]
     }
+
+    if os.path.exists(registry_file):
+        if not overwrite:
+            try:
+                with open(registry_file, "r", encoding="utf-8") as f:
+                    for raw_line in f:
+                        line_s = raw_line.strip()
+                        if not line_s:
+                            continue
+                        data = json.loads(line_s)
+                        if data.get("trial_name") == trial_name and data.get("n_bars") == n_bars:
+                            return data
+            except Exception:
+                pass
+        else:
+            updated_lines: List[str] = []
+            replaced = False
+            with open(registry_file, "r", encoding="utf-8") as f:
+                for raw_line in f:
+                    line_s = raw_line.strip()
+                    if not line_s:
+                        continue
+                    data = json.loads(line_s)
+                    if data.get("trial_name") == trial_name and data.get("n_bars") == n_bars:
+                        if not replaced:
+                            updated_lines.append(json.dumps(entry, ensure_ascii=False))
+                            replaced = True
+                    else:
+                        updated_lines.append(line_s)
+            if not replaced:
+                updated_lines.append(json.dumps(entry, ensure_ascii=False))
+            with open(registry_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(updated_lines) + "\n")
+            return entry
+
     with open(registry_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
@@ -1004,7 +1048,9 @@ def simulate_vietnam(
     min_advance_notional: float = 0.0,
     half_spread_floor: float = 0.0012,
     dividend_tax_rate: float = 0.05,
-    strict_t25_ato_lock: bool = False
+    strict_t25_ato_lock: bool = False,
+    warn_unlagged: bool = True,
+    strict_lag_check: bool = False
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
@@ -1022,6 +1068,17 @@ def simulate_vietnam(
     floor = np.asarray(floor, dtype=np.float64)
     adv20_shares = np.asarray(adv20_shares, dtype=np.float64)
     target_weights = np.asarray(target_weights, dtype=np.float64).copy()
+
+    if target_weights.shape[0] > 0 and np.any(np.abs(target_weights[0]) > 1e-12):
+        msg = (
+            "simulate_vietnam received non-zero target_weights[0]; session t=0 orders are "
+            "ignored by the T+2.5 engine. Ensure signals computed at close[t] are shifted by "
+            "1 session (w_exec[1:] = w[:-1], w_exec[0] = 0) to prevent look-ahead bias."
+        )
+        if strict_lag_check:
+            raise ValueError(msg)
+        if warn_unlagged:
+            warnings.warn(msg, UserWarning, stacklevel=2)
     
     if sanitize_inputs:
         (

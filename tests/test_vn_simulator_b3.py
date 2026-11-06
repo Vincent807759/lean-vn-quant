@@ -143,3 +143,51 @@ def test_c2_initial_session_t0_invariance():
     assert res_pert["equity"][0] == res_base["equity"][0]
     assert res_pert["trading_fees"][0] == res_base["trading_fees"][0]
     assert res_pert["realized_daily_turnover"][0] == res_base["realized_daily_turnover"][0]
+def test_simulate_vietnam_unlagged_weights_warning_and_strict_check():
+    """
+    M2.2b: Verify simulate_vietnam emits UserWarning by default when target_weights[0] != 0,
+    raises ValueError when strict_lag_check=True, and emits no warning when target_weights[0] == 0.
+    """
+    import warnings
+    raw_open, raw_close, ceiling, floor, adv20, target_weights = create_synthetic_sim_data(T=10, N=3)
+
+    with pytest.warns(UserWarning, match="non-zero target_weights\\[0\\]"):
+        simulate_vietnam(
+            raw_open=raw_open,
+            raw_close=raw_close,
+            ceiling=ceiling,
+            floor=floor,
+            adv20_shares=adv20,
+            target_weights=target_weights,
+            initial_cash=1.0e9
+        )
+
+    with pytest.raises(ValueError, match="non-zero target_weights\\[0\\]"):
+        simulate_vietnam(
+            raw_open=raw_open,
+            raw_close=raw_close,
+            ceiling=ceiling,
+            floor=floor,
+            adv20_shares=adv20,
+            target_weights=target_weights,
+            initial_cash=1.0e9,
+            strict_lag_check=True
+        )
+
+    lagged_weights = target_weights.copy()
+    lagged_weights[1:] = target_weights[:-1]
+    lagged_weights[0] = 0.0
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        simulate_vietnam(
+            raw_open=raw_open,
+            raw_close=raw_close,
+            ceiling=ceiling,
+            floor=floor,
+            adv20_shares=adv20,
+            target_weights=lagged_weights,
+            initial_cash=1.0e9,
+            strict_lag_check=True
+        )
+    unlagged_warnings = [w for w in caught if "non-zero target_weights[0]" in str(w.message)]
+    assert len(unlagged_warnings) == 0
