@@ -19,6 +19,7 @@ from typing import Dict, Any, Optional, Tuple, Union, List
 import os
 import json
 import datetime
+import warnings
 import numpy as np
 import bottleneck as bn
 import numba
@@ -89,17 +90,25 @@ def compute_deflated_sharpe_ratio(
     # Determine N_eff (Effective number of independent trials)
     n_trials = max(n_trials, 1)
     if trial_returns is not None and trial_returns.shape[1] > 1:
-        C = np.corrcoef(trial_returns.T)
-        eigvals = np.maximum(np.linalg.eigvalsh(C), 0.0)
-        sum_l = float(np.sum(eigvals))
-        sum_l2 = float(np.sum(eigvals ** 2))
-        n_eff = (sum_l ** 2) / max(sum_l2, 1e-6)
-        
-        # Calculate empirical variance across trial Sharpe ratios
-        t_means = np.mean(trial_returns, axis=0) * annualization_factor - risk_free_rate
-        t_stds = np.std(trial_returns, axis=0, ddof=1) * np.sqrt(annualization_factor)
-        t_srs = t_means / np.maximum(t_stds, 1e-4)
-        var_sr = float(np.var(t_srs, ddof=1)) if len(t_srs) > 1 else (0.25 ** 2)
+        valid_cols = np.std(trial_returns, axis=0, ddof=1) > 1e-12
+        valid_trials = trial_returns[:, valid_cols]
+        if valid_trials.shape[1] > 1:
+            n_trials = int(valid_trials.shape[1])
+            C = np.corrcoef(valid_trials.T)
+            eigvals = np.maximum(np.linalg.eigvalsh(C), 0.0)
+            sum_l = float(np.sum(eigvals))
+            sum_l2 = float(np.sum(eigvals ** 2))
+            n_eff = (sum_l ** 2) / max(sum_l2, 1e-6)
+            
+            # Calculate empirical variance across trial Sharpe ratios
+            t_means = np.mean(valid_trials, axis=0) * annualization_factor - risk_free_rate
+            t_stds = np.std(valid_trials, axis=0, ddof=1) * np.sqrt(annualization_factor)
+            t_srs = t_means / np.maximum(t_stds, 1e-4)
+            var_sr = float(np.var(t_srs, ddof=1)) if len(t_srs) > 1 else (0.25 ** 2)
+        else:
+            n_trials = 1
+            n_eff = 1.0
+            var_sr = sr_var * annualization_factor
     elif trial_corr_matrix is not None and trial_corr_matrix.shape[0] > 1:
         eigvals = np.maximum(np.linalg.eigvalsh(trial_corr_matrix), 0.0)
         sum_l = float(np.sum(eigvals))
@@ -152,22 +161,65 @@ def record_trial(
     trial_name: str,
     daily_returns: np.ndarray,
     metadata: Optional[Dict[str, Any]] = None,
-    registry_file: str = "experiments/trial_registry.jsonl"
+    registry_file: str = "experiments/trial_registry.jsonl",
+    overwrite: bool = False
 ) -> Dict[str, Any]:
     """
     Appends a quantitative backtest trial to the persistent JSONL trial registry.
+    When overwrite=False (default), if an entry with the same trial_name and n_bars
+    already exists in registry_file, returns the existing entry without modifying
+    the file on disk (preventing duplicate lines on repeated audit runs).
+    When overwrite=True, replaces matching (trial_name, n_bars) entries in-place
+    to preserve registry line order without swallowing read/parse errors.
     """
     os.makedirs(os.path.dirname(os.path.abspath(registry_file)), exist_ok=True)
     r_arr = np.asarray(daily_returns, dtype=np.float64)
+    n_bars = len(r_arr)
+
     entry = {
         "timestamp": datetime.datetime.now().isoformat(),
         "trial_name": trial_name,
-        "n_bars": len(r_arr),
+        "n_bars": n_bars,
         "mean_daily_return": float(np.mean(r_arr)),
-        "vol_annualized": float(np.std(r_arr, ddof=1) * np.sqrt(252.0)) if len(r_arr) > 1 else 0.0,
+        "vol_annualized": float(np.std(r_arr, ddof=1) * np.sqrt(252.0)) if n_bars > 1 else 0.0,
         "metadata": metadata or {},
         "returns": [float(x) for x in r_arr]
     }
+
+    if os.path.exists(registry_file):
+        if not overwrite:
+            try:
+                with open(registry_file, "r", encoding="utf-8") as f:
+                    for raw_line in f:
+                        line_s = raw_line.strip()
+                        if not line_s:
+                            continue
+                        data = json.loads(line_s)
+                        if data.get("trial_name") == trial_name and data.get("n_bars") == n_bars:
+                            return data
+            except Exception:
+                pass
+        else:
+            updated_lines: List[str] = []
+            replaced = False
+            with open(registry_file, "r", encoding="utf-8") as f:
+                for raw_line in f:
+                    line_s = raw_line.strip()
+                    if not line_s:
+                        continue
+                    data = json.loads(line_s)
+                    if data.get("trial_name") == trial_name and data.get("n_bars") == n_bars:
+                        if not replaced:
+                            updated_lines.append(json.dumps(entry, ensure_ascii=False))
+                            replaced = True
+                    else:
+                        updated_lines.append(line_s)
+            if not replaced:
+                updated_lines.append(json.dumps(entry, ensure_ascii=False))
+            with open(registry_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(updated_lines) + "\n")
+            return entry
+
     with open(registry_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
@@ -214,26 +266,38 @@ def compute_dsr_from_registry(
         if not is_present:
             trials_returns_list.append(current_r)
             
+    if benchmark_returns is not None and len(benchmark_returns) == T:
+        bm_arr = np.asarray(benchmark_returns, dtype=np.float64)
+        current_active = current_r - bm_arr
+        if len(trials_returns_list) > 1 and T > 1:
+            matrix = np.column_stack(trials_returns_list)
+            active_matrix = matrix - bm_arr[:, None]
+            valid_cols = np.std(active_matrix, axis=0, ddof=1) > 1e-12
+            active_matrix = active_matrix[:, valid_cols]
+            if active_matrix.shape[1] > 1:
+                return compute_deflated_sharpe_ratio(
+                    daily_returns=current_active,
+                    n_trials=int(active_matrix.shape[1]),
+                    risk_free_rate=0.0,
+                    annualization_factor=annualization_factor,
+                    trial_returns=active_matrix
+                )
+        return compute_deflated_sharpe_ratio(
+            daily_returns=current_active,
+            n_trials=1,
+            risk_free_rate=0.0,
+            annualization_factor=annualization_factor
+        )
+
     if len(trials_returns_list) > 1:
         matrix = np.column_stack(trials_returns_list)
-        if benchmark_returns is not None and len(benchmark_returns) == T:
-            bm_arr = np.asarray(benchmark_returns, dtype=np.float64)
-            active_matrix = matrix - bm_arr[:, None]
-            return compute_deflated_sharpe_ratio(
-                daily_returns=current_r,
-                n_trials=len(trials_returns_list),
-                risk_free_rate=risk_free_rate,
-                annualization_factor=annualization_factor,
-                trial_returns=active_matrix
-            )
-        else:
-            return compute_deflated_sharpe_ratio(
-                daily_returns=current_r,
-                n_trials=len(trials_returns_list),
-                risk_free_rate=risk_free_rate,
-                annualization_factor=annualization_factor,
-                trial_returns=matrix
-            )
+        return compute_deflated_sharpe_ratio(
+            daily_returns=current_r,
+            n_trials=len(trials_returns_list),
+            risk_free_rate=risk_free_rate,
+            annualization_factor=annualization_factor,
+            trial_returns=matrix
+        )
     else:
         return compute_deflated_sharpe_ratio(
             daily_returns=current_r,
@@ -984,7 +1048,9 @@ def simulate_vietnam(
     min_advance_notional: float = 0.0,
     half_spread_floor: float = 0.0012,
     dividend_tax_rate: float = 0.05,
-    strict_t25_ato_lock: bool = False
+    strict_t25_ato_lock: bool = False,
+    warn_unlagged: bool = True,
+    strict_lag_check: bool = False
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
@@ -1002,6 +1068,17 @@ def simulate_vietnam(
     floor = np.asarray(floor, dtype=np.float64)
     adv20_shares = np.asarray(adv20_shares, dtype=np.float64)
     target_weights = np.asarray(target_weights, dtype=np.float64).copy()
+
+    if target_weights.shape[0] > 0 and np.any(np.abs(target_weights[0]) > 1e-12):
+        msg = (
+            "simulate_vietnam received non-zero target_weights[0]; session t=0 orders are "
+            "ignored by the T+2.5 engine. Ensure signals computed at close[t] are shifted by "
+            "1 session (w_exec[1:] = w[:-1], w_exec[0] = 0) to prevent look-ahead bias."
+        )
+        if strict_lag_check:
+            raise ValueError(msg)
+        if warn_unlagged:
+            warnings.warn(msg, UserWarning, stacklevel=2)
     
     if sanitize_inputs:
         (
