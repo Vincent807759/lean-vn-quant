@@ -486,6 +486,59 @@ def test_exec_price_clamp_and_hose_tick_rounding():
     )
     assert np.all(r_off_adv["cash_history"] >= -1e-6)
 
+    # 3. Test Step D max_budget and cash_avail scaling branches with while-loop backoff
+    # Scenario A: Off-tick slippage rounding in scaling branch (raw 50,025 -> 50,000 in M2 vs 50,100 in M3)
+    ro_a = np.full((3, 1), 50000.0)
+    rc_a = np.full((3, 1), 50000.0)
+    c_a, f_a = sim.compute_bands_and_ticks(ro_a, "HOSE")
+    adv_a = np.full((3, 1), 10_000_000.0)
+    w_a = np.zeros((3, 1))
+    w_a[1, 0] = 1.0
+
+    r_scen_a_m2 = sim.simulate_vietnam(
+        ro_a, rc_a, c_a, f_a, adv_a, w_a,
+        initial_cash=60_000_000.0, broker_fee=0.0015, slippage=0.0005,
+        half_spread_floor=0.0, clamp_and_round_exec_price=True,
+        round_exec_adverse=False, warn_unlagged=False
+    )
+    r_scen_a_m3 = sim.simulate_vietnam(
+        ro_a, rc_a, c_a, f_a, adv_a, w_a,
+        initial_cash=60_000_000.0, broker_fee=0.0015, slippage=0.0005,
+        half_spread_floor=0.0, clamp_and_round_exec_price=True,
+        round_exec_adverse=True, warn_unlagged=False
+    )
+    exec_p_m2 = r_scen_a_m2["broker_fees"][1] / (0.0015 * 1100.0)
+    exec_p_m3 = r_scen_a_m3["broker_fees"][1] / (0.0015 * 1100.0)
+    assert np.isclose(exec_p_m2, 50000.0)
+    assert np.isclose(exec_p_m3, 50100.0)
+    assert round(exec_p_m2) % 100 == 0
+    assert round(exec_p_m3) % 100 == 0
+    assert np.all(r_scen_a_m2["cash_history"] >= -1e-6)
+    assert np.all(r_scen_a_m3["cash_history"] >= -1e-6)
+
+    # Scenario B: Multiple-lot backoff in while-loop under max_budget (Step D branch 3)
+    # p_open is below floor, so exec_price is clamped upwards to flr_p
+    ro_b = np.full((5, 2), 50000.0)
+    rc_b = np.full((5, 2), 50000.0)
+    c_b, f_b = sim.compute_bands_and_ticks(ro_b, "HOSE")
+    adv_b = np.full((5, 2), 10_000_000.0)
+    w_b = np.zeros((5, 2))
+    w_b[1, 0] = 0.5
+    w_b[3, 0] = 0.0
+    w_b[3, 1] = 1.0
+    ro_b[3, 1] = 45000.0
+    rc_b[3, 1] = 45000.0
+    f_b[3, 1] = 46500.0
+
+    r_scen_b = sim.simulate_vietnam(
+        ro_b, rc_b, c_b, f_b, adv_b, w_b,
+        initial_cash=100_000_000.0, broker_fee=0.0015, slippage=0.0,
+        sell_tax=0.001, advance_fee_rate=0.00035,
+        clamp_and_round_exec_price=True, round_exec_adverse=False,
+        warn_unlagged=False
+    )
+    assert np.all(r_scen_b["cash_history"] >= -1e-6)
+
 
 def test_sanitize_market_matrices_ffill_respects_hose_ticks():
     ro_na = np.array([[28855.0], [np.nan]], dtype=np.float64)

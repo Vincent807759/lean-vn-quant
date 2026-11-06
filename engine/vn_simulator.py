@@ -827,8 +827,16 @@ def _simulate_vn_microstructure_core(
                                 exec_price = _finalize_exec_price(p_open * (1.0 + dyn_slip), 1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
                                 cost_per_share = exec_price * (1.0 + broker_fee)
                                 actual_needed = qty_buy * cost_per_share
-                                if actual_needed <= cash_avail:
-                                    cash_avail -= actual_needed
+                                while actual_needed > cash_avail + 1e-6 and qty_buy > 0.0:
+                                    qty_buy -= 100.0
+                                    if qty_buy <= 0.0:
+                                        break
+                                    dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
+                                    exec_price = _finalize_exec_price(p_open * (1.0 + dyn_slip), 1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
+                                    cost_per_share = exec_price * (1.0 + broker_fee)
+                                    actual_needed = qty_buy * cost_per_share
+                                if qty_buy > 0.0 and actual_needed <= cash_avail + 1e-6:
+                                    cash_avail = max(0.0, cash_avail - actual_needed)
                                     b_fee = qty_buy * exec_price * broker_fee
                                     cum_broker_fees += b_fee
                                     daily_turnover_traded += qty_buy * p_open
@@ -871,9 +879,19 @@ def _simulate_vn_microstructure_core(
                         vol_i = daily_vol[t_lag, i]
                         adv_i = adv20_shares[t_lag, i]
                         dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
-                        exec_price = p_open * (1.0 + dyn_slip)
+                        exec_price = _finalize_exec_price(p_open * (1.0 + dyn_slip), 1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
                         cost_per_share = exec_price * (1.0 + broker_fee)
                         actual_needed = qty_buy * cost_per_share
+                        while actual_needed > max_budget + 1e-6 and qty_buy > 0.0:
+                            qty_buy -= 100.0
+                            if qty_buy <= 0.0:
+                                break
+                            dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
+                            exec_price = _finalize_exec_price(p_open * (1.0 + dyn_slip), 1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
+                            cost_per_share = exec_price * (1.0 + broker_fee)
+                            actual_needed = qty_buy * cost_per_share
+                        if qty_buy <= 0.0:
+                            continue
                         b_fee = qty_buy * exec_price * broker_fee
                         
                         if actual_needed <= cash_avail:
@@ -896,7 +914,7 @@ def _simulate_vn_microstructure_core(
                             
                             rem = shortfall - take_t1
                             if rem > 0.0:
-                                take_t0 = rem
+                                take_t0 = min(rem, cap_t0)
                                 adv_cost_t0 = max(min_advance_fee, take_t0 * advance_fee_rate * days_t0)
                                 pending_cash_t0 -= (take_t0 + adv_cost_t0)
                                 cum_adv_fees += adv_cost_t0
