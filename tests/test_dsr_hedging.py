@@ -118,4 +118,100 @@ def test_b11_trial_registry_integration(tmp_path):
     assert res["n_trials"] == 3
     assert 1.0 <= res["n_eff"] <= 3.0
     assert 0.0 <= res["deflated_sharpe_ratio"] <= 1.0
+def test_compute_dsr_from_registry_active_returns_unit_consistency_and_benchmark_filter(tmp_path):
+    """
+    M2.1: Verify that compute_dsr_from_registry with benchmark_returns:
+    1) Filters out degenerate zero-variance active columns (such as benchmark_vn30 - bm == 0)
+       without raising LinAlgError in np.linalg.eigvalsh;
+    2) Evaluates both numerator (daily_returns = r - bm) and denominator (trial_returns = matrix - bm)
+       in active-return units with risk_free_rate = 0.0.
+    """
+    registry_file = str(tmp_path / "trial_registry.jsonl")
+    rng = np.random.default_rng(123)
+    T = 120
 
+    bm = rng.normal(0.0004, 0.012, T)
+    r1 = bm + rng.normal(0.0005, 0.006, T)
+    r2 = bm + 0.5 * (r1 - bm) + rng.normal(0.0001, 0.006, T)
+    r3 = bm + rng.normal(-0.0001, 0.007, T)
+
+    sim.record_trial("benchmark_vn30", bm, metadata={"type": "benchmark"}, registry_file=registry_file)
+    sim.record_trial("alpha_1", r1, registry_file=registry_file)
+    sim.record_trial("alpha_2", r2, registry_file=registry_file)
+    sim.record_trial("alpha_3", r3, registry_file=registry_file)
+
+    res = sim.compute_dsr_from_registry(
+        daily_returns=r1,
+        registry_file=registry_file,
+        risk_free_rate=0.04,
+        benchmark_returns=bm
+    )
+    expected = sim.compute_deflated_sharpe_ratio(
+        daily_returns=r1 - bm,
+        n_trials=3,
+        risk_free_rate=0.0,
+        trial_returns=np.column_stack([r1 - bm, r2 - bm, r3 - bm])
+    )
+
+    assert res["n_trials"] == 3
+    for k in ("deflated_sharpe_ratio", "p_value", "expected_max_sharpe", "annualized_sharpe", "n_eff"):
+        assert np.isclose(res[k], expected[k], atol=1e-12), f"Mismatch on {k}: {res[k]} != {expected[k]}"
+
+
+def test_compute_dsr_from_registry_canonical_active_mode():
+    """
+    M2.1: Verify compute_dsr_from_registry on the canonical 26-entry trial_registry.jsonl
+    with benchmark_vn30 as benchmark_returns (filters 1 degenerate benchmark column -> 25 trials).
+    """
+    import json
+    reg_path = "experiments/trial_registry.jsonl"
+    by_name = {}
+    with open(reg_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                obj = json.loads(line)
+                by_name[obj["trial_name"]] = np.asarray(obj["returns"], dtype=np.float64)
+
+    ret_bm = by_name["benchmark_vn30"]
+    ret_s_a = by_name["single_after_b6_b11"]
+
+    res = sim.compute_dsr_from_registry(
+        daily_returns=ret_s_a,
+        registry_file=reg_path,
+        benchmark_returns=ret_bm
+    )
+    assert res["n_trials"] == 25
+    assert np.isclose(res["n_eff"], 1.9879144564, atol=1e-4)
+    assert np.isclose(res["expected_max_sharpe"], 0.2564143934, atol=1e-4)
+    assert np.isclose(res["annualized_sharpe"], 0.6815294001, atol=1e-4)
+    assert np.isclose(res["deflated_sharpe_ratio"], 0.7945034484, atol=1e-4)
+def test_record_trial_idempotent_deduplication_and_overwrite(tmp_path):
+    """
+    M2.2a: Verify record_trial deduplicates by (trial_name, n_bars) when overwrite=False
+    (leaving file bytes untouched) and replaces in-place preserving line order when overwrite=True.
+    """
+    import hashlib
+    import json
+
+    reg_path = tmp_path / "trial_registry.jsonl"
+    reg_file = str(reg_path)
+    r1 = np.array([0.01, -0.005, 0.002, 0.003], dtype=np.float64)
+    r2 = np.array([0.002, 0.001, -0.001, 0.004], dtype=np.float64)
+    r1_updated = np.array([0.02, 0.01, 0.005, 0.006], dtype=np.float64)
+
+    sim.record_trial("trial_first", r1, registry_file=reg_file)
+    sim.record_trial("trial_second", r2, registry_file=reg_file)
+    sha_before = hashlib.sha256(reg_path.read_bytes()).hexdigest()
+
+    # Calling record_trial again with default overwrite=False must not alter the file on disk
+    returned = sim.record_trial("trial_first", r1_updated, registry_file=reg_file)
+    sha_after = hashlib.sha256(reg_path.read_bytes()).hexdigest()
+    assert sha_after == sha_before
+    assert np.isclose(returned["mean_daily_return"], float(np.mean(r1)))
+
+    # Calling with overwrite=True must update trial_first in-place at line 0 (preserving order)
+    sim.record_trial("trial_first", r1_updated, registry_file=reg_file, overwrite=True)
+    lines = [json.loads(line) for line in reg_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 2
+    assert [x["trial_name"] for x in lines] == ["trial_first", "trial_second"]
+    assert np.isclose(lines[0]["mean_daily_return"], float(np.mean(r1_updated)))
