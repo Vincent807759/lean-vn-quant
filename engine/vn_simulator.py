@@ -387,6 +387,63 @@ def compute_bands_and_ticks(
 # ==============================================================================
 
 @numba.njit(cache=True)
+def _get_hose_tick_size(price: float) -> float:
+    """Returns standard HOSE tick size (10, 50, or 100 VND) for a given price in VND."""
+    if price < 10000.0:
+        return 10.0
+    elif price < 50000.0:
+        return 50.0
+    else:
+        return 100.0
+
+
+@numba.njit(cache=True)
+def _finalize_exec_price(
+    raw_exec: float,
+    side: int,
+    flr_p: float,
+    ceil_p: float,
+    clamp_and_round: bool,
+    round_adverse: bool = False
+) -> float:
+    """
+    Clamps execution price to [flr_p, ceil_p] (aligned inward to valid HOSE ticks)
+    and rounds to HOSE tick size when clamp_and_round is True.
+    side: +1 for BUY, -1 for SELL.
+    """
+    if not clamp_and_round:
+        return raw_exec
+    p = raw_exec
+    eff_flr = flr_p
+    eff_ceil = ceil_p
+    if flr_p > 0.0 and np.isfinite(flr_p):
+        flr_tk = _get_hose_tick_size(flr_p)
+        eff_flr = np.ceil(flr_p / flr_tk - 1e-12) * flr_tk
+    if ceil_p > 0.0 and np.isfinite(ceil_p):
+        ceil_tk = _get_hose_tick_size(ceil_p)
+        eff_ceil = np.floor(ceil_p / ceil_tk + 1e-12) * ceil_tk
+    if eff_flr > 0.0 and eff_ceil >= eff_flr:
+        if p < eff_flr:
+            p = eff_flr
+        if p > eff_ceil:
+            p = eff_ceil
+    tk = _get_hose_tick_size(p)
+    if round_adverse:
+        if side > 0:
+            p = np.ceil(p / tk - 1e-12) * tk
+        else:
+            p = np.floor(p / tk + 1e-12) * tk
+    else:
+        p = np.round(p / tk) * tk
+    if eff_flr > 0.0 and eff_ceil >= eff_flr:
+        if p < eff_flr:
+            p = eff_flr
+        if p > eff_ceil:
+            p = eff_ceil
+    return p
+
+
+@numba.njit(cache=True)
 def _calc_borrow_cap(pending: float, rate: float, days: float, min_fee: float) -> float:
     """
     Computes maximum advance cash withdrawal capacity given pending receivables,
@@ -454,7 +511,9 @@ def _simulate_vn_microstructure_core(
     min_advance_notional: float = 0.0,
     half_spread_floor: float = 0.0012,
     dividend_tax_rate: float = 0.05,
-    strict_t25_ato_lock: bool = False
+    strict_t25_ato_lock: bool = False,
+    clamp_and_round_exec_price: bool = False,
+    round_exec_adverse: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     High-performance Numba engine simulating Vietnam microstructure:
@@ -637,7 +696,9 @@ def _simulate_vn_microstructure_core(
                     vol_i = daily_vol[t_lag, i]
                     adv_i = adv20_shares[t_lag, i]
                     dyn_slip = _calc_dynamic_slippage(q_trap, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
-                    exec_price = p_open * (1.0 - dyn_slip - penalty_rate)
+                    ceil_p = ceiling[t, i]
+                    raw_exec = p_open * (1.0 - dyn_slip - penalty_rate)
+                    exec_price = _finalize_exec_price(raw_exec, -1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
                     gross_val = q_trap * exec_price
                     b_fee = gross_val * broker_fee
                     s_tax = gross_val * sell_tax
@@ -693,7 +754,9 @@ def _simulate_vn_microstructure_core(
                         vol_i = daily_vol[t_lag, i]
                         adv_i = adv20_shares[t_lag, i]
                         dyn_slip = _calc_dynamic_slippage(qty_sell, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
-                        exec_price = p_open * (1.0 - dyn_slip)
+                        ceil_p = ceiling[t, i]
+                        raw_exec = p_open * (1.0 - dyn_slip)
+                        exec_price = _finalize_exec_price(raw_exec, -1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
                         gross_val = qty_sell * exec_price
                         b_fee = gross_val * broker_fee
                         s_tax = gross_val * sell_tax
@@ -715,6 +778,7 @@ def _simulate_vn_microstructure_core(
             if delta_shares[i] > 50.0:
                 p_open = raw_open[t, i]
                 ceil_p = ceiling[t, i]
+                flr_p = floor[t, i]
                 
                 # Check valid positive open price and ceiling lock
                 if p_open <= 0.0 or not np.isfinite(p_open):
@@ -737,7 +801,7 @@ def _simulate_vn_microstructure_core(
                 vol_i = daily_vol[t_lag, i]
                 adv_i = adv20_shares[t_lag, i]
                 dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
-                exec_price = p_open * (1.0 + dyn_slip)
+                exec_price = _finalize_exec_price(p_open * (1.0 + dyn_slip), 1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
                 cost_per_share = exec_price * (1.0 + broker_fee)
                 total_needed = qty_buy * cost_per_share
                 
@@ -760,7 +824,7 @@ def _simulate_vn_microstructure_core(
                                 vol_i = daily_vol[t_lag, i]
                                 adv_i = adv20_shares[t_lag, i]
                                 dyn_slip = _calc_dynamic_slippage(qty_buy, adv_i, vol_i, base_slippage=slippage, half_spread_floor=half_spread_floor)
-                                exec_price = p_open * (1.0 + dyn_slip)
+                                exec_price = _finalize_exec_price(p_open * (1.0 + dyn_slip), 1, flr_p, ceil_p, clamp_and_round_exec_price, round_exec_adverse)
                                 cost_per_share = exec_price * (1.0 + broker_fee)
                                 actual_needed = qty_buy * cost_per_share
                                 if actual_needed <= cash_avail:
@@ -790,7 +854,7 @@ def _simulate_vn_microstructure_core(
                         
                         rem = shortfall - take_t1
                         if rem > 0.0:
-                            take_t0 = rem
+                            take_t0 = min(rem, cap_t0)
                             adv_cost_t0 = max(min_advance_fee, take_t0 * advance_fee_rate * days_t0)
                             pending_cash_t0 -= (take_t0 + adv_cost_t0)
                             cum_adv_fees += adv_cost_t0
@@ -996,8 +1060,11 @@ def sanitize_market_matrices(
                         fill_price = last_valid_close * (1.0 - halt_haircut)
                     clean_close[t, j] = fill_price
                     clean_open[t, j] = fill_price
-                    clean_ceil[t, j] = fill_price * 1.07
-                    clean_floor[t, j] = fill_price * 0.93
+                    c_b, f_b = compute_bands_and_ticks(
+                        np.array([fill_price], dtype=np.float64), exchange="HOSE"
+                    )
+                    clean_ceil[t, j] = float(c_b[0])
+                    clean_floor[t, j] = float(f_b[0])
                 else:
                     clean_close[t, j] = 0.0
                     clean_open[t, j] = 0.0
@@ -1050,7 +1117,9 @@ def simulate_vietnam(
     dividend_tax_rate: float = 0.05,
     strict_t25_ato_lock: bool = False,
     warn_unlagged: bool = True,
-    strict_lag_check: bool = False
+    strict_lag_check: bool = False,
+    clamp_and_round_exec_price: bool = False,
+    round_exec_adverse: bool = False
 ) -> Dict[str, Any]:
     """
     Full simulation wrapper executing the Numba-compiled realistic Vietnam microstructure engine:
@@ -1231,7 +1300,9 @@ def simulate_vietnam(
         min_advance_notional=min_advance_notional,
         half_spread_floor=half_spread_floor,
         dividend_tax_rate=dividend_tax_rate,
-        strict_t25_ato_lock=strict_t25_ato_lock
+        strict_t25_ato_lock=strict_t25_ato_lock,
+        clamp_and_round_exec_price=clamp_and_round_exec_price,
+        round_exec_adverse=round_exec_adverse
     )
     
     if not np.all(np.isfinite(eq)):
