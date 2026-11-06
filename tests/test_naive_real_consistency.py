@@ -149,24 +149,25 @@ def test_naive_real_t0_weights():
     weights[4:6] = 0.0
     weights[6:8] = 1.0
 
-    res_real = sim.simulate_vietnam(
-        raw_open=raw_open,
-        raw_close=raw_close,
-        ceiling=ceiling,
-        floor=floor,
-        adv20_shares=adv20_shares,
-        target_weights=weights,
-        initial_cash=init_cash,
-        broker_fee=0.0,
-        slippage=0.0,
-        sell_tax=0.0,
-        advance_fee_rate=0.0,
-        min_advance_fee=0.0,
-        half_spread_floor=0.0,
-        daily_vol=daily_vol,
-        max_adv_participation=1.0,
-        penalty_rate_per_day=0.0
-    )
+    with pytest.warns(UserWarning, match="non-zero target_weights\\[0\\]"):
+        res_real = sim.simulate_vietnam(
+            raw_open=raw_open,
+            raw_close=raw_close,
+            ceiling=ceiling,
+            floor=floor,
+            adv20_shares=adv20_shares,
+            target_weights=weights,
+            initial_cash=init_cash,
+            broker_fee=0.0,
+            slippage=0.0,
+            sell_tax=0.0,
+            advance_fee_rate=0.0,
+            min_advance_fee=0.0,
+            half_spread_floor=0.0,
+            daily_vol=daily_vol,
+            max_adv_participation=1.0,
+            penalty_rate_per_day=0.0
+        )
 
     naive_eq = sim.simulate_naive(
         raw_close=raw_close,

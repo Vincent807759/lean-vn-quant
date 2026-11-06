@@ -41,7 +41,8 @@ def test_b3_nan_in_zero_weight_asset_does_not_infect_portfolio():
         adv20_shares=adv20,
         target_weights=target_weights,
         initial_cash=1.0e9,
-        sanitize_inputs=True
+        sanitize_inputs=True,
+        warn_unlagged=False
     )
     
     # Portfolio equity must be 100% finite
@@ -65,7 +66,8 @@ def test_b3_floating_point_error_raised_when_non_finite():
             adv20_shares=adv20,
             target_weights=target_weights,
             initial_cash=1.0e9,
-            sanitize_inputs=False
+            sanitize_inputs=False,
+            warn_unlagged=False
         )
     assert "Simulator Invariant B3 Violated" in str(excinfo.value)
 
@@ -115,7 +117,8 @@ def test_c2_initial_session_t0_invariance():
         floor=floor,
         adv20_shares=adv20,
         target_weights=target_weights,
-        initial_cash=1.0e9
+        initial_cash=1.0e9,
+        warn_unlagged=False
     )
 
     # Assert session t=0 holds 100% cash and 0 fees/turnover
@@ -135,7 +138,8 @@ def test_c2_initial_session_t0_invariance():
         floor=floor,
         adv20_shares=adv20_pert,
         target_weights=target_weights,
-        initial_cash=1.0e9
+        initial_cash=1.0e9,
+        warn_unlagged=False
     )
 
     # Session t=0 state must be 100% identical
