@@ -37,7 +37,7 @@ except ImportError:
 
 # ==============================================================================
 # Constant for VN30F Derivative Beta Hedge margin requirement
-VN30F_MARGIN_RATE = 0.30  # TODO: xác nhận với công ty chứng khoán (VSD quy định ký quỹ ban đầu ~17%, CTCK yêu cầu 20-30%)
+VN30F_MARGIN_RATE = 0.30  # Conservative 30% initial margin buffer (VSD statutory minimum ~17%, typical VN brokerage requirement 20%-30%)
 
 # TEST 1: 0% LOOK-AHEAD BIAS VERIFICATION
 # ==============================================================================
@@ -246,13 +246,7 @@ def _default_textbook_placeholder_signal(raw_close: np.ndarray, tradable_mask: n
     Used exclusively for quantitative engine verification and continuous integration audits.
     Does NOT contain proprietary alpha research or live trading strategy weights.
     """
-    hh = ops.ts_mean(raw_close, 40)
-    dev = ops.ts_std_dev(raw_close, 40)
-    z = (raw_close - hh) / np.maximum(dev, 1e-4)
-    sma50 = ops.ts_mean(raw_close, 50)
-    in_uptrend = raw_close > sma50
-    z_filtered = np.where(in_uptrend, z, -999.0)
-    return ops.rank(z_filtered, mask=tradable_mask)
+    return ops.default_textbook_placeholder_signal(raw_close, tradable_mask)
 
 
 def compute_verification_signal(raw_close: np.ndarray, tradable_mask: np.ndarray) -> np.ndarray:
