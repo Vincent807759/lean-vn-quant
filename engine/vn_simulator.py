@@ -89,17 +89,25 @@ def compute_deflated_sharpe_ratio(
     # Determine N_eff (Effective number of independent trials)
     n_trials = max(n_trials, 1)
     if trial_returns is not None and trial_returns.shape[1] > 1:
-        C = np.corrcoef(trial_returns.T)
-        eigvals = np.maximum(np.linalg.eigvalsh(C), 0.0)
-        sum_l = float(np.sum(eigvals))
-        sum_l2 = float(np.sum(eigvals ** 2))
-        n_eff = (sum_l ** 2) / max(sum_l2, 1e-6)
-        
-        # Calculate empirical variance across trial Sharpe ratios
-        t_means = np.mean(trial_returns, axis=0) * annualization_factor - risk_free_rate
-        t_stds = np.std(trial_returns, axis=0, ddof=1) * np.sqrt(annualization_factor)
-        t_srs = t_means / np.maximum(t_stds, 1e-4)
-        var_sr = float(np.var(t_srs, ddof=1)) if len(t_srs) > 1 else (0.25 ** 2)
+        valid_cols = np.std(trial_returns, axis=0, ddof=1) > 1e-12
+        valid_trials = trial_returns[:, valid_cols]
+        if valid_trials.shape[1] > 1:
+            n_trials = int(valid_trials.shape[1])
+            C = np.corrcoef(valid_trials.T)
+            eigvals = np.maximum(np.linalg.eigvalsh(C), 0.0)
+            sum_l = float(np.sum(eigvals))
+            sum_l2 = float(np.sum(eigvals ** 2))
+            n_eff = (sum_l ** 2) / max(sum_l2, 1e-6)
+            
+            # Calculate empirical variance across trial Sharpe ratios
+            t_means = np.mean(valid_trials, axis=0) * annualization_factor - risk_free_rate
+            t_stds = np.std(valid_trials, axis=0, ddof=1) * np.sqrt(annualization_factor)
+            t_srs = t_means / np.maximum(t_stds, 1e-4)
+            var_sr = float(np.var(t_srs, ddof=1)) if len(t_srs) > 1 else (0.25 ** 2)
+        else:
+            n_trials = 1
+            n_eff = 1.0
+            var_sr = sr_var * annualization_factor
     elif trial_corr_matrix is not None and trial_corr_matrix.shape[0] > 1:
         eigvals = np.maximum(np.linalg.eigvalsh(trial_corr_matrix), 0.0)
         sum_l = float(np.sum(eigvals))
@@ -214,26 +222,38 @@ def compute_dsr_from_registry(
         if not is_present:
             trials_returns_list.append(current_r)
             
+    if benchmark_returns is not None and len(benchmark_returns) == T:
+        bm_arr = np.asarray(benchmark_returns, dtype=np.float64)
+        current_active = current_r - bm_arr
+        if len(trials_returns_list) > 1 and T > 1:
+            matrix = np.column_stack(trials_returns_list)
+            active_matrix = matrix - bm_arr[:, None]
+            valid_cols = np.std(active_matrix, axis=0, ddof=1) > 1e-12
+            active_matrix = active_matrix[:, valid_cols]
+            if active_matrix.shape[1] > 1:
+                return compute_deflated_sharpe_ratio(
+                    daily_returns=current_active,
+                    n_trials=int(active_matrix.shape[1]),
+                    risk_free_rate=0.0,
+                    annualization_factor=annualization_factor,
+                    trial_returns=active_matrix
+                )
+        return compute_deflated_sharpe_ratio(
+            daily_returns=current_active,
+            n_trials=1,
+            risk_free_rate=0.0,
+            annualization_factor=annualization_factor
+        )
+
     if len(trials_returns_list) > 1:
         matrix = np.column_stack(trials_returns_list)
-        if benchmark_returns is not None and len(benchmark_returns) == T:
-            bm_arr = np.asarray(benchmark_returns, dtype=np.float64)
-            active_matrix = matrix - bm_arr[:, None]
-            return compute_deflated_sharpe_ratio(
-                daily_returns=current_r,
-                n_trials=len(trials_returns_list),
-                risk_free_rate=risk_free_rate,
-                annualization_factor=annualization_factor,
-                trial_returns=active_matrix
-            )
-        else:
-            return compute_deflated_sharpe_ratio(
-                daily_returns=current_r,
-                n_trials=len(trials_returns_list),
-                risk_free_rate=risk_free_rate,
-                annualization_factor=annualization_factor,
-                trial_returns=matrix
-            )
+        return compute_deflated_sharpe_ratio(
+            daily_returns=current_r,
+            n_trials=len(trials_returns_list),
+            risk_free_rate=risk_free_rate,
+            annualization_factor=annualization_factor,
+            trial_returns=matrix
+        )
     else:
         return compute_deflated_sharpe_ratio(
             daily_returns=current_r,
