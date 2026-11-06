@@ -215,3 +215,143 @@ def test_record_trial_idempotent_deduplication_and_overwrite(tmp_path):
     assert len(lines) == 2
     assert [x["trial_name"] for x in lines] == ["trial_first", "trial_second"]
     assert np.isclose(lines[0]["mean_daily_return"], float(np.mean(r1_updated)))
+def test_calculate_vn30f_hedge_static_overlay():
+    """
+    M4.2b: Unit test coverage for standalone static overlay calculate_vn30f_hedge.
+    Covers exact contract sizing, under/over hedging rounding, beta <= 0, and degenerate inputs.
+    """
+    # 1. Exact sizing
+    h = sim.calculate_vn30f_hedge(portfolio_value=1.0e9, beta=1.0, futures_price=1250.0)
+    assert h["contracts_to_short"] == 8
+    assert np.isclose(h["contract_value_vnd"], 1250.0 * 100000.0)
+    assert np.isclose(h["total_hedge_notional_vnd"], 1.0e9)
+    assert np.isclose(h["margin_required_vnd"], 2.0e8)
+    assert np.isclose(h["original_beta"], 1.0)
+    assert np.isclose(h["residual_beta"], 0.0)
+
+    # 2. Under-hedged (round down)
+    h_under = sim.calculate_vn30f_hedge(portfolio_value=1.0e9, beta=0.90, futures_price=1250.0)
+    assert h_under["contracts_to_short"] == 7
+    assert h_under["residual_beta"] > 0.0
+
+    # 3. Over-hedged (round up)
+    h_over = sim.calculate_vn30f_hedge(portfolio_value=1.0e9, beta=1.10, futures_price=1250.0)
+    assert h_over["contracts_to_short"] == 9
+    assert h_over["residual_beta"] < 0.0
+
+    # 4. Small portfolio < half contract
+    h_small = sim.calculate_vn30f_hedge(portfolio_value=5.0e7, beta=1.0, futures_price=1250.0)
+    assert h_small["contracts_to_short"] == 0
+    assert np.isclose(h_small["residual_beta"], 1.0)
+
+    # 5. Non-positive beta
+    h_zero = sim.calculate_vn30f_hedge(portfolio_value=1.0e9, beta=0.0, futures_price=1250.0)
+    assert h_zero["contracts_to_short"] == 0
+    h_neg = sim.calculate_vn30f_hedge(portfolio_value=1.0e9, beta=-0.5, futures_price=1250.0)
+    assert h_neg["contracts_to_short"] == 0
+
+    # 6. Degenerate inputs return all 6 standard keys without exception
+    std_keys = {"contracts_to_short", "contract_value_vnd", "total_hedge_notional_vnd", "margin_required_vnd", "original_beta", "residual_beta"}
+    for kwargs in [
+        {"portfolio_value": -1.0, "beta": 1.0, "futures_price": 1250.0},
+        {"portfolio_value": 1.0e9, "beta": 1.0, "futures_price": 0.0},
+        {"portfolio_value": 1.0e9, "beta": 1.0, "futures_price": -100.0},
+        {"portfolio_value": 1.0e9, "beta": 1.0, "futures_price": 1250.0, "multiplier": 0.0},
+        {"portfolio_value": 1.0e9, "beta": 1.0, "futures_price": 1250.0, "margin_req": 0.0},
+    ]:
+        res_deg = sim.calculate_vn30f_hedge(**kwargs)
+        assert std_keys.issubset(res_deg.keys())
+        assert res_deg["contracts_to_short"] == 0
+
+
+def test_load_and_decay_fingraph_alpha_standalone_bridge(tmp_path):
+    """
+    M4.2b: Unit test coverage for standalone overlay load_and_decay_fingraph_alpha.
+    Covers missing file, missing date column, date/symbol matrix alignment, zero inputs, and exact transform.
+    """
+    import polars as pl
+    from engine import ml_alpha_combiner as ml
+    from engine import alpha_ops as ops
+
+    # 1. FileNotFoundError
+    with pytest.raises(FileNotFoundError):
+        ml.load_and_decay_fingraph_alpha("non_existent_path.parquet", ["2026-01-01"], ["HPG"])
+
+    # 2. ValueError when missing required 'date' column
+    bad_df = pl.DataFrame({"HPG": [1.0, 2.0]})
+    bad_path = str(tmp_path / "missing_date.parquet")
+    bad_df.write_parquet(bad_path)
+    with pytest.raises(ValueError, match="missing required 'date' column"):
+        ml.load_and_decay_fingraph_alpha(bad_path, ["2026-01-01"], ["HPG"])
+
+    # 3. Alignment with pl.Utf8 and scrambled dates/symbols
+    dates = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"]
+    df_utf8 = pl.DataFrame({
+        "date": [dates[3], dates[0], dates[1]],  # scrambled, missing 2026-01-07
+        "HPG": [0.5, 1.2, -0.4],
+        "VNM": [1.1, -0.2, 0.8],
+        "VIC": [0.0, 0.5, -0.5]
+    })
+    path_utf8 = str(tmp_path / "fingraph_utf8.parquet")
+    df_utf8.write_parquet(path_utf8)
+
+    target_dates = dates
+    target_symbols = ["VIC", "HPG", "VNM", "MSN"]  # MSN not in parquet
+    res_utf8 = ml.load_and_decay_fingraph_alpha(path_utf8, target_dates, target_symbols, tau_sessions=5.0)
+    assert res_utf8.shape == (len(target_dates), len(target_symbols))
+
+    # Check that bit-for-bit matches manual application
+    raw_expected = np.zeros((4, 4), dtype=np.float64)
+    raw_expected[0, :] = [0.5, 1.2, -0.2, 0.0]
+    raw_expected[1, :] = [-0.5, -0.4, 0.8, 0.0]
+    raw_expected[2, :] = [0.0, 0.0, 0.0, 0.0]
+    raw_expected[3, :] = [0.0, 0.5, 1.1, 0.0]
+
+    expected_alpha = ops.van_der_waerden_transform(ops.apply_hawkes_ou_decay(raw_expected, tau_sessions=5.0))
+    assert np.allclose(res_utf8, expected_alpha, equal_nan=True, atol=1e-12)
+
+    # 4. Uniform zero & tau_sessions <= 0
+    zero_df = pl.DataFrame({"date": dates, "HPG": [0.0] * 4, "VNM": [0.0] * 4})
+    path_zero = str(tmp_path / "fingraph_zero.parquet")
+    zero_df.write_parquet(path_zero)
+    res_zero = ml.load_and_decay_fingraph_alpha(path_zero, dates, ["HPG", "VNM"], tau_sessions=0.0)
+    assert res_zero.shape == (4, 2)
+
+
+def test_default_textbook_placeholder_signal_single_source_of_truth():
+    """
+    M4.2b: Single source of truth verification for default_textbook_placeholder_signal.
+    Asserts bit-for-bit equality across engine/alpha_ops, run_verification, and services/daily_paper_trader,
+    with zero RuntimeWarnings on startup t < 49 and robust handling of edge cases.
+    """
+    import warnings
+    from engine import alpha_ops as ops
+    import run_verification as r_verif
+    import services.daily_paper_trader as d_paper
+
+    rng = np.random.RandomState(42)
+    T = 100
+    N = 6
+    raw_close = rng.lognormal(mean=10.0, sigma=0.05, size=(T, N))
+    mask_bool = rng.rand(T, N) > 0.2
+
+    raw_close[:, 0] = 50000.0
+    raw_close[50:60, 1] = np.nan
+    mask_bool[70, :] = False
+    mask_bool[71, :] = False
+    mask_bool[71, 2] = True
+    mask_int = mask_bool.astype(int)
+
+    with warnings.catch_warnings(record=True) as w_records:
+        warnings.simplefilter("always")
+        s_ops = ops.default_textbook_placeholder_signal(raw_close, mask_bool)
+        s_verif = r_verif._default_textbook_placeholder_signal(raw_close, mask_bool)
+        s_paper = d_paper._default_textbook_placeholder_signal(raw_close, mask_bool)
+        s_int = ops.default_textbook_placeholder_signal(raw_close, mask_int)
+
+        runtime_warns = [w for w in w_records if issubclass(w.category, RuntimeWarning)]
+        assert len(runtime_warns) == 0, f"Unexpected RuntimeWarning: {runtime_warns}"
+
+    assert np.array_equal(s_ops, s_verif, equal_nan=True)
+    assert np.array_equal(s_ops, s_paper, equal_nan=True)
+    assert np.array_equal(s_ops, s_int, equal_nan=True)
