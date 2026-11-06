@@ -185,3 +185,33 @@ def test_compute_dsr_from_registry_canonical_active_mode():
     assert np.isclose(res["expected_max_sharpe"], 0.2564143934, atol=1e-4)
     assert np.isclose(res["annualized_sharpe"], 0.6815294001, atol=1e-4)
     assert np.isclose(res["deflated_sharpe_ratio"], 0.7945034484, atol=1e-4)
+def test_record_trial_idempotent_deduplication_and_overwrite(tmp_path):
+    """
+    M2.2a: Verify record_trial deduplicates by (trial_name, n_bars) when overwrite=False
+    (leaving file bytes untouched) and replaces in-place preserving line order when overwrite=True.
+    """
+    import hashlib
+    import json
+
+    reg_path = tmp_path / "trial_registry.jsonl"
+    reg_file = str(reg_path)
+    r1 = np.array([0.01, -0.005, 0.002, 0.003], dtype=np.float64)
+    r2 = np.array([0.002, 0.001, -0.001, 0.004], dtype=np.float64)
+    r1_updated = np.array([0.02, 0.01, 0.005, 0.006], dtype=np.float64)
+
+    sim.record_trial("trial_first", r1, registry_file=reg_file)
+    sim.record_trial("trial_second", r2, registry_file=reg_file)
+    sha_before = hashlib.sha256(reg_path.read_bytes()).hexdigest()
+
+    # Calling record_trial again with default overwrite=False must not alter the file on disk
+    returned = sim.record_trial("trial_first", r1_updated, registry_file=reg_file)
+    sha_after = hashlib.sha256(reg_path.read_bytes()).hexdigest()
+    assert sha_after == sha_before
+    assert np.isclose(returned["mean_daily_return"], float(np.mean(r1)))
+
+    # Calling with overwrite=True must update trial_first in-place at line 0 (preserving order)
+    sim.record_trial("trial_first", r1_updated, registry_file=reg_file, overwrite=True)
+    lines = [json.loads(line) for line in reg_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 2
+    assert [x["trial_name"] for x in lines] == ["trial_first", "trial_second"]
+    assert np.isclose(lines[0]["mean_daily_return"], float(np.mean(r1_updated)))
