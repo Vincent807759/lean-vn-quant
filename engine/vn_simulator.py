@@ -1358,7 +1358,8 @@ def calculate_vn30f_hedge(
     margin_req: float = 0.20
 ) -> Dict[str, Any]:
     """
-    Calculates VN30F futures contract overlay to hedge broad market systemic risk:
+    Calculates VN30F futures contract overlay to hedge broad market systemic risk
+    [Standalone Overlay - Not active in Table 5.1 baseline]:
     - Point value multiplier: 100,000 VND / point
     - Initial margin requirement: 20%
     
@@ -1374,12 +1375,25 @@ def calculate_vn30f_hedge(
     --------
     Dict containing hedge specification.
     """
-    contract_val = futures_price * multiplier
-    if contract_val <= 0:
-        return {"contracts": 0, "margin_required": 0.0, "effective_beta": beta}
+    contract_val = futures_price * multiplier if (futures_price > 0 and multiplier > 0) else 0.0
+    if contract_val <= 0 or portfolio_value <= 0 or margin_req <= 0:
+        return {
+            "contracts_to_short": 0,
+            "contract_value_vnd": contract_val,
+            "total_hedge_notional_vnd": 0.0,
+            "margin_required_vnd": 0.0,
+            "original_beta": beta,
+            "residual_beta": beta,
+            "contracts": 0,
+            "margin_required": 0.0,
+            "effective_beta": beta,
+        }
         
-    hedge_notional = beta * portfolio_value
-    num_contracts = int(round(hedge_notional / contract_val))
+    if beta <= 0.0:
+        num_contracts = 0
+    else:
+        hedge_notional = beta * portfolio_value
+        num_contracts = int(round(hedge_notional / contract_val))
     margin_required = num_contracts * contract_val * margin_req
     actual_hedge_notional = num_contracts * contract_val
     hedged_beta = beta - (actual_hedge_notional / portfolio_value) if portfolio_value > 0 else 0.0
@@ -1408,7 +1422,7 @@ def calculate_dynamic_vn30f_hedge(
     total_margin_buffer: float = 0.30
 ) -> Dict[str, Any]:
     """
-    Dynamic Contagion Regime Hedge Overlay with VN30F1M Futures (Phase 4 / Section 4.1 Q2):
+    Dynamic Contagion Regime Hedge Overlay with VN30F1M Futures (Phase 4 / Section 4.1 Q2) [Standalone Overlay - Not active in Table 5.1 baseline]:
     - Replaces static 15-contract short hedge with regime-aware logistic switching.
     - Market regime M in {0, 1, 2}:
         M = I(P_VN30 < SMA_50) + I(vol_10d > 1.35 * vol_60d)
