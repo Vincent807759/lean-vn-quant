@@ -376,7 +376,7 @@ def load_and_decay_fingraph_alpha(
     tau_sessions: float = 5.0
 ) -> np.ndarray:
     """
-    Ingests VN-FinGraph event contagion alpha from Parquet,
+    Ingests VN-FinGraph event contagion alpha from Parquet [Standalone Overlay - Not active in Table 5.1 baseline],
     applies continuous Hawkes/OU exponential decay and Van der Waerden normal score transform,
     and returns aligned stationary factor matrix matching (T, N).
     """
@@ -384,12 +384,14 @@ def load_and_decay_fingraph_alpha(
         raise FileNotFoundError(f"VN-FinGraph parquet not found at: {fingraph_parquet_path}")
         
     df_fg = pl.read_parquet(fingraph_parquet_path)
+    if "date" not in df_fg.columns:
+        raise ValueError(f"VN-FinGraph parquet missing required 'date' column: {fingraph_parquet_path}")
     T = len(target_dates)
     N = len(target_symbols)
     raw_fg = np.zeros((T, N), dtype=np.float64)
     
     date_strs = [str(d)[:10] for d in target_dates]
-    df_dates = df_fg["date"].to_list()
+    df_dates = [str(d)[:10] for d in df_fg["date"].to_list()]
     date_to_idx = {d: i for i, d in enumerate(df_dates)}
     
     fg_cols = set(df_fg.columns)

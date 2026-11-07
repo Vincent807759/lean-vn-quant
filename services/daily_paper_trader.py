@@ -772,13 +772,7 @@ def _default_textbook_placeholder_signal(
     Used exclusively for quantitative engine forward testing and CI/CD validation.
     Does NOT contain proprietary alpha research or live trading strategy weights.
     """
-    hh = ops.ts_mean(raw_close, 40)
-    dev = ops.ts_std_dev(raw_close, 40)
-    z = (raw_close - hh) / np.maximum(dev, 1e-4)
-    sma50 = ops.ts_mean(raw_close, 50)
-    in_uptrend = raw_close > sma50
-    z_filtered = np.where(in_uptrend, z, -999.0)
-    return ops.rank(z_filtered, mask=tradable_mask)
+    return ops.default_textbook_placeholder_signal(raw_close, tradable_mask)
 
 
 def compute_strategy_signal(
