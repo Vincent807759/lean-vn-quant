@@ -244,7 +244,7 @@ def generate_html_content(data: Dict[str, Any]) -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lean VN-Quant | Production Dashboard</title>
     <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
