@@ -26,6 +26,7 @@ Operational Specifications:
 
 import sys
 import os
+import html
 import json
 import shutil
 import argparse
@@ -429,13 +430,60 @@ def advance_t25_settlement(state: Dict[str, Any], session_date: str) -> bool:
     return True
 
 
+VN_FIXED_HOLIDAYS = {(1, 1), (4, 30), (5, 1), (9, 2), (9, 3)}
+
+
+def _to_date_obj(val: Any) -> datetime.date:
+    if isinstance(val, datetime.datetime):
+        return val.date()
+    if isinstance(val, datetime.date):
+        return val
+    return datetime.date.fromisoformat(str(val)[:10])
+
+
+def _next_business_day(d: datetime.date) -> datetime.date:
+    cur = d + datetime.timedelta(days=1)
+    while cur.weekday() >= 5 or (cur.month, cur.day) in VN_FIXED_HOLIDAYS:
+        cur += datetime.timedelta(days=1)
+    return cur
+
+
+def _compute_settlement_calendar_days(
+    session_date: Any,
+    trading_dates: Optional[List[Any]] = None
+) -> Tuple[int, int]:
+    """
+    Computes calendar days to T+1 and T+2 settlement dates.
+    Uses actual subsequent trading_dates when available (handling penultimate session),
+    falling back to weekend + VN_FIXED_HOLIDAYS stepping for live end-of-series sessions.
+    """
+    try:
+        s_date = _to_date_obj(session_date)
+        d1: Optional[datetime.date] = None
+        d2: Optional[datetime.date] = None
+        if trading_dates is not None:
+            future_dates = sorted({_to_date_obj(x) for x in trading_dates if _to_date_obj(x) > s_date})
+            if len(future_dates) >= 1:
+                d1 = future_dates[0]
+            if len(future_dates) >= 2:
+                d2 = future_dates[1]
+        if d1 is None:
+            d1 = _next_business_day(s_date)
+        if d2 is None:
+            d2 = _next_business_day(d1)
+        return max(1, (d1 - s_date).days), max(2, (d2 - s_date).days)
+    except Exception:
+        return 1, 2
+
+
 def execute_pending_orders_and_settle(
     state: Dict[str, Any],
     today_market_slice: Dict[str, Dict[str, float]],
     session_date: str,
     use_dynamic_slippage: bool = False,
     clamp_and_round: bool = True,
-    round_adverse: bool = False
+    round_adverse: bool = False,
+    trading_dates: Optional[List[Any]] = None
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
     Executes morning ATO session workflow:
@@ -538,25 +586,8 @@ def execute_pending_orders_and_settle(
         executed_reports.append(rep)
 
     # --- PROCESS BUY ORDERS ---
-    # Determine calendar days for advance interest
-    try:
-        s_date = datetime.date.fromisoformat(session_date) if isinstance(session_date, str) else session_date
-        weekday = s_date.weekday()
-        # Friday: T+1 settles Mon (3 cal days), T+2 settles Tue (4 cal days)
-        # Thursday: T+1 settles Fri (1 cal day), T+2 settles Mon (4 cal days)
-        # Mon-Wed: T+1 is 1 day, T+2 is 2 days
-        if weekday == 4:
-            cal_days_t1 = 3
-            cal_days_t2 = 4
-        elif weekday == 3:
-            cal_days_t1 = 1
-            cal_days_t2 = 4
-        else:
-            cal_days_t1 = 1
-            cal_days_t2 = 2
-    except Exception:
-        cal_days_t1 = 1
-        cal_days_t2 = 2
+    # Determine calendar days for advance interest (holiday-aware & trading_dates-aware)
+    cal_days_t1, cal_days_t2 = _compute_settlement_calendar_days(session_date, trading_dates)
 
     for o in buy_orders:
         sym = o["symbol"]
@@ -598,11 +629,13 @@ def execute_pending_orders_and_settle(
         exec_price = round_and_clamp_exec_price(raw_open * (1.0 + slip_rate), "BUY", floor_p, ceil_p, clamp_and_round=clamp_and_round, round_adverse=round_adverse)
         cost_per_share = exec_price * (1.0 + BROKER_FEE)
         
-        # Check cash purchasing power
+        # Check cash purchasing power bounded by sim._calc_borrow_cap (reserving 50k floor fee per tranche)
         avail_cash = state["available_cash"]
         rec_t1 = state["receivable_cash_t1"]
         rec_t2 = state["receivable_cash_t2"]
-        total_purchasing_power = avail_cash + rec_t1 + rec_t2
+        cap_t1 = float(sim._calc_borrow_cap(rec_t1, ADVANCE_FEE_RATE, float(cal_days_t1), 50000.0))
+        cap_t2 = float(sim._calc_borrow_cap(rec_t2, ADVANCE_FEE_RATE, float(cal_days_t2), 50000.0))
+        total_purchasing_power = avail_cash + cap_t1 + cap_t2
         
         shares_afford = int(total_purchasing_power // cost_per_share)
         shares_afford = (shares_afford // LOT_SIZE) * LOT_SIZE
@@ -612,8 +645,12 @@ def execute_pending_orders_and_settle(
             slip_rate = float(sim._calc_dynamic_slippage(float(fill_qty), adv20_sh, vol_val, base_slippage=SLIPPAGE))
             exec_price = round_and_clamp_exec_price(raw_open * (1.0 + slip_rate), "BUY", floor_p, ceil_p, clamp_and_round=clamp_and_round, round_adverse=round_adverse)
             cost_per_share = exec_price * (1.0 + BROKER_FEE)
-            if fill_qty * cost_per_share > total_purchasing_power + 1e-6:
+            while fill_qty > 0 and fill_qty * cost_per_share > total_purchasing_power + 1e-6:
                 fill_qty -= LOT_SIZE
+                if fill_qty > 0:
+                    slip_rate = float(sim._calc_dynamic_slippage(float(fill_qty), adv20_sh, vol_val, base_slippage=SLIPPAGE))
+                    exec_price = round_and_clamp_exec_price(raw_open * (1.0 + slip_rate), "BUY", floor_p, ceil_p, clamp_and_round=clamp_and_round, round_adverse=round_adverse)
+                    cost_per_share = exec_price * (1.0 + BROKER_FEE)
         
         if fill_qty <= 0:
             rep = dict(o)
@@ -637,14 +674,14 @@ def execute_pending_orders_and_settle(
             deficit = total_buy_cost - state["available_cash"]
             state["available_cash"] = 0.0
             
-            # Borrow against T+1 receivables first
-            borrow_t1 = min(deficit, state["receivable_cash_t1"])
+            # Borrow against T+1 receivables first (capped at cap_t1 so borrow_t1 + adv_fee_t1 <= rec_t1)
+            borrow_t1 = min(deficit, cap_t1)
             adv_fee_t1 = max(50000.0, borrow_t1 * ADVANCE_FEE_RATE * cal_days_t1) if borrow_t1 > 0 else 0.0
             state["receivable_cash_t1"] = max(0.0, state["receivable_cash_t1"] - borrow_t1 - adv_fee_t1)
             deficit -= borrow_t1
             
-            # Borrow against T+2 receivables
-            borrow_t2 = min(deficit, state["receivable_cash_t2"])
+            # Borrow against T+2 receivables (capped at cap_t2 so borrow_t2 + adv_fee_t2 <= rec_t2)
+            borrow_t2 = min(deficit, cap_t2)
             adv_fee_t2 = max(50000.0, borrow_t2 * ADVANCE_FEE_RATE * cal_days_t2) if borrow_t2 > 0 else 0.0
             state["receivable_cash_t2"] = max(0.0, state["receivable_cash_t2"] - borrow_t2 - adv_fee_t2)
             deficit -= borrow_t2
@@ -917,8 +954,11 @@ def generate_next_day_orders(
                     "target_weight": float(today_target_w[syms.index(s)])
                 })
 
-    # Greedy Cash Sweep: Allocates idle cash if > 15% NAV
-    total_available_funds = state["available_cash"] + state["receivable_cash_t1"] + state["receivable_cash_t2"]
+    # Greedy Cash Sweep: Allocates idle cash if > 15% NAV (using borrow cap to reserve advance fee)
+    cal_t1_swp, cal_t2_swp = _compute_settlement_calendar_days(session_date, list(dates))
+    cap_t1_swp = float(sim._calc_borrow_cap(state["receivable_cash_t1"], ADVANCE_FEE_RATE, float(cal_t1_swp), 50000.0))
+    cap_t2_swp = float(sim._calc_borrow_cap(state["receivable_cash_t2"], ADVANCE_FEE_RATE, float(cal_t2_swp), 50000.0))
+    total_available_funds = state["available_cash"] + cap_t1_swp + cap_t2_swp
     rem_cash = total_available_funds - total_est_buy_cost
     
     if rem_cash > 0.15 * real_nav:
@@ -1137,7 +1177,9 @@ def build_telegram_summary(
     
     catch_up_info = ""
     if len(dates_processed) > 1:
-        catch_up_info = f"\n⚡ <b>Multi-day Catch-up:</b> {len(dates_processed)} sessions reconciled ({dates_processed[0]} -> {dates_processed[-1]})\n"
+        d_start = html.escape(str(dates_processed[0]), quote=True)
+        d_end = html.escape(str(dates_processed[-1]), quote=True)
+        catch_up_info = f"\n⚡ <b>Multi-day Catch-up:</b> {len(dates_processed)} sessions reconciled ({d_start} -> {d_end})\n"
 
     holdings = state.get("holdings", {})
     stock_count = len(holdings)
@@ -1146,7 +1188,7 @@ def build_telegram_summary(
         order_lines = []
         for o in orders:
             act = "🟢 BUY" if o["action"] == "BUY" else "🔴 SELL"
-            sym = o["symbol"]
+            sym = html.escape(str(o["symbol"]), quote=True)
             q = o["qty"]
             p = o["est_price"]
             v = o["est_value"]
@@ -1156,8 +1198,9 @@ def build_telegram_summary(
     else:
         orders_text = "• <i>No rebalancing orders. Holding current portfolio.</i>"
 
+    safe_session_date = html.escape(str(session_date), quote=True)
     msg = f"""<b>📊 LEAN VN-QUANT DAILY PAPER TRADING REPORT</b>
-📅 Session: <b>{session_date}</b>{catch_up_info}
+📅 Session: <b>{safe_session_date}</b>{catch_up_info}
 💰 <b>PORTFOLIO & PERFORMANCE:</b>
 • Real NAV: <b>{real_nav:,.0f} VND</b> (<b>{ret_pct:+.2f}%</b>)
 • Available Cash: <b>{avail_cash:,.0f} VND</b>
@@ -1216,7 +1259,7 @@ def run_test_replay_10(parquet_file: str, days: int = 10) -> None:
                 prev_close_map[row["symbol"]] = row["raw_close"]
 
         state = load_portfolio_state(replay_state_file, DEFAULT_INITIAL_CAPITAL)
-        state, exec_reps = execute_pending_orders_and_settle(state, today_market, cur_date_str)
+        state, exec_reps = execute_pending_orders_and_settle(state, today_market, cur_date_str, trading_dates=all_dates)
         hist_record = mark_to_market(state, today_market, prev_close_map, cur_date_str, len(exec_reps))
         append_nav_history(replay_history_file, hist_record)
         orders = generate_next_day_orders(state, df_history, cur_date_str)
@@ -1373,7 +1416,7 @@ def main():
             df_prev = df_market.filter(pl.col("date") == prev_date)
             prev_close_map = {row["symbol"]: row["raw_close"] for row in df_prev.iter_rows(named=True)}
 
-        state, exec_reps = execute_pending_orders_and_settle(state, today_market, session_date_str)
+        state, exec_reps = execute_pending_orders_and_settle(state, today_market, session_date_str, trading_dates=all_dates)
         last_exec_reps = exec_reps
 
         hist_record = mark_to_market(state, today_market, prev_close_map, session_date_str, len(exec_reps))

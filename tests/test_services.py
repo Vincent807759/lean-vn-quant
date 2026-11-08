@@ -459,4 +459,145 @@ def test_paper_trader_exec_price_clamping_and_t25_next_day_sellable():
     st2["pending_orders"] = pending_sell
     mkt_slice2 = {"HPG": {"raw_open": 25000.0, "floor_price": 23250.0, "ceiling_price": 26750.0, "raw_close": 25000.0, "adv20": 1e11}}
     _, rep2 = dpt.execute_pending_orders_and_settle(st2, mkt_slice2, "2024-01-03")
-    assert rep2[0]["status"] == "FILLED" 
+    assert rep2[0]["status"] == "FILLED"
+
+def test_paper_trader_advance_borrow_cap_and_holiday_calendar():
+    """
+    M5.1: Verifies that execute_pending_orders_and_settle bounds advance borrowing
+    by sim._calc_borrow_cap, preserving fee split accounting identity across single-tranche
+    and multi-tranche borrows, Greedy Cash Sweep, and holiday calendar computation.
+    """
+    import services.daily_paper_trader as dpt
+    import engine.vn_simulator as sim
+    from engine import data_pipeline as dp
+
+    # 1. Single tranche advance borrowing bounded by sim._calc_borrow_cap
+    state = dpt.init_empty_state(10_000_000.0)
+    state["last_ledger_advance_date"] = "2026-04-29"
+    state["available_cash"] = 0.0
+    state["receivable_cash_t1"] = 10_000_000.0
+    state["receivable_cash_t2"] = 0.0
+    state["pending_orders"] = [
+        {
+            "action": "BUY",
+            "symbol": "FPT",
+            "qty": 400,
+            "est_price": 24_900.0,
+            "est_value": 400 * 24_900.0,
+            "target_weight": 1.0,
+        }
+    ]
+    today_slice = {
+        "FPT": {
+            "raw_open": 24_900.0,
+            "raw_close": 25_000.0,
+            "ceiling_price": 26_600.0,
+            "floor_price": 23_200.0,
+            "ref_price": 24_900.0,
+        }
+    }
+    state, reps = dpt.execute_pending_orders_and_settle(
+        state,
+        today_slice,
+        "2026-04-29",
+        use_dynamic_slippage=False,
+        clamp_and_round=True,
+        round_adverse=False,
+    )
+    assert reps[0]["status"] == "FILLED"
+    assert reps[0]["fill_qty"] == 300
+    assert state["holdings"]["FPT"]["locked_t2"] == 300
+    assert state["total_advance_fees"] == 50_000.0
+    total_cost_1 = reps[0]["fill_qty"] * reps[0]["fill_price"] * (1.0 + dpt.BROKER_FEE)
+    assert state["receivable_cash_t1"] + total_cost_1 + state["total_advance_fees"] == pytest.approx(10_000_000.0)
+
+    # 2. Two tranche advance borrowing overflowing from T+1 to T+2
+    state2 = dpt.init_empty_state(20_000_000.0)
+    state2["last_ledger_advance_date"] = "2026-04-29"
+    state2["available_cash"] = 0.0
+    state2["receivable_cash_t1"] = 10_000_000.0
+    state2["receivable_cash_t2"] = 10_000_000.0
+    state2["pending_orders"] = [
+        {
+            "action": "BUY",
+            "symbol": "FPT",
+            "qty": 600,
+            "est_price": 24_900.0,
+            "est_value": 600 * 24_900.0,
+            "target_weight": 1.0,
+        }
+    ]
+    state2, reps2 = dpt.execute_pending_orders_and_settle(
+        state2,
+        today_slice,
+        "2026-04-29",
+        use_dynamic_slippage=False,
+        clamp_and_round=True,
+        round_adverse=False,
+    )
+    assert reps2[0]["status"] == "FILLED"
+    assert reps2[0]["fill_qty"] == 600
+    assert state2["receivable_cash_t1"] == 0.0
+    assert state2["total_advance_fees"] == 100_000.0
+    total_cost_2 = reps2[0]["fill_qty"] * reps2[0]["fill_price"] * (1.0 + dpt.BROKER_FEE)
+    assert state2["receivable_cash_t1"] + state2["receivable_cash_t2"] + total_cost_2 + state2["total_advance_fees"] == pytest.approx(20_000_000.0)
+
+    # 3. Greedy Cash Sweep with borrow cap
+    st_swp = dpt.init_empty_state(100_000_000.0)
+    st_swp["available_cash"] = 0.0
+    st_swp["receivable_cash_t1"] = 20_000_000.0
+    st_swp["receivable_cash_t2"] = 0.0
+    st_swp["last_real_nav"] = 20_000_000.0
+    df_hist = dp.generate_fallback_data(
+        symbols=["ACB", "FPT", "HPG", "VCB", "MBB", "TCB"],
+        start_date="2023-01-01",
+        end_date="2023-05-15",
+        seed=42
+    )
+    last_date = str(df_hist["date"].max())
+    swp_orders = dpt.generate_next_day_orders(st_swp, df_hist, last_date)
+    tot_buy_cost = sum(o["qty"] * o["est_price"] * (1.0 + dpt.BROKER_FEE) for o in swp_orders if o["action"] == "BUY")
+    cal_t1, _ = dpt._compute_settlement_calendar_days(last_date)
+    cap_t1 = float(sim._calc_borrow_cap(20_000_000.0, dpt.ADVANCE_FEE_RATE, float(cal_t1), 50000.0))
+    assert tot_buy_cost <= cap_t1 + 1e-6
+
+    # 4. Holiday calendar settlement computation
+    assert dpt._compute_settlement_calendar_days("2026-04-29") == (5, 6)
+    assert dpt._compute_settlement_calendar_days("2026-04-29", trading_dates=["2026-04-29", "2026-05-04", "2026-05-05"]) == (5, 6)
+    assert dpt._compute_settlement_calendar_days("2026-04-28", trading_dates=["2026-04-28", "2026-04-29"]) == (1, 6)
+
+
+def test_telegram_summary_html_escape_and_dashboard_pinned_chartjs():
+    """
+    M5.3: Verifies that build_telegram_summary escapes HTML in user-controlled fields
+    (session_date, symbol, dates_processed) and dashboard.py uses pinned chart.js version.
+    """
+    import services.daily_paper_trader as dpt
+    from services.dashboard import generate_html_content
+
+    state = dpt.init_empty_state(100_000_000.0)
+    session_date = '2026-01-02<script>"x"&</script>'
+    orders = [{
+        "action": "BUY",
+        "symbol": '<b>SYM&"1"</b>',
+        "qty": 100,
+        "est_price": 20000.0,
+        "est_value": 2000000.0,
+        "target_weight": 0.1
+    }]
+    dates_processed = ['2026-01-01<a>', '2026-01-02<b>']
+    msg = dpt.build_telegram_summary(state, session_date, orders, [], dates_processed)
+
+    assert "<script>" not in msg
+    assert "</script>" not in msg
+    assert "&lt;script&gt;" in msg
+    assert "&quot;x&quot;&amp;&lt;/script&gt;" in msg
+    assert "<b>SYM" not in msg
+    assert "&lt;b&gt;SYM&amp;&quot;1&quot;&lt;/b&gt;" in msg
+    assert "2026-01-01&lt;a&gt;" in msg
+    assert "2026-01-02&lt;b&gt;" in msg
+
+    html = generate_html_content({"state": state, "history": [], "prev_close_map": {}})
+    assert "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" in html
+    assert 'https://cdn.jsdelivr.net/npm/chart.js"></script>' not in html
+

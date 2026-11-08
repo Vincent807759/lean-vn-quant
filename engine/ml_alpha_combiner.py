@@ -128,7 +128,7 @@ def orthogonalize_factor_library(
     alphas: List[np.ndarray],
     names: List[str],
     tradable_mask: np.ndarray,
-    threshold: float = 0.25
+    threshold: float = 0.25, per_session_gate: bool = False
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
     """
     Applies sequential Gram-Schmidt QR Orthogonalization to remove cross-correlation,
@@ -151,7 +151,7 @@ def orthogonalize_factor_library(
             new_alpha=alphas[k],
             existing_alphas=ortho_alphas,
             threshold=threshold,
-            tradable_mask=tradable_mask
+            tradable_mask=tradable_mask, per_session_gate=per_session_gate
         )
         ranked_ortho = ops.rank(ortho_k, mask=tradable_mask)
         ortho_alphas.append(ranked_ortho)

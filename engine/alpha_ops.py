@@ -343,7 +343,7 @@ def check_and_orthogonalize(
     new_alpha: np.ndarray,
     existing_alphas: Union[np.ndarray, List[np.ndarray]],
     threshold: float = 0.50,
-    tradable_mask: Optional[np.ndarray] = None
+    tradable_mask: Optional[np.ndarray] = None, per_session_gate: bool = False
 ) -> Tuple[np.ndarray, float, float]:
     """
     Calculates Pearson correlation between new_alpha and existing_alphas.
@@ -423,7 +423,7 @@ def check_and_orthogonalize(
             corrs_before.append(0.0)
             
     max_corr_before = float(np.max(corrs_before)) if corrs_before else 0.0
-    if max_corr_before < threshold:
+    if not per_session_gate and max_corr_before < threshold:
         return new_alpha.copy(), max_corr_before, max_corr_before
 
     # Cross-Sectional QR Orthogonalization per session t (Strictly Causal)
@@ -451,7 +451,7 @@ def check_and_orthogonalize(
         valid_cols = var_e > 1e-12
         if not np.any(valid_cols) or np.var(v_dm) <= 1e-12:
             continue
-            
+        if per_session_gate and threshold > 0.0 and float(np.max(np.abs(E_dm[:, valid_cols].T @ v_dm) / (n_valid * np.sqrt(var_e[valid_cols] * np.var(v_dm))))) < threshold: continue
         E_active = E_dm[:, valid_cols]
         beta, _, _, _ = np.linalg.lstsq(E_active, v_dm, rcond=1e-10)
         v_proj = E_active @ beta
