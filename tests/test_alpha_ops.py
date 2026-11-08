@@ -223,4 +223,58 @@ def test_ridge_and_lowdin_strict_causality_no_look_ahead():
         diff_lowdin_k = float(np.max(np.abs(lowdin_orig[k][:t0 + 1] - lowdin_pert[k][:t0 + 1])))
         assert diff_lowdin_k < 1e-12, f"C1 VIOLATION: Look-ahead detected in Löwdin factor {k}! diff={diff_lowdin_k}"
 
+def test_check_and_orthogonalize_per_session_gate_boundary_causality():
+    """
+    M5.2: Verifies that per_session_gate=True evaluates threshold per session t,
+    eliminating boundary look-ahead / truncation drift on synthetic series,
+    while per_session_gate=False reproduces whole-sample gate past difference.
+    """
+    import numpy as np
+    import engine.alpha_ops as ops
+    import engine.ml_alpha_combiner as ml_comb
+
+    rng = np.random.default_rng(20261107)
+    T, N, t0 = 200, 30, 100
+    ex1 = rng.standard_normal((T, N))
+    noise = rng.standard_normal((T, N)) * 0.85
+
+    # [0..99] positively correlated (~0.42 >= 0.25)
+    new_a = 0.40 * ex1 + noise
+    # In new_b: [100..199] negatively correlated (-0.40) so pooled whole-sample corr < 0.25
+    new_b = new_a.copy()
+    new_b[t0:, :] = -0.40 * ex1[t0:, :] + noise[t0:, :]
+
+    # Negative assertion (per_session_gate=False): whole-sample gate causes past diff > 1.0
+    out_a_whole, _, _ = ops.check_and_orthogonalize(new_a, [ex1], threshold=0.25, per_session_gate=False)
+    out_b_whole, _, _ = ops.check_and_orthogonalize(new_b, [ex1], threshold=0.25, per_session_gate=False)
+    diff_whole = float(np.max(np.abs(out_a_whole[:t0] - out_b_whole[:t0])))
+    assert diff_whole > 1.0, f"Expected past diff > 1.0 for whole-sample gate, got {diff_whole}"
+
+    # Positive assertion (per_session_gate=True): zero past difference
+    out_a_sess, _, _ = ops.check_and_orthogonalize(new_a, [ex1], threshold=0.25, per_session_gate=True)
+    out_b_sess, _, _ = ops.check_and_orthogonalize(new_b, [ex1], threshold=0.25, per_session_gate=True)
+    diff_sess = float(np.max(np.abs(out_a_sess[:t0] - out_b_sess[:t0])))
+    assert diff_sess == 0.0, f"Expected 0.0 past diff for per_session_gate=True, got {diff_sess}"
+
+    # Check ml_alpha_combiner with per_session_gate=True
+    tradable_mask = np.ones((T, N), dtype=bool)
+    ortho_a_list, _, _ = ml_comb.orthogonalize_factor_library([ex1, new_a], ["F1", "F2"], tradable_mask, threshold=0.25, per_session_gate=True)
+    ortho_b_list, _, _ = ml_comb.orthogonalize_factor_library([ex1, new_b], ["F1", "F2"], tradable_mask, threshold=0.25, per_session_gate=True)
+    diff_comb_sess = float(np.max(np.abs(ortho_a_list[1][:t0] - ortho_b_list[1][:t0])))
+    assert diff_comb_sess == 0.0, f"Expected 0.0 comb diff, got {diff_comb_sess}"
+
+    # Check per-session gate mechanics:
+    # When corr < threshold, slice is untouched
+    zero_corr_slice = rng.standard_normal((1, N))
+    zero_ex = rng.standard_normal((1, N))
+    actual_c = abs(float(np.corrcoef(zero_corr_slice[0], zero_ex[0])[0, 1]))
+    zero_out, _, _ = ops.check_and_orthogonalize(zero_corr_slice, [zero_ex], threshold=actual_c + 0.10, per_session_gate=True)
+    assert np.allclose(zero_out, zero_corr_slice, atol=1e-12)
+
+    # When corr >= threshold, cross-sectional corr after projection < 1e-10
+    high_corr_slice = zero_ex.copy() + 0.01 * rng.standard_normal((1, N))
+    actual_high_c = abs(float(np.corrcoef(high_corr_slice[0], zero_ex[0])[0, 1]))
+    high_out, _, _ = ops.check_and_orthogonalize(high_corr_slice, [zero_ex], threshold=actual_high_c - 0.10, per_session_gate=True)
+    corr_after = abs(float(np.corrcoef(high_out[0], zero_ex[0])[0, 1]))
+    assert corr_after < 1e-10
 
