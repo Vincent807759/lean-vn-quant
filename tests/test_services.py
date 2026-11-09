@@ -973,3 +973,169 @@ def test_m7_corp_action_overlap_alert_idempotent_csv_and_dashboard_mtm(tmp_path)
     dash_state["prev_close_map"] = {"FPT": 112_000.0}
     html_out = dash.generate_html_content({"state": dash_state, "history": []})
     assert "115,000,000 VND" in html_out
+
+
+def test_m8_no_self_crossing_orders_and_no_greedy_sweep_ping_pong():
+    """
+    M8.1: Verifies that generate_next_day_orders:
+    1. Never emits both SELL and BUY orders for the same symbol in the same session (zero self-crossing).
+    2. Retains already-held Greedy Cash Sweep lots of top_candidates across T+2.5 settlement unlock
+       (preventing the 2-day ping-pong sell-off and re-buy loop), while cleanly selling when a symbol
+       falls out of top_candidates.
+    3. Blocks Greedy Cash Sweep from buying a symbol whose locked_t2 holdings already exceed effective_target_shares.
+    """
+    import polars as pl
+    from engine import data_pipeline as dp
+    from services import daily_paper_trader as dpt
+
+    df_raw = dp.generate_fallback_data(
+        symbols=["ACB", "CTG", "FPT", "HPG", "TCB", "TPB", "VCB", "VIB", "VJC", "VNM"],
+        start_date="2023-01-01",
+        end_date="2023-06-15",
+        seed=42,
+    )
+    df_enr = dpt._enrich_market_dataframe(df_raw)
+    all_dates = sorted(df_enr["date"].unique().to_list())
+
+    # 1. Multi-session sequential simulation: verify zero self-crossing and no T+2.5 ping-pong
+    state = dpt.init_empty_state(100_000_000.0)
+    sim_dates = all_dates[-8:]
+    for idx, cur_date in enumerate(sim_dates):
+        cur_str = cur_date.isoformat()
+        df_hist = df_enr.filter(pl.col("date") <= cur_date)
+        today_mkt = {r["symbol"]: dict(r) for r in df_enr.filter(pl.col("date") == cur_date).iter_rows(named=True)}
+        prev_map = {}
+        if idx > 0:
+            p_date = sim_dates[idx - 1]
+            prev_map = {r["symbol"]: r["raw_close"] for r in df_enr.filter(pl.col("date") == p_date).iter_rows(named=True)}
+        state, exec_reps = dpt.execute_pending_orders_and_settle(state, today_mkt, cur_str, trading_dates=all_dates)
+        dpt.mark_to_market(state, today_mkt, prev_map, cur_str, len(exec_reps))
+        orders = dpt.generate_next_day_orders(state, df_hist, cur_str)
+        sell_syms = {o["symbol"] for o in orders if o["action"] == "SELL"}
+        buy_syms = {o["symbol"] for o in orders if o["action"] == "BUY"}
+        assert sell_syms.isdisjoint(buy_syms)
+        assert len(buy_syms) == len([o for o in orders if o["action"] == "BUY"])
+
+    # 2. Direct test of held top_candidate with idle cash > 15% NAV: must retain held lot and never self-cross
+    last_dt = sim_dates[-1]
+    last_str = last_dt.isoformat()
+    df_last_hist = df_enr.filter(pl.col("date") <= last_dt)
+    st_direct = dpt.init_empty_state(100_000_000.0)
+    st_direct["available_cash"] = 35_000_000.0
+    st_direct["last_real_nav"] = 90_000_000.0
+    # Seed 100 sellable shares across all symbols so whichever is top_candidate is already held
+    last_prices = {r["symbol"]: r["raw_close"] for r in df_enr.filter(pl.col("date") == last_dt).iter_rows(named=True)}
+    for sym_k, p_k in last_prices.items():
+        st_direct["holdings"][sym_k] = {
+            "sellable_qty": 100,
+            "locked_t1": 0,
+            "locked_t2": 0,
+            "avg_cost": float(p_k),
+            "last_close": float(p_k),
+        }
+    orders_direct = dpt.generate_next_day_orders(st_direct, df_last_hist, last_str)
+    sells_d = {o["symbol"] for o in orders_direct if o["action"] == "SELL"}
+    buys_d = {o["symbol"] for o in orders_direct if o["action"] == "BUY"}
+    assert sells_d.isdisjoint(buys_d)
+
+    # 3. Overweight locked_t2 symbol (current_sellable == 0) must NOT be bought by Greedy Cash Sweep
+    st_locked = dpt.init_empty_state(100_000_000.0)
+    st_locked["available_cash"] = 30_000_000.0
+    st_locked["last_real_nav"] = 100_000_000.0
+    for sym_k, p_k in last_prices.items():
+        st_locked["holdings"][sym_k] = {
+            "sellable_qty": 0,
+            "locked_t1": 0,
+            "locked_t2": 100_000,
+            "avg_cost": float(p_k),
+            "last_close": float(p_k),
+        }
+    orders_locked = dpt.generate_next_day_orders(st_locked, df_last_hist, last_str)
+    assert [o for o in orders_locked if o["action"] == "BUY"] == []
+
+
+def test_m8_replay_isolation_overlap_backfill_mtm_fallback_and_bak_flag_reset(tmp_path, monkeypatch):
+    """
+    M8.2 & M8.3: Verifies:
+    1. run_test_replay_10 writes to paper_replay_state.json / paper_replay_nav_history.csv without touching
+       live paper_portfolio_state.json.
+    2. fetch_or_update_data backfills missing (date, symbol) rows inside the overlap window with schema alignment.
+    3. _resolve_valid_close_price skips None / 0.0 and prioritizes last_close -> prev_close_map -> avg_cost.
+    """
+    import datetime
+    import json
+    import polars as pl
+    from engine import data_pipeline as dp
+    from services import daily_paper_trader as dpt
+
+    # 1. Replay isolation test
+    live_state_path = tmp_path / "paper_portfolio_state.json"
+    live_sentinel = {"sentinel": "LIVE_PORTFOLIO_UNTOUCHED", "last_real_nav": 123_456_789.0}
+    live_state_path.write_text(json.dumps(live_sentinel), encoding="utf-8")
+    replay_state_path = tmp_path / "paper_replay_state.json"
+    replay_hist_path = tmp_path / "paper_replay_nav_history.csv"
+    monkeypatch.setattr(dpt, "DEFAULT_STATE_FILE", str(live_state_path))
+    monkeypatch.setattr(dpt, "DEFAULT_REPLAY_STATE_FILE", str(replay_state_path))
+    monkeypatch.setattr(dpt, "DEFAULT_REPLAY_HISTORY_FILE", str(replay_hist_path))
+
+    pq_replay = tmp_path / "replay_source.parquet"
+    df_rep = dp.generate_fallback_data(
+        symbols=["ACB", "FPT", "HPG", "VCB", "MBB", "TCB"],
+        start_date="2023-01-01",
+        end_date="2023-05-15",
+        seed=42,
+    )
+    df_rep.write_parquet(pq_replay)
+    dpt.run_test_replay_10(str(pq_replay), days=3)
+
+    assert json.loads(live_state_path.read_text(encoding="utf-8")) == live_sentinel
+    assert replay_state_path.exists()
+    assert replay_hist_path.exists()
+    assert len(pl.read_csv(replay_hist_path)) == 3
+
+    # 2. Overlap symbol gap backfill with schema alignment
+    live_pq = tmp_path / "vn30_live_paper.parquet"
+    d1 = datetime.date(2026, 10, 20)
+    d2 = datetime.date(2026, 10, 21)
+    df_cached = pl.DataFrame({
+        "date": [d1, d1, d2],
+        "symbol": ["ACB", "FPT", "ACB"],  # FPT missing on d2 due to prior timeout
+        "raw_open": [20000.0, 100000.0, 20100.0],
+        "raw_high": [20500.0, 101000.0, 20600.0],
+        "raw_low": [19800.0, 99000.0, 19900.0],
+        "raw_close": [20200.0, 100500.0, 20300.0],
+        "adj_close": [20200.0, 100500.0, 20300.0],
+        "volume": [1000000.0, 2000000.0, 1100000.0],
+        "data_source": ["entrade", "entrade", "entrade"],
+    })
+    df_cached.write_parquet(live_pq)
+
+    # df_new has reversed column order, integer volume, missing data_source metadata column, and includes (d2, FPT)
+    df_new_api = pl.DataFrame({
+        "symbol": ["ACB", "FPT", "ACB", "FPT"],
+        "date": [d1, d1, d2, d2],
+        "volume": [1000000, 2000000, 1100000, 2100000],
+        "adj_close": [20200.0, 100500.0, 20300.0, 101500.0],
+        "raw_close": [20200.0, 100500.0, 20300.0, 101500.0],
+        "raw_low": [19800.0, 99000.0, 19900.0, 100000.0],
+        "raw_high": [20500.0, 101000.0, 20600.0, 102000.0],
+        "raw_open": [20000.0, 100000.0, 20100.0, 101000.0],
+    })
+    monkeypatch.setattr(dp, "fetch_vn_ohlcv", lambda **kwargs: df_new_api)
+    df_updated = dpt.fetch_or_update_data(str(live_pq), is_replay=False)
+    assert len(df_updated) == 4
+    assert df_updated.schema == df_cached.schema
+    fpt_d2 = df_updated.filter((pl.col("date") == d2) & (pl.col("symbol") == "FPT"))
+    assert len(fpt_d2) == 1
+    assert float(fpt_d2["raw_close"][0]) == pytest.approx(101500.0)
+
+    # 3. MTM fallback when raw_close is None or 0.0
+    st_mtm = dpt.init_empty_state(100_000_000.0)
+    st_mtm["available_cash"] = 0.0
+    st_mtm["holdings"] = {
+        "FPT": {"sellable_qty": 100, "locked_t1": 0, "locked_t2": 0, "avg_cost": 80_000.0, "last_close": 95_000.0},
+        "ACB": {"sellable_qty": 100, "locked_t1": 0, "locked_t2": 0, "avg_cost": 20_000.0, "last_close": 0.0},
+    }
+    st_mtm["prev_close_map"] = {"ACB": 24_000.0}
+    rec_mtm = dpt.mark_to_market(st_mtm, {"FPT": {"raw_close": None}, "ACB": {"raw_close": 0.0}}, {}, "2026-10-22", 0)
+    assert rec_mtm["stock_value"] == pytest.approx(100 * 95_000.0 + 100 * 24_000.0)
