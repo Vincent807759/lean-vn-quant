@@ -103,6 +103,7 @@ DEFAULT_INITIAL_CAPITAL = 100_000_000.0  # 100M VND
 DEFAULT_STATE_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_portfolio_state.json")
 DEFAULT_HISTORY_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_nav_history.csv")
 DEFAULT_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_production.parquet")
+DEFAULT_LIVE_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_live_paper.parquet")
 
 BROKER_FEE = 0.0015       # 0.15% brokerage commission per leg
 SLIPPAGE = 0.0010         # 0.10% slippage per leg
@@ -128,6 +129,7 @@ def init_empty_state(initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[s
         "receivable_cash_t2": 0.0,
         "dividend_cash_receivable": 0.0,
         "locked_corp_action_shares": {},  # symbol -> int
+        "corporate_action_alerts": [],  # detected overlap adjustments on held symbols
         "trapped_sell_orders": [],  # orders trapped at floor price
         "holdings": {},  # symbol -> {"sellable_qty": int, "locked_t1": int, "locked_t2": int, "avg_cost": float}
         "pending_orders": [],  # list of pending ATO orders for next morning
@@ -327,10 +329,38 @@ def check_cache_overlap_and_reconcile(
     return True
 
 
+def _resolve_live_parquet_path(parquet_file: str, is_replay: bool = False) -> str:
+    """
+    Redirects default live paper-trading ingestion to vn30_live_paper.parquet,
+    preserving canonical data/vn30_production.parquet 100% immutable.
+    """
+    if is_replay:
+        return parquet_file
+    norm_in = os.path.normcase(os.path.abspath(parquet_file))
+    norm_def = os.path.normcase(os.path.abspath(DEFAULT_PARQUET_FILE))
+    if norm_in != norm_def:
+        return parquet_file
+    live_pq = os.path.join(os.path.dirname(os.path.abspath(parquet_file)), "vn30_live_paper.parquet")
+    if (not os.path.exists(live_pq) or os.path.getsize(live_pq) == 0) and os.path.exists(parquet_file) and os.path.getsize(parquet_file) > 0:
+        os.makedirs(os.path.dirname(live_pq), exist_ok=True)
+        tmp_seed = f"{live_pq}.{os.getpid()}.tmp"
+        try:
+            shutil.copy2(parquet_file, tmp_seed)
+            os.replace(tmp_seed, live_pq)
+        finally:
+            if os.path.exists(tmp_seed):
+                try:
+                    os.remove(tmp_seed)
+                except Exception:
+                    pass
+    return live_pq
+
+
 def fetch_or_update_data(
     parquet_file: str,
     is_replay: bool = False,
-    calibration_file: Optional[str] = None
+    calibration_file: Optional[str] = None,
+    state: Optional[Dict[str, Any]] = None
 ) -> pl.DataFrame:
     """
     Ingests or updates VN30 daily OHLCV dataset.
@@ -341,6 +371,7 @@ def fetch_or_update_data(
     - On corporate action mismatch: Refetches entire history and invalidates/refreshes calibration table.
     - On API error: preserves cached storage untouched.
     """
+    parquet_file = _resolve_live_parquet_path(parquet_file, is_replay=is_replay)
     if not os.path.exists(parquet_file):
         print(f"[DATA] Parquet storage {parquet_file} not found. Fetching historical data from Entrade API...")
         os.makedirs(os.path.dirname(os.path.abspath(parquet_file)), exist_ok=True)
@@ -575,7 +606,7 @@ def execute_pending_orders_and_settle(
     round_adverse: bool = False,
     trading_dates: Optional[List[Any]] = None,
     sell_adv_cap: bool = False,
-    penalty_rate_per_day: float = 0.07,
+    penalty_rate_per_day: float = 0.0,
     min_advance_notional: float = 0.0
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
@@ -619,7 +650,7 @@ def execute_pending_orders_and_settle(
             rep["fill_qty"] = 0
             rep["fill_price"] = raw_open
             rep["trapped_days"] = o.get("trapped_days", 0) + 1
-            rep["note"] = f"Market opened locked at floor ({raw_open:,.0f} VND), zero bid. Retaining order in priority queue for next session with -7%/session penalty."
+            rep["note"] = f"Market opened locked at floor ({raw_open:,.0f} VND), zero bid. Retaining order in priority queue for next session with -{penalty_rate_per_day*100:.1f}%/session penalty."
             executed_reports.append(rep)
             o_trapped = dict(o)
             o_trapped["trapped_days"] = rep["trapped_days"]
@@ -824,6 +855,9 @@ def execute_pending_orders_and_settle(
         executed_reports.append(rep)
 
     state["pending_orders"] = remaining_pending
+    state["trapped_sell_orders"] = [
+        dict(o) for o in remaining_pending if o.get("action") == "SELL" and int(o.get("trapped_days", 0)) > 0
+    ]
     return state, executed_reports
 
 
@@ -1023,33 +1057,48 @@ def generate_next_day_orders(
             current_shares[s] = 0
             current_sellable[s] = 0
 
+    prev_trapped_map: Dict[str, Dict[str, Any]] = {}
+    for po in state.get("pending_orders", []) + state.get("trapped_sell_orders", []):
+        if po.get("action") == "SELL" and int(po.get("trapped_days", 0)) > 0:
+            sym_po = str(po["symbol"])
+            if sym_po not in prev_trapped_map or int(po["trapped_days"]) > int(prev_trapped_map[sym_po].get("trapped_days", 0)):
+                prev_trapped_map[sym_po] = dict(po)
+    trapped_sell_syms = set()
     orders = []
 
     # --- 1. GENERATE SELL ORDERS ---
     for s in syms:
         cur_q = current_shares[s]
         tgt_q = target_shares.get(s, 0)
-        if tgt_q < cur_q:
-            desired_sell = cur_q - tgt_q
-            avail_sell = current_sellable.get(s, 0)
-            actual_sell = min(desired_sell, avail_sell)
-            actual_sell = (actual_sell // LOT_SIZE) * LOT_SIZE
-            
-            if actual_sell > 0:
-                p = last_close_prices.get(s, 0.0)
-                orders.append({
-                    "action": "SELL",
-                    "symbol": s,
-                    "qty": int(actual_sell),
-                    "est_price": float(p),
-                    "est_value": float(actual_sell * p),
-                    "target_weight": float(today_target_w[syms.index(s)])
-                })
+        avail_sell = (int(current_sellable.get(s, 0)) // LOT_SIZE) * LOT_SIZE
+        trapped_info = prev_trapped_map.get(s)
+        trapped_days_s = int(trapped_info.get("trapped_days", 0)) if trapped_info else 0
+        trapped_qty_s = min((int(trapped_info.get("qty", 0)) // LOT_SIZE) * LOT_SIZE, avail_sell) if trapped_info else 0
+        desired_sell = max(0, cur_q - tgt_q)
+        actual_sell = min((desired_sell // LOT_SIZE) * LOT_SIZE, avail_sell)
+        if trapped_days_s > 0 and trapped_qty_s >= LOT_SIZE:
+            actual_sell = max(actual_sell, trapped_qty_s)
+            trapped_sell_syms.add(s)
+        if actual_sell > 0:
+            p = last_close_prices.get(s, 0.0)
+            sell_entry: Dict[str, Any] = {
+                "action": "SELL",
+                "symbol": s,
+                "qty": int(actual_sell),
+                "est_price": float(p),
+                "est_value": float(actual_sell * p),
+                "target_weight": float(today_target_w[syms.index(s)])
+            }
+            if trapped_days_s > 0:
+                sell_entry["trapped_days"] = trapped_days_s
+            orders.append(sell_entry)
 
     # --- 2. GENERATE BUY ORDERS & GREEDY CASH SWEEP ---
     buy_orders = []
     total_est_buy_cost = 0.0
     for s in syms:
+        if s in trapped_sell_syms:
+            continue
         cur_q = current_shares[s]
         tgt_q = target_shares.get(s, 0)
         if tgt_q > cur_q:
@@ -1080,6 +1129,8 @@ def generate_next_day_orders(
         top_candidates = []
         alpha_today = alpha[-1]
         for i, s in enumerate(syms):
+            if s in trapped_sell_syms:
+                continue
             if tradable_mask[-1, i] and raw_close[-1, i] > sma50[-1, i]:
                 top_candidates.append((alpha_today[i], s, last_close_prices[s], i))
         top_candidates.sort(key=lambda x: x[0], reverse=True)
@@ -1113,6 +1164,9 @@ def generate_next_day_orders(
 
     orders.extend(buy_orders)
     state["pending_orders"] = orders
+    state["trapped_sell_orders"] = [
+        dict(o) for o in orders if o.get("action") == "SELL" and int(o.get("trapped_days", 0)) > 0
+    ]
     return orders
 
 
