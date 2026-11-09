@@ -378,7 +378,7 @@ def test_4_full_backtest():
         sell_tax=0.0010,
         advance_fee_rate=0.00035,
         max_adv_participation=0.05,
-        dates=dates[warmup:]
+        dates=dates[warmup:], warn_unlagged=False
     )
     real_equity = vn_sim_res["equity"]
     
@@ -625,7 +625,7 @@ def test_5_phase1_microstructure_audit():
         sell_tax=0.0,
         corp_action_div_cash=div_cash_matrix,
         corp_action_div_pay_t=div_pay_matrix,
-        dividend_tax_rate=0.0
+        dividend_tax_rate=0.0, warn_unlagged=False
     )
     
     eq_corp = res_corp["equity"]
@@ -792,7 +792,7 @@ def test_6_phase2_pit_and_market_impact():
         adv20_shares=adv_liq,
         target_weights=w_liq,
         initial_cash=1.0e9,
-        in_pit_universe=pit_liq
+        in_pit_universe=pit_liq, warn_unlagged=False
     )
     # Stock bought at t=1, settles at t=3, then immediately liquidated on t=3 due to pit exclusion
     assert res_liq["sell_tax"][1] == 0.0, "[FAIL] No sell at t=1"
