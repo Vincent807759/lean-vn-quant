@@ -300,7 +300,7 @@ def fetch_vn_ohlcv(
         return df
         
     start_dt = datetime.datetime.fromisoformat(start_date)
-    end_dt = datetime.datetime.fromisoformat(end_date)
+    end_dt = datetime.datetime.fromisoformat(str(end_date).strip()) + (datetime.timedelta(seconds=86399) if len(str(end_date).strip()) <= 10 else datetime.timedelta(0))
     from_ts = int(start_dt.timestamp())
     to_ts = int(end_dt.timestamp())
     
