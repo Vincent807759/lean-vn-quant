@@ -103,6 +103,7 @@ DEFAULT_INITIAL_CAPITAL = 100_000_000.0  # 100M VND
 DEFAULT_STATE_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_portfolio_state.json")
 DEFAULT_HISTORY_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_nav_history.csv")
 DEFAULT_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_production.parquet")
+DEFAULT_LIVE_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_live_paper.parquet")
 
 BROKER_FEE = 0.0015       # 0.15% brokerage commission per leg
 SLIPPAGE = 0.0010         # 0.10% slippage per leg
@@ -128,6 +129,7 @@ def init_empty_state(initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[s
         "receivable_cash_t2": 0.0,
         "dividend_cash_receivable": 0.0,
         "locked_corp_action_shares": {},  # symbol -> int
+        "corporate_action_alerts": [],  # detected overlap adjustments on held symbols
         "trapped_sell_orders": [],  # orders trapped at floor price
         "holdings": {},  # symbol -> {"sellable_qty": int, "locked_t1": int, "locked_t2": int, "avg_cost": float}
         "pending_orders": [],  # list of pending ATO orders for next morning
@@ -260,31 +262,52 @@ def save_portfolio_state(state: Dict[str, Any], state_file: str) -> None:
 
 
 def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
-    """Appends daily NAV and Implementation Shortfall record into CSV ledger."""
+    """Appends daily NAV and Implementation Shortfall record into CSV ledger idempotently by date."""
     os.makedirs(os.path.dirname(os.path.abspath(history_file)), exist_ok=True)
-    file_exists = os.path.exists(history_file) and os.path.getsize(history_file) > 0
     headers = [
         "date", "real_nav", "available_cash", "receivable_cash", "stock_value",
         "naive_nav", "implementation_shortfall_pct", "daily_return_real",
         "daily_return_naive", "orders_executed"
     ]
-    
-    with open(history_file, "a", encoding="utf-8") as f:
-        if not file_exists:
-            f.write(",".join(headers) + "\n")
-        line = [
-            str(record["date"]),
-            f"{record['real_nav']:.2f}",
-            f"{record['available_cash']:.2f}",
-            f"{record['receivable_cash']:.2f}",
-            f"{record['stock_value']:.2f}",
-            f"{record['naive_nav']:.2f}",
-            f"{record['implementation_shortfall_pct']:.4f}",
-            f"{record['daily_return_real']:.6f}",
-            f"{record['daily_return_naive']:.6f}",
-            str(record["orders_executed"])
-        ]
-        f.write(",".join(line) + "\n")
+    rec_date = str(record["date"])
+    new_line = ",".join([
+        rec_date,
+        f"{record['real_nav']:.2f}",
+        f"{record['available_cash']:.2f}",
+        f"{record['receivable_cash']:.2f}",
+        f"{record['stock_value']:.2f}",
+        f"{record['naive_nav']:.2f}",
+        f"{record['implementation_shortfall_pct']:.4f}",
+        f"{record['daily_return_real']:.6f}",
+        f"{record['daily_return_naive']:.6f}",
+        str(record["orders_executed"])
+    ])
+    with _state_file_lock(history_file):
+        kept_rows: List[str] = []
+        if os.path.exists(history_file) and os.path.getsize(history_file) > 0:
+            with open(history_file, "r", encoding="utf-8") as rf:
+                for raw_ln in rf:
+                    s_ln = raw_ln.strip()
+                    if not s_ln or s_ln.startswith("date,"):
+                        continue
+                    if s_ln.split(",", 1)[0].strip() != rec_date:
+                        kept_rows.append(s_ln)
+        kept_rows.append(new_line)
+        tmp_csv = f"{history_file}.{os.getpid()}.tmp"
+        try:
+            with open(tmp_csv, "w", encoding="utf-8", newline="") as wf:
+                wf.write(",".join(headers) + "\n")
+                for r_ln in kept_rows:
+                    wf.write(r_ln + "\n")
+                wf.flush()
+                os.fsync(wf.fileno())
+            os.replace(tmp_csv, history_file)
+        finally:
+            if os.path.exists(tmp_csv):
+                try:
+                    os.remove(tmp_csv)
+                except Exception:
+                    pass
 
 
 # ==============================================================================
@@ -327,10 +350,91 @@ def check_cache_overlap_and_reconcile(
     return True
 
 
+def detect_corporate_action_on_overlap(
+    df_cache: pl.DataFrame,
+    df_new: pl.DataFrame,
+    holdings: Optional[Dict[str, Any]] = None,
+    overlap_window: int = 20,
+    tolerance: float = 1e-4,
+    detected_date: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Identifies symbols whose historical adj_close shifted across the overlap window
+    (ex-dividend / stock split / bonus shares) and flags held positions for reconciliation.
+    """
+    cache_dates = set(df_cache["date"].unique().to_list())
+    new_dates = set(df_new["date"].unique().to_list())
+    common_dates = sorted(cache_dates & new_dates)
+    if not common_dates:
+        return []
+    overlap_dates = common_dates[-overlap_window:]
+    cache_sub = df_cache.filter(pl.col("date").is_in(overlap_dates)).select(["date", "symbol", "adj_close"])
+    new_sub = df_new.filter(pl.col("date").is_in(overlap_dates)).select(["date", "symbol", "adj_close"])
+    joined = cache_sub.join(new_sub, on=["date", "symbol"], suffix="_new").sort(["symbol", "date"])
+    if len(joined) == 0:
+        return []
+    holdings_map = holdings or {}
+    det_str = detected_date or datetime.date.today().isoformat()
+    alerts_by_sym: Dict[str, Dict[str, Any]] = {}
+    for row in joined.iter_rows(named=True):
+        c_old = float(row["adj_close"])
+        c_new = float(row["adj_close_new"])
+        if c_old <= 0:
+            continue
+        rel_diff = abs(c_new - c_old) / c_old
+        if rel_diff > tolerance:
+            sym = str(row["symbol"])
+            h_info = holdings_map.get(sym, {})
+            held_qty = int(h_info.get("sellable_qty", 0)) + int(h_info.get("locked_t1", 0)) + int(h_info.get("locked_t2", 0))
+            alerts_by_sym[sym] = {
+                "symbol": sym,
+                "detected_date": det_str,
+                "overlap_ref_date": str(row["date"]),
+                "cached_close": round(c_old, 2),
+                "new_close": round(c_new, 2),
+                "adj_ratio": round(c_new / c_old, 6),
+                "held_qty": held_qty,
+                "requires_manual_reconcile": bool(held_qty > 0),
+            }
+    if holdings_map:
+        held_alerts = [a for a in alerts_by_sym.values() if a["held_qty"] > 0]
+        if held_alerts:
+            return sorted(held_alerts, key=lambda x: x["symbol"])
+    return sorted(alerts_by_sym.values(), key=lambda x: x["symbol"])
+
+
+def _resolve_live_parquet_path(parquet_file: str, is_replay: bool = False) -> str:
+    """
+    Redirects default live paper-trading ingestion to vn30_live_paper.parquet,
+    preserving canonical data/vn30_production.parquet 100% immutable.
+    """
+    if is_replay:
+        return parquet_file
+    norm_in = os.path.normcase(os.path.abspath(parquet_file))
+    norm_def = os.path.normcase(os.path.abspath(DEFAULT_PARQUET_FILE))
+    if norm_in != norm_def:
+        return parquet_file
+    live_pq = os.path.join(os.path.dirname(os.path.abspath(parquet_file)), "vn30_live_paper.parquet")
+    if (not os.path.exists(live_pq) or os.path.getsize(live_pq) == 0) and os.path.exists(parquet_file) and os.path.getsize(parquet_file) > 0:
+        os.makedirs(os.path.dirname(live_pq), exist_ok=True)
+        tmp_seed = f"{live_pq}.{os.getpid()}.tmp"
+        try:
+            shutil.copy2(parquet_file, tmp_seed)
+            os.replace(tmp_seed, live_pq)
+        finally:
+            if os.path.exists(tmp_seed):
+                try:
+                    os.remove(tmp_seed)
+                except Exception:
+                    pass
+    return live_pq
+
+
 def fetch_or_update_data(
     parquet_file: str,
     is_replay: bool = False,
-    calibration_file: Optional[str] = None
+    calibration_file: Optional[str] = None,
+    state: Optional[Dict[str, Any]] = None
 ) -> pl.DataFrame:
     """
     Ingests or updates VN30 daily OHLCV dataset.
@@ -341,6 +445,7 @@ def fetch_or_update_data(
     - On corporate action mismatch: Refetches entire history and invalidates/refreshes calibration table.
     - On API error: preserves cached storage untouched.
     """
+    parquet_file = _resolve_live_parquet_path(parquet_file, is_replay=is_replay)
     if not os.path.exists(parquet_file):
         print(f"[DATA] Parquet storage {parquet_file} not found. Fetching historical data from Entrade API...")
         os.makedirs(os.path.dirname(os.path.abspath(parquet_file)), exist_ok=True)
@@ -389,6 +494,22 @@ def fetch_or_update_data(
                 
                 if not is_cache_consistent:
                     print(f"[DATA WARNING] Historical price adjustment (split/dividend) detected on overlap window! Refetching entire history...")
+                    if state is not None:
+                        new_alerts = detect_corporate_action_on_overlap(
+                            df_cache=df_market,
+                            df_new=df_new,
+                            holdings=state.get("holdings"),
+                            overlap_window=20,
+                            detected_date=today.isoformat(),
+                        )
+                        existing_alerts = list(state.get("corporate_action_alerts", []))
+                        seen_keys = {(a.get("symbol"), a.get("overlap_ref_date")) for a in existing_alerts}
+                        for na in new_alerts:
+                            k = (na.get("symbol"), na.get("overlap_ref_date"))
+                            if k not in seen_keys:
+                                existing_alerts.append(na)
+                                seen_keys.add(k)
+                        state["corporate_action_alerts"] = existing_alerts
                     earliest_dt = cache_dates[0]
                     df_market = dp.fetch_vn_ohlcv(
                         start_date=earliest_dt.isoformat(),
@@ -575,7 +696,7 @@ def execute_pending_orders_and_settle(
     round_adverse: bool = False,
     trading_dates: Optional[List[Any]] = None,
     sell_adv_cap: bool = False,
-    penalty_rate_per_day: float = 0.07,
+    penalty_rate_per_day: float = 0.0,
     min_advance_notional: float = 0.0
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
@@ -619,7 +740,7 @@ def execute_pending_orders_and_settle(
             rep["fill_qty"] = 0
             rep["fill_price"] = raw_open
             rep["trapped_days"] = o.get("trapped_days", 0) + 1
-            rep["note"] = f"Market opened locked at floor ({raw_open:,.0f} VND), zero bid. Retaining order in priority queue for next session with -7%/session penalty."
+            rep["note"] = f"Market opened locked at floor ({raw_open:,.0f} VND), zero bid. Retaining order in priority queue for next session with -{penalty_rate_per_day*100:.1f}%/session penalty."
             executed_reports.append(rep)
             o_trapped = dict(o)
             o_trapped["trapped_days"] = rep["trapped_days"]
@@ -824,6 +945,9 @@ def execute_pending_orders_and_settle(
         executed_reports.append(rep)
 
     state["pending_orders"] = remaining_pending
+    state["trapped_sell_orders"] = [
+        dict(o) for o in remaining_pending if o.get("action") == "SELL" and int(o.get("trapped_days", 0)) > 0
+    ]
     return state, executed_reports
 
 
@@ -1023,33 +1147,48 @@ def generate_next_day_orders(
             current_shares[s] = 0
             current_sellable[s] = 0
 
+    prev_trapped_map: Dict[str, Dict[str, Any]] = {}
+    for po in state.get("pending_orders", []) + state.get("trapped_sell_orders", []):
+        if po.get("action") == "SELL" and int(po.get("trapped_days", 0)) > 0:
+            sym_po = str(po["symbol"])
+            if sym_po not in prev_trapped_map or int(po["trapped_days"]) > int(prev_trapped_map[sym_po].get("trapped_days", 0)):
+                prev_trapped_map[sym_po] = dict(po)
+    trapped_sell_syms = set()
     orders = []
 
     # --- 1. GENERATE SELL ORDERS ---
     for s in syms:
         cur_q = current_shares[s]
         tgt_q = target_shares.get(s, 0)
-        if tgt_q < cur_q:
-            desired_sell = cur_q - tgt_q
-            avail_sell = current_sellable.get(s, 0)
-            actual_sell = min(desired_sell, avail_sell)
-            actual_sell = (actual_sell // LOT_SIZE) * LOT_SIZE
-            
-            if actual_sell > 0:
-                p = last_close_prices.get(s, 0.0)
-                orders.append({
-                    "action": "SELL",
-                    "symbol": s,
-                    "qty": int(actual_sell),
-                    "est_price": float(p),
-                    "est_value": float(actual_sell * p),
-                    "target_weight": float(today_target_w[syms.index(s)])
-                })
+        avail_sell = (int(current_sellable.get(s, 0)) // LOT_SIZE) * LOT_SIZE
+        trapped_info = prev_trapped_map.get(s)
+        trapped_days_s = int(trapped_info.get("trapped_days", 0)) if trapped_info else 0
+        trapped_qty_s = min((int(trapped_info.get("qty", 0)) // LOT_SIZE) * LOT_SIZE, avail_sell) if trapped_info else 0
+        desired_sell = max(0, cur_q - tgt_q)
+        actual_sell = min((desired_sell // LOT_SIZE) * LOT_SIZE, avail_sell)
+        if trapped_days_s > 0 and trapped_qty_s >= LOT_SIZE:
+            actual_sell = max(actual_sell, trapped_qty_s)
+            trapped_sell_syms.add(s)
+        if actual_sell > 0:
+            p = last_close_prices.get(s, 0.0)
+            sell_entry: Dict[str, Any] = {
+                "action": "SELL",
+                "symbol": s,
+                "qty": int(actual_sell),
+                "est_price": float(p),
+                "est_value": float(actual_sell * p),
+                "target_weight": float(today_target_w[syms.index(s)])
+            }
+            if trapped_days_s > 0:
+                sell_entry["trapped_days"] = trapped_days_s
+            orders.append(sell_entry)
 
     # --- 2. GENERATE BUY ORDERS & GREEDY CASH SWEEP ---
     buy_orders = []
     total_est_buy_cost = 0.0
     for s in syms:
+        if s in trapped_sell_syms:
+            continue
         cur_q = current_shares[s]
         tgt_q = target_shares.get(s, 0)
         if tgt_q > cur_q:
@@ -1080,6 +1219,8 @@ def generate_next_day_orders(
         top_candidates = []
         alpha_today = alpha[-1]
         for i, s in enumerate(syms):
+            if s in trapped_sell_syms:
+                continue
             if tradable_mask[-1, i] and raw_close[-1, i] > sma50[-1, i]:
                 top_candidates.append((alpha_today[i], s, last_close_prices[s], i))
         top_candidates.sort(key=lambda x: x[0], reverse=True)
@@ -1113,6 +1254,9 @@ def generate_next_day_orders(
 
     orders.extend(buy_orders)
     state["pending_orders"] = orders
+    state["trapped_sell_orders"] = [
+        dict(o) for o in orders if o.get("action") == "SELL" and int(o.get("trapped_days", 0)) > 0
+    ]
     return orders
 
 
@@ -1187,6 +1331,10 @@ def print_portfolio_dashboard(
     print(f"  TOTAL REAL NAV           : {real_nav:>15,.0f} VND (Return: {ret_pct:>+6.2f} %)")
     print(f"  Frictionless Naive T+0   : {naive_nav:>15,.0f} VND")
     print(f"  Implementation Shortfall : {shortfall:>+15.2f} % (Friction & settlement drag)")
+    corp_alerts = state.get("corporate_action_alerts", [])
+    if corp_alerts:
+        alert_summary = ", ".join(f"{a.get('symbol')} (ratio={a.get('adj_ratio', 1.0):.4f}, held={a.get('held_qty', 0)})" for a in corp_alerts)
+        print(f"  [CORP ACTION WARNING]    : Historical price adjustment detected -> {alert_summary}")
 
     # 3. Next Session ATO Order Ticket
     print("\n" + "=" * 90)
@@ -1316,6 +1464,13 @@ def build_telegram_summary(
     bak_warning = ""
     if state.get("recovered_from_bak"):
         bak_warning = "\n⚠️ <b>WARNING:</b> State recovered from .bak backup!\n"
+    corp_alerts = state.get("corporate_action_alerts", [])
+    if corp_alerts:
+        corp_items = ", ".join(
+            f"{html.escape(str(a.get('symbol', '')), quote=True)} (ratio={float(a.get('adj_ratio', 1.0)):.4f}, held={int(a.get('held_qty', 0))})"
+            for a in corp_alerts
+        )
+        bak_warning += f"\n⚠️ <b>CORP ACTION ALERT:</b> Historical price adjustment detected ({corp_items}). Reconcile dividend/split ledger!\n"
     safe_session_date = html.escape(str(session_date), quote=True)
     msg = f"""<b>📊 LEAN VN-QUANT DAILY PAPER TRADING REPORT</b>
 📅 Session: <b>{safe_session_date}</b>{catch_up_info}{bak_warning}
@@ -1451,7 +1606,10 @@ def main():
         print("   LEAN VN-QUANT: MORNING PRE-OPEN STAGING & ATO TICKET VERIFICATION (08:15 ICT)")
         print("=" * 90)
         state = load_portfolio_state(args.state_file, args.capital)
-        df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False))
+        prev_alert_cnt = len(state.get("corporate_action_alerts", []))
+        df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False, state=state))
+        if len(state.get("corporate_action_alerts", [])) > prev_alert_cnt:
+            save_portfolio_state(state, args.state_file)
         all_dates = sorted(df_market.select("date").unique()["date"].to_list())
         latest_date = all_dates[-1]
         today_str = datetime.date.today().isoformat()
@@ -1463,7 +1621,7 @@ def main():
                 df_cg = pl.read_parquet(contagion_path)
                 print(f"[PRE-OPEN] Loaded VN-FinGraph overnight contagion signals from {contagion_path} ({len(df_cg)} sessions)")
             except Exception as e:
-                print(f"[PRE-OPEN WARNING] Could not read contagion data: {e}")
+                print(f"[PRE-OPEN WARNING] Could not read contagion data: {sanitize_error_message(str(e))}")
 
         pending_orders = state.get("pending_orders", [])
         df_today = df_market.filter(pl.col("date") == latest_date)
@@ -1476,10 +1634,12 @@ def main():
         print("[PRE-OPEN SUCCESS] ATO Order tickets staged and verified. Ready for 09:00:00 HOSE opening auction.")
         return
 
-    df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False))
-    all_dates = sorted(df_market.select("date").unique()["date"].to_list())
-
     state = load_portfolio_state(args.state_file, args.capital)
+    prev_alert_cnt = len(state.get("corporate_action_alerts", []))
+    df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False, state=state))
+    if len(state.get("corporate_action_alerts", [])) > prev_alert_cnt:
+        save_portfolio_state(state, args.state_file)
+    all_dates = sorted(df_market.select("date").unique()["date"].to_list())
     last_updated_date = state.get("last_updated_date")
 
     if last_updated_date is None:
@@ -1560,7 +1720,7 @@ def main():
             args.history_file
         )
     except Exception as e:
-        print(f"[DASHBOARD] Could not export HTML: {e}")
+        print(f"[DASHBOARD] Could not export HTML: {sanitize_error_message(str(e))}")
 
 
 if __name__ == "__main__":

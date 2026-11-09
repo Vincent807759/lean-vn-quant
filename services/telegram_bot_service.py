@@ -178,6 +178,9 @@ Quantitative portfolio execution & monitoring engine for VN30.
 
 
 def get_parquet_file_path() -> str:
+    live_pq = os.path.join(ROOT_DIR, "data", "vn30_live_paper.parquet")
+    if os.path.exists(live_pq) and os.path.getsize(live_pq) > 0:
+        return live_pq
     return os.path.join(ROOT_DIR, "data", "vn30_production.parquet")
 
 
