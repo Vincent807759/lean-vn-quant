@@ -256,8 +256,8 @@ def compute_dsr_from_registry(
                     ret_seq = data.get("returns")
                     if ret_seq and len(ret_seq) == T:
                         trials_returns_list.append(np.asarray(ret_seq, dtype=np.float64))
-        except Exception:
-            pass
+        except Exception as exc:
+            warnings.warn(f"Failed to read trial registry {registry_file}: {exc}", UserWarning)
             
     if not trials_returns_list:
         trials_returns_list = [current_r]
