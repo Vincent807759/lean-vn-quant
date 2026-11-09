@@ -38,10 +38,10 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 ENV_FILE_PATHS = [
-    os.path.join(os.getcwd(), ".env"),
     os.path.join(ROOT_DIR, ".env"),
     os.path.join(BASE_DIR, ".env"),
     os.path.join(BASE_DIR, "..", ".env"),
+    os.path.join(os.getcwd(), ".env"),
 ]
 
 
@@ -120,9 +120,12 @@ def send_message(token: str, chat_id: str, text: str) -> bool:
     }
     try:
         resp = requests.post(url, json=payload, timeout=8)
-        return resp.status_code == 200
+        if resp.status_code != 200:
+            print(f"[SEND WARNING] HTTP {resp.status_code}: {sanitize_error_message(resp.text[:200], token)}")
+            return False
+        return True
     except Exception as e:
-        safe_msg = mask_token(str(e), token)
+        safe_msg = sanitize_error_message(str(e), token)
         print(f"[SEND ERROR] Failed to deliver message: {safe_msg}")
         return False
 
@@ -487,10 +490,11 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
                         continue
                     
                     sender_chat_id = str(msg["chat"]["id"])
+                    sender_user_id = str(msg.get("from", {}).get("id", sender_chat_id))
                     text = msg.get("text", "").strip()
                     
-                    # Strict Authorization Check
-                    if sender_chat_id != str(admin_chat_id):
+                    # Strict Authorization Check (both chat.id and from.id must match admin_chat_id)
+                    if sender_chat_id != str(admin_chat_id) or sender_user_id != str(admin_chat_id):
                         print(f"[SECURITY WARNING] Rejected command from unauthorized chat_id {mask_chat_id(sender_chat_id)}: {repr(mask_token(text[:512], token)[:64])}")
                         continue
                         
@@ -498,6 +502,10 @@ def run_bot_daemon(poll_interval: int = 2) -> None:
                         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Received command: {text}")
                         reply_html = process_command(text)
                         send_message(token, sender_chat_id, reply_html)
+            else:
+                print(f"[POLL WARNING] HTTP {resp.status_code}: {sanitize_error_message(resp.text[:200], token)}")
+                time.sleep(max(poll_interval, 5))
+                continue
                         
             time.sleep(poll_interval)
         except KeyboardInterrupt:

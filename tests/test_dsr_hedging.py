@@ -355,3 +355,32 @@ def test_default_textbook_placeholder_signal_single_source_of_truth():
     assert np.array_equal(s_ops, s_verif, equal_nan=True)
     assert np.array_equal(s_ops, s_paper, equal_nan=True)
     assert np.array_equal(s_ops, s_int, equal_nan=True)
+def test_dsr_registry_corrupted_line_emits_warning_and_run_verification_zero_warnings(tmp_path):
+    """
+    M6.3: Verifies that compute_dsr_from_registry emits a UserWarning when encountering
+    a malformed JSON line in the registry file instead of failing silently, and that
+    simulate_vietnam(..., warn_unlagged=False) suppresses false-positive unlagged warnings.
+    """
+    import warnings
+    from engine import vn_simulator as sim
+
+    bad_reg = tmp_path / "corrupted_registry.jsonl"
+    bad_reg.write_text("{malformed_json_line\n", encoding="utf-8")
+
+    rng = np.random.RandomState(7)
+    daily_r = rng.normal(0.0005, 0.012, size=60)
+
+    with pytest.warns(UserWarning, match="Failed to read trial registry"):
+        res = sim.compute_dsr_from_registry(daily_r, registry_file=str(bad_reg))
+    assert "deflated_sharpe_ratio" in res
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UserWarning)
+        ro = np.full((10, 2), 50000.0)
+        rc = np.full((10, 2), 50000.0)
+        ceil = np.full((10, 2), 53500.0)
+        flr = np.full((10, 2), 46500.0)
+        adv = np.full((10, 2), 1000000.0)
+        w = np.full((10, 2), 0.5)
+        sim.simulate_vietnam(ro, rc, ceil, flr, adv, w, initial_cash=1.0e9, warn_unlagged=False)
+        assert len(caught) == 0
