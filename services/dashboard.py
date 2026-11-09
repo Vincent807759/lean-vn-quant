@@ -39,6 +39,22 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+try:
+    from services.telegram_bot_service import sanitize_error_message
+except ImportError:
+    try:
+        from telegram_bot_service import sanitize_error_message
+    except ImportError:
+        def sanitize_error_message(text: str, token: Optional[str] = None) -> str:
+            if not text:
+                return ""
+            import re
+            cleaned = str(text)
+            cleaned = re.sub(r"bot\d+:[A-Za-z0-9_-]+", "bot[MASKED_TOKEN]", cleaned)
+            cleaned = re.sub(r'[A-Za-z]:[\\/][^\s:<>"\']+', "[PATH]", cleaned)
+            cleaned = re.sub(r"(?:/[a-zA-Z0-9_\.\-]+){2,}", "[PATH]", cleaned)
+            return cleaned
+
 DEFAULT_DATA_DIR = os.path.join(ROOT_DIR, "data")
 if not os.path.exists(DEFAULT_DATA_DIR):
     DEFAULT_DATA_DIR = os.path.join(os.getcwd(), "data")
@@ -58,7 +74,7 @@ def load_portfolio_data(state_file: str = DEFAULT_STATE_FILE, history_file: str 
             with open(state_file, "r", encoding="utf-8") as f:
                 state = json.load(f)
         except Exception as e:
-            print(f"[DASHBOARD] Error reading state JSON: {e}")
+            print(f"[DASHBOARD] Error reading state JSON: {sanitize_error_message(str(e))}")
 
     history_records = []
     if os.path.exists(history_file):
@@ -66,7 +82,7 @@ def load_portfolio_data(state_file: str = DEFAULT_STATE_FILE, history_file: str 
             df = pl.read_csv(history_file)
             history_records = df.to_dicts()
         except Exception as e:
-            print(f"[DASHBOARD] Error reading history CSV: {e}")
+            print(f"[DASHBOARD] Error reading history CSV: {sanitize_error_message(str(e))}")
 
     return {"state": state, "history": history_records}
 
@@ -88,20 +104,35 @@ def generate_html_content(data: Dict[str, Any]) -> str:
 
     holdings = state.get("holdings", {})
     
-    # Mark-to-Market synchronization (M2): Value holdings at latest market price
-    prev_close_map = data.get("prev_close_map")
-    if prev_close_map is None:
-        parquet_file = os.path.join(DEFAULT_DATA_DIR, "vn30_production.parquet")
-        if os.path.exists(parquet_file):
-            try:
-                df_p = pl.read_parquet(parquet_file)
-                latest_date = df_p["date"].max()
-                df_latest = df_p.filter(pl.col("date") == latest_date)
-                prev_close_map = {row["symbol"]: float(row["raw_close"]) for row in df_latest.iter_rows(named=True)}
-            except Exception:
-                prev_close_map = {}
-        else:
+    # Mark-to-Market synchronization (M2 & M7.3): Value holdings at latest market price
+    prev_close_map: Dict[str, float] = {}
+    live_pq = os.path.join(DEFAULT_DATA_DIR, "vn30_live_paper.parquet")
+    parquet_file = (
+        live_pq
+        if (os.path.exists(live_pq) and os.path.getsize(live_pq) > 0)
+        else os.path.join(DEFAULT_DATA_DIR, "vn30_production.parquet")
+    )
+    if os.path.exists(parquet_file):
+        try:
+            df_p = pl.read_parquet(parquet_file)
+            latest_date = df_p["date"].max()
+            df_latest = df_p.filter(pl.col("date") == latest_date)
+            prev_close_map = {
+                str(row["symbol"]): float(row["raw_close"])
+                for row in df_latest.iter_rows(named=True)
+                if row.get("raw_close") is not None and float(row["raw_close"]) > 0
+            }
+        except Exception:
             prev_close_map = {}
+    for src_map in (state.get("prev_close_map"), data.get("prev_close_map")):
+        if isinstance(src_map, dict):
+            for k_sym, v_p in src_map.items():
+                if v_p is not None and float(v_p) > 0:
+                    prev_close_map[str(k_sym)] = float(v_p)
+    for sym, h in holdings.items():
+        lc = h.get("last_close")
+        if lc is not None and float(lc) > 0:
+            prev_close_map[str(sym)] = float(lc)
 
     stock_value = 0.0
     for sym, h in holdings.items():
