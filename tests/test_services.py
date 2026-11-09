@@ -409,7 +409,7 @@ def test_paper_trader_exec_price_clamping_and_t25_next_day_sellable():
             "adv20": 1e11
         }
     }
-    st_res, reps = dpt.execute_pending_orders_and_settle(state, mkt_slice, "2024-01-02", clamp_and_round=True)
+    st_res, reps = dpt.execute_pending_orders_and_settle(state, mkt_slice, "2024-01-02", clamp_and_round=True, penalty_rate_per_day=0.07)
     assert len(reps) == 1
     assert reps[0]["status"] == "FILLED"
     assert reps[0]["fill_price"] == 46500.0
@@ -749,3 +749,207 @@ def test_paper_trader_market_enrichment_and_execution_parity_flags():
         st_gen, df_enr, str(last_dt), enable_greedy_sweep=False, use_adv20_tie_break=True
     )
     assert isinstance(orders_no_sweep, list)
+
+
+def test_m7_live_parquet_isolation_and_end_date_timestamp(tmp_path, monkeypatch):
+    """
+    M7.1: Verifies that live paper-trading data ingestion redirects DEFAULT_PARQUET_FILE
+    to vn30_live_paper.parquet (leaving vn30_production.parquet untouched byte-for-byte)
+    and that fetch_vn_ohlcv parses date-only end_date strings to 23:59:59 of that day.
+    """
+    import datetime
+    import hashlib
+    import inspect
+    import shutil
+    from pathlib import Path
+    import polars as pl
+    from engine import data_pipeline as dp
+    from services import daily_paper_trader as dpt
+    from services import telegram_bot_service as tbs
+
+    # 1. Verify end_date 23:59:59 timestamp calculation in fetch_vn_ohlcv
+    captured_params = {}
+
+    class DummyResp:
+        status_code = 200
+
+        def json(self):
+            return {"t": [1794182400], "o": [130.0], "h": [132.0], "l": [129.0], "c": [131.0], "v": [1000000]}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        captured_params["params"] = dict(params or {})
+        return DummyResp()
+
+    monkeypatch.setattr(dp.requests, "get", fake_get)
+    dp.fetch_vn_ohlcv(
+        symbols=["FPT"],
+        start_date="2026-11-01",
+        end_date="2026-11-09",
+        save_parquet=None,
+        force_fallback=False,
+    )
+    from_ts = int(captured_params["params"]["from"])
+    to_ts = int(captured_params["params"]["to"])
+    assert to_ts - int(datetime.datetime.fromisoformat("2026-11-09").timestamp()) == 86399
+
+    # 2. Verify canonical vn30_production.parquet isolation during live update
+    fake_prod = tmp_path / "vn30_production.parquet"
+    fake_live = tmp_path / "vn30_live_paper.parquet"
+    real_prod = Path(dpt.ROOT_DIR) / "data" / "vn30_production.parquet"
+    df_seed = pl.read_parquet(real_prod).tail(120)
+    df_seed.write_parquet(fake_prod)
+    prod_sha_before = hashlib.sha256(fake_prod.read_bytes()).hexdigest()
+
+    monkeypatch.setattr(dpt, "DEFAULT_PARQUET_FILE", str(fake_prod))
+    monkeypatch.setattr(dpt, "DEFAULT_LIVE_PARQUET_FILE", str(fake_live))
+
+    latest_dt = df_seed["date"].max()
+    next_dt = latest_dt + datetime.timedelta(days=1)
+    df_last_day = df_seed.filter(pl.col("date") == latest_dt).with_columns(pl.lit(next_dt).alias("date"))
+    df_overlap_plus_new = pl.concat([df_seed, df_last_day]).sort(["date", "symbol"])
+
+    monkeypatch.setattr(dp, "fetch_vn_ohlcv", lambda **kwargs: df_overlap_plus_new)
+
+    resolved = dpt._resolve_live_parquet_path(str(fake_prod), is_replay=False)
+    assert Path(resolved) == fake_live
+    assert fake_live.exists() and fake_live.stat().st_size > 0
+    assert hashlib.sha256(fake_prod.read_bytes()).hexdigest() == prod_sha_before
+
+    # Replay mode must NOT redirect
+    assert Path(dpt._resolve_live_parquet_path(str(fake_prod), is_replay=True)) == fake_prod
+    assert tbs.get_parquet_file_path().endswith(("vn30_live_paper.parquet", "vn30_production.parquet"))
+
+
+def test_m7_floor_trapped_sell_order_survival_and_zero_default_penalty():
+    """
+    M7.2: Verifies that execute_pending_orders_and_settle defaults to penalty_rate_per_day=0.0
+    (matching vn_simulator.simulate_vietnam) and that floor-trapped sell orders retain their
+    trapped_days counter and priority queue status across afternoon generate_next_day_orders,
+    while blocking conflicting BUY orders on the floor-trapped symbol.
+    """
+    import inspect
+    from pathlib import Path
+    import polars as pl
+    from engine import vn_simulator as sim
+    from services import daily_paper_trader as dpt
+
+    dpt_default = inspect.signature(dpt.execute_pending_orders_and_settle).parameters["penalty_rate_per_day"].default
+    sim_default = inspect.signature(sim.simulate_vietnam).parameters["penalty_rate_per_day"].default
+    assert dpt_default == 0.0
+    assert dpt_default == sim_default
+
+    pq_path = Path(dpt.ROOT_DIR) / "data" / "vn30_production.parquet"
+    df_enr = dpt._enrich_market_dataframe(pl.read_parquet(pq_path))
+    all_dates = sorted(df_enr["date"].unique().to_list())
+    last_date = all_dates[-1]
+    last_date_str = last_date.isoformat()
+    df_history = df_enr.filter(pl.col("date") <= last_date)
+    today_mkt = {row["symbol"]: dict(row) for row in df_enr.filter(pl.col("date") == last_date).iter_rows(named=True)}
+
+    state = dpt.init_empty_state(100_000_000.0)
+    state["holdings"]["FPT"] = {
+        "sellable_qty": 1000,
+        "locked_t1": 0,
+        "locked_t2": 0,
+        "avg_cost": 130_000.0,
+    }
+    state["pending_orders"] = [
+        {
+            "action": "SELL",
+            "symbol": "FPT",
+            "qty": 1000,
+            "est_price": 130_000.0,
+            "est_value": 130_000_000.0,
+            "target_weight": 0.0,
+            "trapped_days": 1,
+        }
+    ]
+    mkt_trap = {k: dict(v) for k, v in today_mkt.items()}
+    mkt_trap["FPT"]["raw_open"] = mkt_trap["FPT"]["floor_price"]
+
+    state, reps = dpt.execute_pending_orders_and_settle(state, mkt_trap, last_date_str, trading_dates=all_dates)
+    assert reps[0]["status"] == "FLOOR TRAPPED (HOLDING ORDER)"
+    assert reps[0]["trapped_days"] == 2
+    assert state["trapped_sell_orders"][0]["trapped_days"] == 2
+
+    eod_orders = dpt.generate_next_day_orders(state, df_history, last_date_str)
+    fpt_sells = [o for o in eod_orders if o["symbol"] == "FPT" and o["action"] == "SELL"]
+    fpt_buys = [o for o in eod_orders if o["symbol"] == "FPT" and o["action"] == "BUY"]
+    assert len(fpt_sells) == 1
+    assert fpt_sells[0]["trapped_days"] == 2
+    assert fpt_sells[0]["qty"] == 1000
+    assert len(fpt_buys) == 0
+    assert state["trapped_sell_orders"][0]["trapped_days"] == 2
+
+
+def test_m7_corp_action_overlap_alert_idempotent_csv_and_dashboard_mtm(tmp_path):
+    """
+    M7.3: Verifies corporate action overlap detection on held symbols, idempotent date
+    deduplication in append_nav_history, and MTM close price resolution in dashboard.py.
+    """
+    import datetime
+    import polars as pl
+    from services import daily_paper_trader as dpt
+    from services import dashboard as dash
+
+    # 1. Corporate action detection on overlap window for held symbol FPT
+    dates = [datetime.date(2026, 10, 20), datetime.date(2026, 10, 21)]
+    df_cache = pl.DataFrame({
+        "date": dates,
+        "symbol": ["FPT", "FPT"],
+        "adj_close": [100_000.0, 102_000.0],
+    })
+    df_new = pl.DataFrame({
+        "date": dates,
+        "symbol": ["FPT", "FPT"],
+        "adj_close": [90_000.0, 91_800.0],  # 10% ex-dividend / split adjustment
+    })
+    holdings = {"FPT": {"sellable_qty": 500, "locked_t1": 200, "locked_t2": 0, "avg_cost": 100_000.0}}
+    alerts = dpt.detect_corporate_action_on_overlap(
+        df_cache, df_new, holdings=holdings, overlap_window=20, detected_date="2026-10-22"
+    )
+    assert len(alerts) == 1
+    assert alerts[0]["symbol"] == "FPT"
+    assert alerts[0]["held_qty"] == 700
+    assert alerts[0]["requires_manual_reconcile"] is True
+    assert alerts[0]["adj_ratio"] == pytest.approx(0.9)
+
+    state = dpt.init_empty_state(100_000_000.0)
+    state["holdings"] = holdings
+    state["corporate_action_alerts"] = alerts
+    tg_msg = dpt.build_telegram_summary(state, "2026-10-22", [], [], [datetime.date(2026, 10, 22)])
+    assert "CORP ACTION ALERT" in tg_msg
+    assert "FPT" in tg_msg
+
+    # 2. Idempotent append_nav_history deduplicating same date
+    csv_file = tmp_path / "paper_nav_history.csv"
+    rec1 = {
+        "date": "2026-10-22",
+        "real_nav": 100_100_000.0,
+        "available_cash": 50_000_000.0,
+        "receivable_cash": 0.0,
+        "stock_value": 50_100_000.0,
+        "naive_nav": 100_200_000.0,
+        "implementation_shortfall_pct": 0.10,
+        "daily_return_real": 0.001,
+        "daily_return_naive": 0.002,
+        "orders_executed": 1,
+    }
+    rec2 = dict(rec1, real_nav=100_500_000.0, orders_executed=2)
+    dpt.append_nav_history(str(csv_file), rec1)
+    dpt.append_nav_history(str(csv_file), rec2)
+    df_csv = pl.read_csv(csv_file)
+    assert len(df_csv) == 1
+    assert float(df_csv["real_nav"][0]) == pytest.approx(100_500_000.0)
+    assert int(df_csv["orders_executed"][0]) == 2
+
+    # 3. Dashboard MTM lookup from state["prev_close_map"] & hold["last_close"]
+    dash_state = dpt.init_empty_state(100_000_000.0)
+    dash_state["last_real_nav"] = 115_000_000.0
+    dash_state["available_cash"] = 0.0
+    dash_state["holdings"] = {
+        "FPT": {"sellable_qty": 1000, "locked_t1": 0, "locked_t2": 0, "avg_cost": 100_000.0, "last_close": 115_000.0}
+    }
+    dash_state["prev_close_map"] = {"FPT": 112_000.0}
+    html_out = dash.generate_html_content({"state": dash_state, "history": []})
+    assert "115,000,000 VND" in html_out
