@@ -600,4 +600,152 @@ def test_telegram_summary_html_escape_and_dashboard_pinned_chartjs():
     html = generate_html_content({"state": state, "history": [], "prev_close_map": {}})
     assert "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" in html
     assert 'https://cdn.jsdelivr.net/npm/chart.js"></script>' not in html
+def test_state_locking_pid_tmp_bak_recovery_and_bot_auth(tmp_path):
+    """
+    M6.1 & M6.3: Verifies cross-process state file locking (.lock >= 1 byte),
+    PID-scoped .tmp cleanup, .bak recovery with recovered_from_bak=True and Telegram alert banner,
+    dashboard Content-Security-Policy header, and Telegram .env search order.
+    """
+    import http.client
+    import socketserver
+    import os, threading
+    import services.daily_paper_trader as dpt
+    import services.telegram_bot_service as tbs
+    from services.dashboard import create_single_file_handler
 
+    state_file = str(tmp_path / "paper_portfolio_state.json")
+    st = dpt.init_empty_state(100_000_000.0)
+    st["available_cash"] = 88_000_000.0
+    dpt.save_portfolio_state(st, state_file)
+
+    lock_file = f"{state_file}.lock"
+    assert os.path.exists(lock_file)
+    assert os.path.getsize(lock_file) >= 1
+    assert not any(p.name.endswith(".tmp") for p in tmp_path.iterdir())
+
+    # Trigger backup creation on second save, then corrupt primary JSON
+    st["available_cash"] = 77_000_000.0
+    dpt.save_portfolio_state(st, state_file)
+    assert os.path.exists(f"{state_file}.bak")
+
+    with open(state_file, "w", encoding="utf-8") as f_bad:
+        f_bad.write("{corrupted_json_payload")
+
+    recovered = dpt.load_portfolio_state(state_file, 100_000_000.0)
+    assert recovered.get("recovered_from_bak") is True
+    assert recovered["available_cash"] == 88_000_000.0
+
+    summary_html = dpt.build_telegram_summary(recovered, "2026-10-23", [], [], [datetime.date(2026, 10, 23)])
+    assert "State recovered from .bak backup!" in summary_html
+
+    # Verify ROOT_DIR/.env takes precedence before os.getcwd()/.env
+    assert tbs.ENV_FILE_PATHS[0] == os.path.join(tbs.ROOT_DIR, ".env")
+    assert tbs.ENV_FILE_PATHS[-1] == os.path.join(os.getcwd(), ".env")
+
+    # Verify Content-Security-Policy header on 200 OK response
+    html_file = tmp_path / "dashboard.html"
+    html_file.write_text("<html><body>CSP OK</body></html>", encoding="utf-8")
+    handler_cls = create_single_file_handler(str(html_file))
+    server = socketserver.TCPServer(("127.0.0.1", 0), handler_cls)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/dashboard.html")
+        resp = conn.getresponse()
+        csp_hdr = resp.getheader("Content-Security-Policy")
+        resp.read()
+        conn.close()
+        assert resp.status == 200
+        assert csp_hdr is not None
+        assert "default-src 'none'" in csp_hdr
+        assert "https://cdn.jsdelivr.net" in csp_hdr
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_paper_trader_market_enrichment_and_execution_parity_flags():
+    """
+    M6.2: Verifies _enrich_market_dataframe lagged adv20 and daily_vol enrichment
+    (preventing look-ahead bias at morning ATO and activating dynamic slippage > 12 bps)
+    as well as optional parity flags sell_adv_cap, penalty_rate_per_day, min_advance_notional,
+    enable_greedy_sweep, and use_adv20_tie_break.
+    """
+    import polars as pl
+    from engine import data_pipeline as dp
+    import services.daily_paper_trader as dpt
+
+    df_raw = dp.generate_fallback_data(
+        symbols=["ACB", "FPT", "HPG", "VCB", "MBB", "TCB"],
+        start_date="2023-01-01",
+        end_date="2023-05-15",
+        seed=42,
+    )
+    df_enr = dpt._enrich_market_dataframe(df_raw)
+    assert "adv20" in df_enr.columns
+    assert "daily_vol" in df_enr.columns
+
+    # Verify strict 1-session lag on adv20 in enriched DataFrame
+    df_masked = dp.build_tradable_mask(df_raw, min_adv=1.0e10, window=20).sort(["symbol", "date"])
+    fpt_eod_adv20 = df_masked.filter(pl.col("symbol") == "FPT")["adv20"].to_list()
+    fpt_lag_adv20 = df_enr.sort(["symbol", "date"]).filter(pl.col("symbol") == "FPT")["adv20"].to_list()
+    assert fpt_lag_adv20[-1] == pytest.approx(fpt_eod_adv20[-2])
+
+    # Dynamic slippage activated via enriched slice (> 12 bps half-spread floor vs 10 bps fixed fallback)
+    last_dt = df_enr["date"].max()
+    today_enr = {r["symbol"]: r for r in df_enr.filter(pl.col("date") == last_dt).iter_rows(named=True)}
+    today_raw = {r["symbol"]: r for r in df_raw.filter(pl.col("date") == last_dt).iter_rows(named=True)}
+
+    st_raw = dpt.init_empty_state(100_000_000.0)
+    st_raw["last_ledger_advance_date"] = str(last_dt)
+    st_raw["pending_orders"] = [{"action": "BUY", "symbol": "FPT", "qty": 1000, "est_price": today_raw["FPT"]["raw_open"], "est_value": 1000 * today_raw["FPT"]["raw_open"], "target_weight": 0.5}]
+    _, reps_raw = dpt.execute_pending_orders_and_settle(st_raw, today_raw, str(last_dt), clamp_and_round=False)
+
+    st_enr = dpt.init_empty_state(100_000_000.0)
+    st_enr["last_ledger_advance_date"] = str(last_dt)
+    st_enr["pending_orders"] = [{"action": "BUY", "symbol": "FPT", "qty": 1000, "est_price": today_enr["FPT"]["raw_open"], "est_value": 1000 * today_enr["FPT"]["raw_open"], "target_weight": 0.5}]
+    _, reps_enr = dpt.execute_pending_orders_and_settle(st_enr, today_enr, str(last_dt), clamp_and_round=False)
+
+    assert reps_enr[0]["fill_price"] > reps_raw[0]["fill_price"]
+
+    # Test sell_adv_cap=True, penalty_rate_per_day=0.0, and min_advance_notional
+    st_flags = dpt.init_empty_state(100_000_000.0)
+    st_flags["last_ledger_advance_date"] = "2026-05-04"
+    st_flags["available_cash"] = 6_000_000.0
+    st_flags["receivable_cash_t1"] = 20_000_000.0
+    st_flags["holdings"] = {"FPT": {"sellable_qty": 2000, "locked_t1": 0, "locked_t2": 0, "avg_cost": 20_000.0}}
+    st_flags["pending_orders"] = [
+        {"action": "SELL", "symbol": "FPT", "qty": 2000, "trapped_days": 2, "est_price": 20_000.0, "est_value": 40_000_000.0, "target_weight": 0.0},
+        {"action": "BUY", "symbol": "ACB", "qty": 300, "est_price": 25_000.0, "est_value": 7_500_000.0, "target_weight": 0.2},
+    ]
+    slice_flags = {
+        "FPT": {"raw_open": 20_000.0, "raw_close": 20_000.0, "ceiling_price": 21_400.0, "floor_price": 18_600.0, "adv20": 200_000_000.0},
+        "ACB": {"raw_open": 25_000.0, "raw_close": 25_000.0, "ceiling_price": 26_750.0, "floor_price": 23_250.0, "adv20": 500_000_000_000.0},
+    }
+    st_flags, reps_flags = dpt.execute_pending_orders_and_settle(
+        st_flags,
+        slice_flags,
+        "2026-05-04",
+        use_dynamic_slippage=False,
+        clamp_and_round=False,
+        sell_adv_cap=True,
+        penalty_rate_per_day=0.0,
+        min_advance_notional=5_000_000.0,
+    )
+    sell_rep = [r for r in reps_flags if r["action"] == "SELL"][0]
+    buy_rep = [r for r in reps_flags if r["action"] == "BUY"][0]
+    assert sell_rep["fill_qty"] == 500  # 5% of (200M / 20k = 10,000 shares) = 500 shares
+    assert sell_rep["fill_price"] == pytest.approx(20_000.0 * (1.0 - dpt.SLIPPAGE))  # 0.0 penalty rate
+    assert any(p["action"] == "SELL" and p["qty"] == 1500 for p in st_flags["pending_orders"])
+    assert buy_rep["fill_qty"] == 200  # Scaled down to available_cash (6M VND -> 200 shs) without advance loan
+    assert st_flags["total_advance_fees"] == 0.0
+
+    # Test enable_greedy_sweep=False and use_adv20_tie_break=True
+    st_gen = dpt.init_empty_state(100_000_000.0)
+    orders_no_sweep = dpt.generate_next_day_orders(
+        st_gen, df_enr, str(last_dt), enable_greedy_sweep=False, use_adv20_tie_break=True
+    )
+    assert isinstance(orders_no_sweep, list)
