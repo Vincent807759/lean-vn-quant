@@ -28,9 +28,11 @@ import sys
 import os
 import html
 import json
+import time
 import shutil
 import argparse
 import datetime
+import contextlib
 from typing import Dict, List, Tuple, Any, Optional
 
 import requests
@@ -55,13 +57,13 @@ try:
     from engine import vn_simulator as sim
     from engine import alpha_ops as ops
     from engine import data_pipeline as dp
-    from services.telegram_bot_service import mask_token
+    from services.telegram_bot_service import mask_token, sanitize_error_message
 except ImportError:
     import vn_simulator as sim
     import alpha_ops as ops
     import data_pipeline as dp
     try:
-        from telegram_bot_service import mask_token
+        from telegram_bot_service import mask_token, sanitize_error_message
     except ImportError:
         def mask_token(text: str, token: Optional[str] = None) -> str:
             if not text:
@@ -77,6 +79,15 @@ except ImportError:
                 "[MASKED_TOKEN]",
                 cleaned,
             )
+            return cleaned
+
+        def sanitize_error_message(text: str, token: Optional[str] = None) -> str:
+            if not text:
+                return ""
+            import re
+            cleaned = mask_token(text, token=token)
+            cleaned = re.sub(r'[A-Za-z]:[\\/][^\s:<>"\']+', '[PATH]', cleaned)
+            cleaned = re.sub(r'(?:/[a-zA-Z0-9_\.\-]+){2,}', '[PATH]', cleaned)
             return cleaned
 
 # ==============================================================================
@@ -130,69 +141,122 @@ def init_empty_state(initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[s
     }
 
 
+@contextlib.contextmanager
+def _state_file_lock(state_file: str, timeout: float = 10.0):
+    """
+    Cross-process exclusive file lock for state persistence (Windows msvcrt / POSIX fcntl).
+    Ensures at least 1 physical byte in the .lock file before locking byte 0 on Windows.
+    """
+    state_dir = os.path.dirname(os.path.abspath(state_file))
+    os.makedirs(state_dir, exist_ok=True)
+    lock_path = f"{state_file}.lock"
+    f_lock = open(lock_path, "a+b")
+    locked = False
+    try:
+        f_lock.seek(0, os.SEEK_END)
+        if f_lock.tell() == 0:
+            f_lock.write(b"0")
+            f_lock.flush()
+        deadline = time.time() + max(timeout, 0.1)
+        while True:
+            try:
+                f_lock.seek(0)
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(f_lock.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(f_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+                break
+            except (OSError, IOError):
+                if time.time() >= deadline:
+                    raise TimeoutError(f"Timeout acquiring state lock {lock_path}")
+                time.sleep(0.05)
+        yield
+    finally:
+        if locked:
+            try:
+                f_lock.seek(0)
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(f_lock.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(f_lock.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+        try:
+            f_lock.close()
+        except Exception:
+            pass
+
+
 def load_portfolio_state(state_file: str, initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[str, Any]:
     """
-    Loads portfolio state from JSON file.
-    B13 Invariant: If state file is corrupted, attempts recovery from .bak file.
+    Loads portfolio state from JSON file under cross-process lock.
+    B13 Invariant: If state file is corrupted, attempts recovery from .bak file and sets recovered_from_bak=True.
     If both fail, strictly raises RuntimeError to prevent catastrophic silent state reset.
     """
     bak_file = f"{state_file}.bak"
-    if os.path.exists(state_file):
-        try:
-            with open(state_file, "r", encoding="utf-8") as f:
-                state = json.load(f)
-                return state
-        except Exception as e:
-            print(f"[ERROR] Corrupted state file {state_file} ({e}). Attempting backup recovery from {bak_file}...")
-            if os.path.exists(bak_file):
-                try:
-                    with open(bak_file, "r", encoding="utf-8") as f_bak:
-                        state = json.load(f_bak)
-                        print(f"[RECOVERY] Successfully recovered portfolio state from {bak_file}")
-                        return state
-                except Exception as bak_err:
+    with _state_file_lock(state_file):
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                    return state
+            except Exception as e:
+                print(f"[ERROR] Corrupted state file {state_file} ({e}). Attempting backup recovery from {bak_file}...")
+                if os.path.exists(bak_file):
+                    try:
+                        with open(bak_file, "r", encoding="utf-8") as f_bak:
+                            state = json.load(f_bak)
+                            state["recovered_from_bak"] = True
+                            print(f"[RECOVERY] Successfully recovered portfolio state from {bak_file}")
+                            return state
+                    except Exception as bak_err:
+                        raise RuntimeError(
+                            f"B13 FATAL: Both primary state file ({state_file}: {e}) and backup ({bak_file}: {bak_err}) "
+                            "are corrupted! Refusing to reset empty state automatically."
+                        )
+                else:
                     raise RuntimeError(
-                        f"B13 FATAL: Both primary state file ({state_file}: {e}) and backup ({bak_file}: {bak_err}) "
-                        "are corrupted! Refusing to reset empty state automatically."
+                        f"B13 FATAL: Primary state file ({state_file}) is corrupted ({e}) and no backup file ({bak_file}) exists! "
+                        "Refusing to reset empty state automatically."
                     )
-            else:
-                raise RuntimeError(
-                    f"B13 FATAL: Primary state file ({state_file}) is corrupted ({e}) and no backup file ({bak_file}) exists! "
-                    "Refusing to reset empty state automatically."
-                )
     return init_empty_state(initial_capital)
 
 
 def save_portfolio_state(state: Dict[str, Any], state_file: str) -> None:
     """
-    Saves portfolio state atomically into JSON file with fsync and automatic backup (.bak).
-    B13 Protocol:
-    1. Backup existing state_file to state_file.bak
-    2. Write new payload into temporary file state_file.tmp
-    3. Flush and call os.fsync() to force hardware disk write
-    4. Atomic rename via os.replace(tmp, state_file)
+    Saves portfolio state atomically into JSON file with cross-process lock, PID-scoped tmp file,
+    fsync, automatic backup (.bak), and guaranteed tmp cleanup on error.
     """
     state_dir = os.path.dirname(os.path.abspath(state_file))
     os.makedirs(state_dir, exist_ok=True)
-    
+
     bak_file = f"{state_file}.bak"
-    tmp_file = f"{state_file}.tmp"
-    
-    # 1. Backup current state
-    if os.path.exists(state_file):
+    tmp_file = f"{state_file}.{os.getpid()}.tmp"
+
+    with _state_file_lock(state_file):
+        if os.path.exists(state_file):
+            try:
+                shutil.copy2(state_file, bak_file)
+            except Exception as e:
+                print(f"[WARNING] Failed to create backup state {bak_file}: {e}")
+
         try:
-            shutil.copy2(state_file, bak_file)
-        except Exception as e:
-            print(f"[WARNING] Failed to create backup state {bak_file}: {e}")
-            
-    # 2. Write to tmp file with fsync
-    with open(tmp_file, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-        
-    # 3. Atomic replacement
-    os.replace(tmp_file, state_file)
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_file, state_file)
+        finally:
+            if os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except Exception:
+                    pass
 
 
 def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
@@ -345,7 +409,16 @@ def fetch_or_update_data(
                     new_candles = df_new.filter(pl.col("date") > latest_dt)
                     if len(new_candles) > 0:
                         combined = pl.concat([df_market, new_candles]).sort(["date", "symbol"])
-                        combined.write_parquet(parquet_file)
+                        tmp_pq = f"{parquet_file}.{os.getpid()}.tmp"
+                        try:
+                            combined.write_parquet(tmp_pq)
+                            os.replace(tmp_pq, parquet_file)
+                        finally:
+                            if os.path.exists(tmp_pq):
+                                try:
+                                    os.remove(tmp_pq)
+                                except Exception:
+                                    pass
                         print(f"[DATA] Appended {len(new_candles)} new daily candles to {parquet_file}.")
                         return combined
         except Exception as e:
@@ -476,6 +549,23 @@ def _compute_settlement_calendar_days(
         return 1, 2
 
 
+def _enrich_market_dataframe(df_market: pl.DataFrame) -> pl.DataFrame:
+    """
+    Enriches raw OHLCV DataFrame with lagged adv20 and lagged 20-day return volatility (daily_vol)
+    known at session t-1 close prior to morning t ATO execution (matching vn_simulator.py t_lag = t - 1).
+    """
+    df_masked = dp.build_tradable_mask(df_market, min_adv=1.0e10, window=20).sort(["symbol", "date"])
+    try:
+        vol_eod = pl.col("raw_close").pct_change().rolling_std(window_size=20, min_samples=5).over("symbol").fill_null(0.015)
+    except TypeError:
+        vol_eod = pl.col("raw_close").pct_change().rolling_std(window_size=20, min_periods=5).over("symbol").fill_null(0.015)
+    df_with_eod = df_masked.with_columns(vol_eod.alias("_vol_eod"))
+    return df_with_eod.with_columns([
+        pl.col("adv20").shift(1).over("symbol").fill_null(pl.col("adv20")).fill_null(1.0e11).alias("adv20"),
+        pl.col("_vol_eod").shift(1).over("symbol").fill_null(pl.col("_vol_eod")).fill_null(0.015).alias("daily_vol"),
+    ]).drop("_vol_eod").sort(["date", "symbol"])
+
+
 def execute_pending_orders_and_settle(
     state: Dict[str, Any],
     today_market_slice: Dict[str, Dict[str, float]],
@@ -483,7 +573,10 @@ def execute_pending_orders_and_settle(
     use_dynamic_slippage: bool = False,
     clamp_and_round: bool = True,
     round_adverse: bool = False,
-    trading_dates: Optional[List[Any]] = None
+    trading_dates: Optional[List[Any]] = None,
+    sell_adv_cap: bool = False,
+    penalty_rate_per_day: float = 0.07,
+    min_advance_notional: float = 0.0
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
     Executes morning ATO session workflow:
@@ -535,6 +628,11 @@ def execute_pending_orders_and_settle(
             
         sellable = state["holdings"].get(sym, {}).get("sellable_qty", 0)
         fill_qty = min(qty_requested, sellable)
+        if sell_adv_cap:
+            adv20_s = float(mkt.get("adv20", mkt.get("adv", 1e11)))
+            max_sell_adv = int((adv20_s * MAX_ADV_PARTICIPATION) / max(raw_open, 1.0))
+            max_sell_adv = max(LOT_SIZE, (max_sell_adv // LOT_SIZE) * LOT_SIZE)
+            fill_qty = min(fill_qty, max_sell_adv)
         fill_qty = (fill_qty // LOT_SIZE) * LOT_SIZE
         
         if fill_qty <= 0:
@@ -545,6 +643,13 @@ def execute_pending_orders_and_settle(
             rep["note"] = f"Shares not yet settled in tradable account (still locked in T+1/T+2)."
             executed_reports.append(rep)
             continue
+
+        if sell_adv_cap and fill_qty < min(qty_requested, sellable):
+            rem_sell = ((min(qty_requested, sellable) - fill_qty) // LOT_SIZE) * LOT_SIZE
+            if rem_sell >= LOT_SIZE:
+                o_rem = dict(o)
+                o_rem["qty"] = int(rem_sell)
+                remaining_pending.append(o_rem)
             
         ceil_p = mkt.get("ceiling_price", raw_open * 1.07)
         if use_dynamic_slippage or "daily_vol" in mkt:
@@ -555,7 +660,7 @@ def execute_pending_orders_and_settle(
         else:
             slip_rate = SLIPPAGE
         trapped_days = o.get("trapped_days", 0)
-        penalty_slippage = min(0.40, 0.07 * trapped_days)
+        penalty_slippage = min(0.40, float(penalty_rate_per_day) * trapped_days)
         raw_exec = raw_open * (1.0 - slip_rate - penalty_slippage)
         exec_price = round_and_clamp_exec_price(raw_exec, "SELL", floor_p, ceil_p, clamp_and_round=clamp_and_round, round_adverse=round_adverse)
         gross_val = fill_qty * exec_price
@@ -640,6 +745,11 @@ def execute_pending_orders_and_settle(
         shares_afford = int(total_purchasing_power // cost_per_share)
         shares_afford = (shares_afford // LOT_SIZE) * LOT_SIZE
         fill_qty = min(capped_qty, shares_afford)
+        if min_advance_notional > 0.0 and fill_qty * cost_per_share > avail_cash:
+            if (fill_qty * cost_per_share - avail_cash) < min_advance_notional:
+                cash_only_sh = (int(avail_cash // cost_per_share) // LOT_SIZE) * LOT_SIZE
+                fill_qty = min(capped_qty, cash_only_sh)
+                total_purchasing_power = avail_cash
 
         if (use_dynamic_slippage or "daily_vol" in mkt) and fill_qty != capped_qty and fill_qty > 0:
             slip_rate = float(sim._calc_dynamic_slippage(float(fill_qty), adv20_sh, vol_val, base_slippage=SLIPPAGE))
@@ -835,7 +945,9 @@ def generate_next_day_orders(
     state: Dict[str, Any],
     df_market_history: pl.DataFrame,
     session_date: str,
-    strict_t25_ato_lock: bool = False
+    strict_t25_ato_lock: bool = False,
+    enable_greedy_sweep: bool = True,
+    use_adv20_tie_break: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Computes Alpha signals at session close and generates morning ATO order ticket:
@@ -853,6 +965,7 @@ def generate_next_day_orders(
     df_masked = dp.build_tradable_mask(df_market_history, min_adv=1.0e10, window=20)
     raw_close, dates, syms = dp.pivot_to_matrix(df_masked, "raw_close")
     tradable_mask, _, _ = dp.pivot_to_matrix(df_masked, "tradable_mask")
+    adv20_mat, _, _ = dp.pivot_to_matrix(df_masked, "adv20")
     
     T, N = raw_close.shape
     if T < 55:
@@ -868,7 +981,8 @@ def generate_next_day_orders(
         top_k_out=4,
         ema_span=20,
         max_daily_turnover=0.015,
-        mask=tradable_mask
+        mask=tradable_mask,
+        tie_break_key=adv20_mat if use_adv20_tie_break else None
     )
     
     today_target_w = target_weights_matrix[-1]
@@ -961,7 +1075,7 @@ def generate_next_day_orders(
     total_available_funds = state["available_cash"] + cap_t1_swp + cap_t2_swp
     rem_cash = total_available_funds - total_est_buy_cost
     
-    if rem_cash > 0.15 * real_nav:
+    if enable_greedy_sweep and rem_cash > 0.15 * real_nav:
         sma50 = ops.ts_mean(raw_close, 50)
         top_candidates = []
         alpha_today = alpha[-1]
@@ -1108,9 +1222,10 @@ def load_env_variables() -> Dict[str, str]:
     env_vars = {}
     base_dir = os.path.dirname(os.path.abspath(__file__))
     search_paths = [
-        os.path.join(os.getcwd(), ".env"),
+        os.path.join(ROOT_DIR, ".env"),
         os.path.join(base_dir, ".env"),
         os.path.join(base_dir, "..", ".env"),
+        os.path.join(os.getcwd(), ".env"),
     ]
     for p in search_paths:
         if os.path.exists(p):
@@ -1151,11 +1266,11 @@ def send_telegram_alert(report_text: str) -> bool:
             print("[TELEGRAM] Daily report successfully dispatched to smartphone via Telegram Bot.")
             return True
         else:
-            safe_text = mask_token(resp.text, token)
+            safe_text = sanitize_error_message(resp.text, token)
             print(f"[TELEGRAM ERROR] HTTP {resp.status_code}: {safe_text}")
             return False
     except Exception as e:
-        safe_err = mask_token(str(e), token)
+        safe_err = sanitize_error_message(str(e), token)
         print(f"[TELEGRAM CONNECTION ERROR] {safe_err}")
         return False
 
@@ -1198,9 +1313,12 @@ def build_telegram_summary(
     else:
         orders_text = "• <i>No rebalancing orders. Holding current portfolio.</i>"
 
+    bak_warning = ""
+    if state.get("recovered_from_bak"):
+        bak_warning = "\n⚠️ <b>WARNING:</b> State recovered from .bak backup!\n"
     safe_session_date = html.escape(str(session_date), quote=True)
     msg = f"""<b>📊 LEAN VN-QUANT DAILY PAPER TRADING REPORT</b>
-📅 Session: <b>{safe_session_date}</b>{catch_up_info}
+📅 Session: <b>{safe_session_date}</b>{catch_up_info}{bak_warning}
 💰 <b>PORTFOLIO & PERFORMANCE:</b>
 • Real NAV: <b>{real_nav:,.0f} VND</b> (<b>{ret_pct:+.2f}%</b>)
 • Available Cash: <b>{avail_cash:,.0f} VND</b>
@@ -1236,7 +1354,7 @@ def run_test_replay_10(parquet_file: str, days: int = 10) -> None:
     state = init_empty_state(DEFAULT_INITIAL_CAPITAL)
     save_portfolio_state(state, replay_state_file)
 
-    df_market = pl.read_parquet(parquet_file)
+    df_market = _enrich_market_dataframe(pl.read_parquet(parquet_file))
     all_dates = sorted(df_market.select("date").unique()["date"].to_list())
     
     if len(all_dates) < days:
@@ -1333,7 +1451,7 @@ def main():
         print("   LEAN VN-QUANT: MORNING PRE-OPEN STAGING & ATO TICKET VERIFICATION (08:15 ICT)")
         print("=" * 90)
         state = load_portfolio_state(args.state_file, args.capital)
-        df_market = fetch_or_update_data(args.parquet, is_replay=False)
+        df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False))
         all_dates = sorted(df_market.select("date").unique()["date"].to_list())
         latest_date = all_dates[-1]
         today_str = datetime.date.today().isoformat()
@@ -1358,7 +1476,7 @@ def main():
         print("[PRE-OPEN SUCCESS] ATO Order tickets staged and verified. Ready for 09:00:00 HOSE opening auction.")
         return
 
-    df_market = fetch_or_update_data(args.parquet, is_replay=False)
+    df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False))
     all_dates = sorted(df_market.select("date").unique()["date"].to_list())
 
     state = load_portfolio_state(args.state_file, args.capital)
