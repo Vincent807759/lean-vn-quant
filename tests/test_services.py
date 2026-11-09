@@ -796,7 +796,16 @@ def test_m7_live_parquet_isolation_and_end_date_timestamp(tmp_path, monkeypatch)
     fake_prod = tmp_path / "vn30_production.parquet"
     fake_live = tmp_path / "vn30_live_paper.parquet"
     real_prod = Path(dpt.ROOT_DIR) / "data" / "vn30_production.parquet"
-    df_seed = pl.read_parquet(real_prod).tail(120)
+    df_seed = (
+        pl.read_parquet(real_prod).tail(120)
+        if real_prod.exists()
+        else dp.generate_fallback_data(
+            symbols=["ACB", "FPT", "HPG", "VCB", "MBB", "TCB"],
+            start_date="2023-01-01",
+            end_date="2023-05-15",
+            seed=42,
+        )
+    )
     df_seed.write_parquet(fake_prod)
     prod_sha_before = hashlib.sha256(fake_prod.read_bytes()).hexdigest()
 
@@ -830,6 +839,7 @@ def test_m7_floor_trapped_sell_order_survival_and_zero_default_penalty():
     import inspect
     from pathlib import Path
     import polars as pl
+    from engine import data_pipeline as dp
     from engine import vn_simulator as sim
     from services import daily_paper_trader as dpt
 
@@ -839,7 +849,17 @@ def test_m7_floor_trapped_sell_order_survival_and_zero_default_penalty():
     assert dpt_default == sim_default
 
     pq_path = Path(dpt.ROOT_DIR) / "data" / "vn30_production.parquet"
-    df_enr = dpt._enrich_market_dataframe(pl.read_parquet(pq_path))
+    df_raw = (
+        pl.read_parquet(pq_path)
+        if pq_path.exists()
+        else dp.generate_fallback_data(
+            symbols=["ACB", "FPT", "HPG", "VCB", "MBB", "TCB"],
+            start_date="2023-01-01",
+            end_date="2023-05-15",
+            seed=42,
+        )
+    )
+    df_enr = dpt._enrich_market_dataframe(df_raw)
     all_dates = sorted(df_enr["date"].unique().to_list())
     last_date = all_dates[-1]
     last_date_str = last_date.isoformat()
