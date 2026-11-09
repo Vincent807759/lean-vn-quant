@@ -389,7 +389,7 @@ def fetch_vn_ohlcv(
                 raise PermissionError(
                     f"S1 Invariant Violated: Synthetic data can only be written to tests/tmp/, rejected path: '{save_parquet}'"
                 )
-        df.write_parquet(save_parquet)
+        _tmp_pq = f"{save_parquet}.{os.getpid()}.tmp"; df.write_parquet(_tmp_pq); os.replace(_tmp_pq, save_parquet)
         
     return df
 
