@@ -262,31 +262,52 @@ def save_portfolio_state(state: Dict[str, Any], state_file: str) -> None:
 
 
 def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
-    """Appends daily NAV and Implementation Shortfall record into CSV ledger."""
+    """Appends daily NAV and Implementation Shortfall record into CSV ledger idempotently by date."""
     os.makedirs(os.path.dirname(os.path.abspath(history_file)), exist_ok=True)
-    file_exists = os.path.exists(history_file) and os.path.getsize(history_file) > 0
     headers = [
         "date", "real_nav", "available_cash", "receivable_cash", "stock_value",
         "naive_nav", "implementation_shortfall_pct", "daily_return_real",
         "daily_return_naive", "orders_executed"
     ]
-    
-    with open(history_file, "a", encoding="utf-8") as f:
-        if not file_exists:
-            f.write(",".join(headers) + "\n")
-        line = [
-            str(record["date"]),
-            f"{record['real_nav']:.2f}",
-            f"{record['available_cash']:.2f}",
-            f"{record['receivable_cash']:.2f}",
-            f"{record['stock_value']:.2f}",
-            f"{record['naive_nav']:.2f}",
-            f"{record['implementation_shortfall_pct']:.4f}",
-            f"{record['daily_return_real']:.6f}",
-            f"{record['daily_return_naive']:.6f}",
-            str(record["orders_executed"])
-        ]
-        f.write(",".join(line) + "\n")
+    rec_date = str(record["date"])
+    new_line = ",".join([
+        rec_date,
+        f"{record['real_nav']:.2f}",
+        f"{record['available_cash']:.2f}",
+        f"{record['receivable_cash']:.2f}",
+        f"{record['stock_value']:.2f}",
+        f"{record['naive_nav']:.2f}",
+        f"{record['implementation_shortfall_pct']:.4f}",
+        f"{record['daily_return_real']:.6f}",
+        f"{record['daily_return_naive']:.6f}",
+        str(record["orders_executed"])
+    ])
+    with _state_file_lock(history_file):
+        kept_rows: List[str] = []
+        if os.path.exists(history_file) and os.path.getsize(history_file) > 0:
+            with open(history_file, "r", encoding="utf-8") as rf:
+                for raw_ln in rf:
+                    s_ln = raw_ln.strip()
+                    if not s_ln or s_ln.startswith("date,"):
+                        continue
+                    if s_ln.split(",", 1)[0].strip() != rec_date:
+                        kept_rows.append(s_ln)
+        kept_rows.append(new_line)
+        tmp_csv = f"{history_file}.{os.getpid()}.tmp"
+        try:
+            with open(tmp_csv, "w", encoding="utf-8", newline="") as wf:
+                wf.write(",".join(headers) + "\n")
+                for r_ln in kept_rows:
+                    wf.write(r_ln + "\n")
+                wf.flush()
+                os.fsync(wf.fileno())
+            os.replace(tmp_csv, history_file)
+        finally:
+            if os.path.exists(tmp_csv):
+                try:
+                    os.remove(tmp_csv)
+                except Exception:
+                    pass
 
 
 # ==============================================================================
@@ -327,6 +348,59 @@ def check_cache_overlap_and_reconcile(
     if max_diff is not None and max_diff > tolerance:
         return False
     return True
+
+
+def detect_corporate_action_on_overlap(
+    df_cache: pl.DataFrame,
+    df_new: pl.DataFrame,
+    holdings: Optional[Dict[str, Any]] = None,
+    overlap_window: int = 20,
+    tolerance: float = 1e-4,
+    detected_date: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Identifies symbols whose historical adj_close shifted across the overlap window
+    (ex-dividend / stock split / bonus shares) and flags held positions for reconciliation.
+    """
+    cache_dates = set(df_cache["date"].unique().to_list())
+    new_dates = set(df_new["date"].unique().to_list())
+    common_dates = sorted(cache_dates & new_dates)
+    if not common_dates:
+        return []
+    overlap_dates = common_dates[-overlap_window:]
+    cache_sub = df_cache.filter(pl.col("date").is_in(overlap_dates)).select(["date", "symbol", "adj_close"])
+    new_sub = df_new.filter(pl.col("date").is_in(overlap_dates)).select(["date", "symbol", "adj_close"])
+    joined = cache_sub.join(new_sub, on=["date", "symbol"], suffix="_new").sort(["symbol", "date"])
+    if len(joined) == 0:
+        return []
+    holdings_map = holdings or {}
+    det_str = detected_date or datetime.date.today().isoformat()
+    alerts_by_sym: Dict[str, Dict[str, Any]] = {}
+    for row in joined.iter_rows(named=True):
+        c_old = float(row["adj_close"])
+        c_new = float(row["adj_close_new"])
+        if c_old <= 0:
+            continue
+        rel_diff = abs(c_new - c_old) / c_old
+        if rel_diff > tolerance:
+            sym = str(row["symbol"])
+            h_info = holdings_map.get(sym, {})
+            held_qty = int(h_info.get("sellable_qty", 0)) + int(h_info.get("locked_t1", 0)) + int(h_info.get("locked_t2", 0))
+            alerts_by_sym[sym] = {
+                "symbol": sym,
+                "detected_date": det_str,
+                "overlap_ref_date": str(row["date"]),
+                "cached_close": round(c_old, 2),
+                "new_close": round(c_new, 2),
+                "adj_ratio": round(c_new / c_old, 6),
+                "held_qty": held_qty,
+                "requires_manual_reconcile": bool(held_qty > 0),
+            }
+    if holdings_map:
+        held_alerts = [a for a in alerts_by_sym.values() if a["held_qty"] > 0]
+        if held_alerts:
+            return sorted(held_alerts, key=lambda x: x["symbol"])
+    return sorted(alerts_by_sym.values(), key=lambda x: x["symbol"])
 
 
 def _resolve_live_parquet_path(parquet_file: str, is_replay: bool = False) -> str:
@@ -420,6 +494,22 @@ def fetch_or_update_data(
                 
                 if not is_cache_consistent:
                     print(f"[DATA WARNING] Historical price adjustment (split/dividend) detected on overlap window! Refetching entire history...")
+                    if state is not None:
+                        new_alerts = detect_corporate_action_on_overlap(
+                            df_cache=df_market,
+                            df_new=df_new,
+                            holdings=state.get("holdings"),
+                            overlap_window=20,
+                            detected_date=today.isoformat(),
+                        )
+                        existing_alerts = list(state.get("corporate_action_alerts", []))
+                        seen_keys = {(a.get("symbol"), a.get("overlap_ref_date")) for a in existing_alerts}
+                        for na in new_alerts:
+                            k = (na.get("symbol"), na.get("overlap_ref_date"))
+                            if k not in seen_keys:
+                                existing_alerts.append(na)
+                                seen_keys.add(k)
+                        state["corporate_action_alerts"] = existing_alerts
                     earliest_dt = cache_dates[0]
                     df_market = dp.fetch_vn_ohlcv(
                         start_date=earliest_dt.isoformat(),
@@ -1241,6 +1331,10 @@ def print_portfolio_dashboard(
     print(f"  TOTAL REAL NAV           : {real_nav:>15,.0f} VND (Return: {ret_pct:>+6.2f} %)")
     print(f"  Frictionless Naive T+0   : {naive_nav:>15,.0f} VND")
     print(f"  Implementation Shortfall : {shortfall:>+15.2f} % (Friction & settlement drag)")
+    corp_alerts = state.get("corporate_action_alerts", [])
+    if corp_alerts:
+        alert_summary = ", ".join(f"{a.get('symbol')} (ratio={a.get('adj_ratio', 1.0):.4f}, held={a.get('held_qty', 0)})" for a in corp_alerts)
+        print(f"  [CORP ACTION WARNING]    : Historical price adjustment detected -> {alert_summary}")
 
     # 3. Next Session ATO Order Ticket
     print("\n" + "=" * 90)
@@ -1370,6 +1464,13 @@ def build_telegram_summary(
     bak_warning = ""
     if state.get("recovered_from_bak"):
         bak_warning = "\n⚠️ <b>WARNING:</b> State recovered from .bak backup!\n"
+    corp_alerts = state.get("corporate_action_alerts", [])
+    if corp_alerts:
+        corp_items = ", ".join(
+            f"{html.escape(str(a.get('symbol', '')), quote=True)} (ratio={float(a.get('adj_ratio', 1.0)):.4f}, held={int(a.get('held_qty', 0))})"
+            for a in corp_alerts
+        )
+        bak_warning += f"\n⚠️ <b>CORP ACTION ALERT:</b> Historical price adjustment detected ({corp_items}). Reconcile dividend/split ledger!\n"
     safe_session_date = html.escape(str(session_date), quote=True)
     msg = f"""<b>📊 LEAN VN-QUANT DAILY PAPER TRADING REPORT</b>
 📅 Session: <b>{safe_session_date}</b>{catch_up_info}{bak_warning}
@@ -1505,7 +1606,10 @@ def main():
         print("   LEAN VN-QUANT: MORNING PRE-OPEN STAGING & ATO TICKET VERIFICATION (08:15 ICT)")
         print("=" * 90)
         state = load_portfolio_state(args.state_file, args.capital)
-        df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False))
+        prev_alert_cnt = len(state.get("corporate_action_alerts", []))
+        df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False, state=state))
+        if len(state.get("corporate_action_alerts", [])) > prev_alert_cnt:
+            save_portfolio_state(state, args.state_file)
         all_dates = sorted(df_market.select("date").unique()["date"].to_list())
         latest_date = all_dates[-1]
         today_str = datetime.date.today().isoformat()
@@ -1517,7 +1621,7 @@ def main():
                 df_cg = pl.read_parquet(contagion_path)
                 print(f"[PRE-OPEN] Loaded VN-FinGraph overnight contagion signals from {contagion_path} ({len(df_cg)} sessions)")
             except Exception as e:
-                print(f"[PRE-OPEN WARNING] Could not read contagion data: {e}")
+                print(f"[PRE-OPEN WARNING] Could not read contagion data: {sanitize_error_message(str(e))}")
 
         pending_orders = state.get("pending_orders", [])
         df_today = df_market.filter(pl.col("date") == latest_date)
@@ -1530,10 +1634,12 @@ def main():
         print("[PRE-OPEN SUCCESS] ATO Order tickets staged and verified. Ready for 09:00:00 HOSE opening auction.")
         return
 
-    df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False))
-    all_dates = sorted(df_market.select("date").unique()["date"].to_list())
-
     state = load_portfolio_state(args.state_file, args.capital)
+    prev_alert_cnt = len(state.get("corporate_action_alerts", []))
+    df_market = _enrich_market_dataframe(fetch_or_update_data(args.parquet, is_replay=False, state=state))
+    if len(state.get("corporate_action_alerts", [])) > prev_alert_cnt:
+        save_portfolio_state(state, args.state_file)
+    all_dates = sorted(df_market.select("date").unique()["date"].to_list())
     last_updated_date = state.get("last_updated_date")
 
     if last_updated_date is None:
@@ -1614,7 +1720,7 @@ def main():
             args.history_file
         )
     except Exception as e:
-        print(f"[DASHBOARD] Could not export HTML: {e}")
+        print(f"[DASHBOARD] Could not export HTML: {sanitize_error_message(str(e))}")
 
 
 if __name__ == "__main__":
