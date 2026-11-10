@@ -104,6 +104,8 @@ DEFAULT_STATE_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_portfolio_state.json"
 DEFAULT_HISTORY_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_nav_history.csv")
 DEFAULT_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_production.parquet")
 DEFAULT_LIVE_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_live_paper.parquet")
+DEFAULT_REPLAY_STATE_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_replay_state.json")
+DEFAULT_REPLAY_HISTORY_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_replay_nav_history.csv")
 
 BROKER_FEE = 0.0015       # 0.15% brokerage commission per leg
 SLIPPAGE = 0.0010         # 0.10% slippage per leg
@@ -123,6 +125,7 @@ def init_empty_state(initial_capital: float = DEFAULT_INITIAL_CAPITAL) -> Dict[s
         "last_updated_date": None,
         "last_ledger_advance_date": None,
         "last_eod_reconciled_date": None,
+        "last_reconciled_date": None,
         "initial_capital": float(initial_capital),
         "available_cash": float(initial_capital),
         "receivable_cash_t1": 0.0,
@@ -527,9 +530,21 @@ def fetch_or_update_data(
                     print(f"[DATA] Full history successfully refreshed and saved to {parquet_file}.")
                     return df_market
                 else:
-                    new_candles = df_new.filter(pl.col("date") > latest_dt)
-                    if len(new_candles) > 0:
-                        combined = pl.concat([df_market, new_candles]).sort(["date", "symbol"])
+                    df_new_aligned = df_new
+                    for col_name, col_dtype in df_market.schema.items():
+                        if col_name not in df_new_aligned.columns:
+                            default_val = df_market[col_name][-1] if len(df_market) > 0 else None
+                            df_new_aligned = df_new_aligned.with_columns(
+                                pl.lit(default_val).cast(col_dtype).alias(col_name)
+                            )
+                    df_new_aligned = df_new_aligned.select(df_market.columns).cast(dict(df_market.schema))
+                    combined = (
+                        pl.concat([df_market, df_new_aligned], how="vertical")
+                        .unique(subset=["date", "symbol"], keep="first", maintain_order=True)
+                        .sort(["date", "symbol"])
+                    )
+                    appended_count = len(combined) - len(df_market)
+                    if appended_count > 0:
                         tmp_pq = f"{parquet_file}.{os.getpid()}.tmp"
                         try:
                             combined.write_parquet(tmp_pq)
@@ -540,7 +555,7 @@ def fetch_or_update_data(
                                     os.remove(tmp_pq)
                                 except Exception:
                                     pass
-                        print(f"[DATA] Appended {len(new_candles)} new daily candles to {parquet_file}.")
+                        print(f"[DATA] Appended {appended_count} new daily candles to {parquet_file}.")
                         return combined
         except Exception as e:
             print(f"[DATA WARNING] Could not fetch live API data ({e}). Continuing with cached storage untouched.")
@@ -955,6 +970,30 @@ def execute_pending_orders_and_settle(
 # 4. STEP 3: END-OF-DAY MARK-TO-MARKET & IMPLEMENTATION SHORTFALL AUDITING
 # ==============================================================================
 
+def _resolve_valid_close_price(
+    sym: str,
+    today_market_slice: Dict[str, Any],
+    hold: Dict[str, Any],
+    state: Dict[str, Any]
+) -> float:
+    """Resolves positive finite close price: today_market_slice -> hold['last_close'] -> state['prev_close_map'] -> hold['avg_cost']."""
+    candidates = [
+        (today_market_slice.get(sym) or {}).get("raw_close"),
+        hold.get("last_close"),
+        (state.get("prev_close_map") or {}).get(sym),
+        hold.get("avg_cost"),
+    ]
+    for val in candidates:
+        if val is not None:
+            try:
+                f_val = float(val)
+                if np.isfinite(f_val) and f_val > 0.0:
+                    return f_val
+            except (TypeError, ValueError):
+                continue
+    return 0.0
+
+
 def mark_to_market(
     state: Dict[str, Any],
     today_market_slice: Dict[str, Dict[str, float]],
@@ -968,7 +1007,7 @@ def mark_to_market(
     total_stock_value = 0.0
     for sym, hold in state["holdings"].items():
         tot_qty = hold["sellable_qty"] + hold["locked_t1"] + hold["locked_t2"]
-        close_p = today_market_slice.get(sym, {}).get("raw_close", hold["avg_cost"])
+        close_p = _resolve_valid_close_price(sym, today_market_slice, hold, state)
         total_stock_value += (tot_qty * close_p)
         hold["last_close"] = float(close_p)
         hold["market_value"] = float(tot_qty * close_p)
@@ -976,7 +1015,7 @@ def mark_to_market(
     div_cash_rec = state.get("dividend_cash_receivable", 0.0)
     locked_corp_val = 0.0
     for sym, qty in state.get("locked_corp_action_shares", {}).items():
-        p = today_market_slice.get(sym, {}).get("raw_close", 0.0)
+        p = float((today_market_slice.get(sym) or {}).get("raw_close") or 0.0)
         locked_corp_val += (qty * p)
         
     real_nav = (
@@ -987,7 +1026,7 @@ def mark_to_market(
         + total_stock_value
         + locked_corp_val
     )
-    state["prev_close_map"] = {sym: float(info.get("raw_close", 0.0)) for sym, info in today_market_slice.items() if info.get("raw_close", 0.0) > 0}
+    state["prev_close_map"] = {sym: float(info.get("raw_close", 0.0)) for sym, info in today_market_slice.items() if (info.get("raw_close") or 0.0) > 0}
     
     # Compute Naive T+0 Benchmark NAV
     prev_naive_nav = state.get("naive_nav", state["initial_capital"])
@@ -996,10 +1035,10 @@ def mark_to_market(
     naive_daily_ret = 0.0
     for sym, w in prev_target_w.items():
         if sym in today_market_slice and sym in prev_close_map:
-            p_today = today_market_slice[sym]["raw_close"]
+            p_today = today_market_slice[sym].get("raw_close")
             p_prev = prev_close_map[sym]
-            if p_prev > 0:
-                ret = (p_today - p_prev) / p_prev
+            if p_today is not None and p_prev is not None and float(p_prev) > 0:
+                ret = (float(p_today) - float(p_prev)) / float(p_prev)
                 naive_daily_ret += w * ret
                 
     naive_nav = prev_naive_nav * (1.0 + naive_daily_ret)
@@ -1015,6 +1054,7 @@ def mark_to_market(
     state["naive_nav"] = naive_nav
     state["last_updated_date"] = session_date
     state["last_eod_reconciled_date"] = session_date
+    state["last_reconciled_date"] = session_date
     
     return {
         "date": session_date,
@@ -1060,8 +1100,12 @@ def compute_strategy_signal(
         import private_alphas
         if hasattr(private_alphas, "compute_custom_alpha"):
             return private_alphas.compute_custom_alpha(raw_close, tradable_mask, df_market_history)
-    except (ImportError, ModuleNotFoundError):
-        pass
+    except (ImportError, ModuleNotFoundError) as e:
+        if os.path.isdir(os.path.join(ROOT_DIR, "private_alphas")):
+            print(
+                f"[ALPHA WARNING] private_alphas directory exists but import failed "
+                f"({sanitize_error_message(str(e))}). Falling back to textbook placeholder signal."
+            )
     return _default_textbook_placeholder_signal(raw_close, tradable_mask)
 
 
@@ -1154,12 +1198,80 @@ def generate_next_day_orders(
             if sym_po not in prev_trapped_map or int(po["trapped_days"]) > int(prev_trapped_map[sym_po].get("trapped_days", 0)):
                 prev_trapped_map[sym_po] = dict(po)
     trapped_sell_syms = set()
+    for s in syms:
+        avail_sell_s = (int(current_sellable.get(s, 0)) // LOT_SIZE) * LOT_SIZE
+        trapped_info_s = prev_trapped_map.get(s)
+        trapped_days_s = int(trapped_info_s.get("trapped_days", 0)) if trapped_info_s else 0
+        trapped_qty_s = min((int(trapped_info_s.get("qty", 0)) // LOT_SIZE) * LOT_SIZE, avail_sell_s) if trapped_info_s else 0
+        if trapped_days_s > 0 and trapped_qty_s >= LOT_SIZE:
+            trapped_sell_syms.add(s)
+            target_shares[s] = 0
+
+    top_candidates = []
+    if enable_greedy_sweep:
+        sma50 = ops.ts_mean(raw_close, 50)
+        alpha_today = alpha[-1]
+        for i, s in enumerate(syms):
+            if s in trapped_sell_syms:
+                continue
+            if tradable_mask[-1, i] and raw_close[-1, i] > sma50[-1, i]:
+                top_candidates.append((alpha_today[i], s, last_close_prices[s], i))
+        top_candidates.sort(key=lambda x: x[0], reverse=True)
+        top_candidates = top_candidates[:4]
+    top_cand_syms = {c[1] for c in top_candidates}
+
+    effective_target_shares = dict(target_shares)
+    if enable_greedy_sweep and top_candidates:
+        base_target_cost = sum(
+            target_shares.get(s, 0) * last_close_prices.get(s, 0.0) * (1.0 + BROKER_FEE)
+            for s in syms if s not in trapped_sell_syms
+        )
+        locked_excess_cost = 0.0
+        for s in syms:
+            p_s = last_close_prices.get(s, 0.0)
+            avail_s = (int(current_sellable.get(s, 0)) // LOT_SIZE) * LOT_SIZE
+            if s in trapped_sell_syms:
+                unsellable_excess = current_shares[s]
+            elif s not in top_cand_syms:
+                unsellable_excess = max(0, current_shares[s] - avail_s - target_shares.get(s, 0))
+            else:
+                unsellable_excess = 0
+            locked_excess_cost += unsellable_excess * p_s * (1.0 + BROKER_FEE)
+        unallocated_nav = max(0.0, real_nav - base_target_cost - locked_excess_cost)
+        unallocated_nav_initial = unallocated_nav
+
+        # Step 2a: Retain already-held lots of top_candidates (active whenever unallocated_nav > 0.05 * real_nav)
+        if unallocated_nav > 0.05 * real_nav:
+            for cand_alpha, cand_sym, cand_price, cand_idx in top_candidates:
+                extra_held = max(
+                    0,
+                    ((current_shares.get(cand_sym, 0) - effective_target_shares.get(cand_sym, 0)) // LOT_SIZE) * LOT_SIZE,
+                )
+                lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE)
+                while extra_held >= LOT_SIZE and lot_cost > 0 and unallocated_nav >= lot_cost and unallocated_nav - lot_cost >= 0.05 * real_nav:
+                    effective_target_shares[cand_sym] = effective_target_shares.get(cand_sym, 0) + LOT_SIZE
+                    unallocated_nav -= lot_cost
+                    extra_held -= LOT_SIZE
+
+        # Step 2b: Expand target shares across top_candidates when initial unallocated_nav > 0.15 * real_nav
+        if unallocated_nav_initial > 0.15 * real_nav:
+            while unallocated_nav > 0.10 * real_nav and top_candidates:
+                allocated_target = False
+                for cand_alpha, cand_sym, cand_price, cand_idx in top_candidates:
+                    lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE)
+                    if lot_cost > 0 and unallocated_nav >= lot_cost and unallocated_nav - lot_cost >= 0.05 * real_nav:
+                        effective_target_shares[cand_sym] = effective_target_shares.get(cand_sym, 0) + LOT_SIZE
+                        unallocated_nav -= lot_cost
+                        allocated_target = True
+                if not allocated_target:
+                    break
+
     orders = []
 
     # --- 1. GENERATE SELL ORDERS ---
     for s in syms:
         cur_q = current_shares[s]
-        tgt_q = target_shares.get(s, 0)
+        tgt_q = effective_target_shares.get(s, 0)
         avail_sell = (int(current_sellable.get(s, 0)) // LOT_SIZE) * LOT_SIZE
         trapped_info = prev_trapped_map.get(s)
         trapped_days_s = int(trapped_info.get("trapped_days", 0)) if trapped_info else 0
@@ -1183,21 +1295,37 @@ def generate_next_day_orders(
                 sell_entry["trapped_days"] = trapped_days_s
             orders.append(sell_entry)
 
+    sell_syms = {o["symbol"] for o in orders if o.get("action") == "SELL"}
+    overweight_syms = {s for s in syms if current_shares[s] > effective_target_shares.get(s, 0)}
+    blocked_buy_syms = set(trapped_sell_syms) | sell_syms | overweight_syms
+
     # --- 2. GENERATE BUY ORDERS & GREEDY CASH SWEEP ---
+    cal_t1_swp, cal_t2_swp = _compute_settlement_calendar_days(session_date, list(dates))
+    cap_t1_swp = float(sim._calc_borrow_cap(state["receivable_cash_t1"], ADVANCE_FEE_RATE, float(cal_t1_swp), 50000.0))
+    cap_t2_swp = float(sim._calc_borrow_cap(state["receivable_cash_t2"], ADVANCE_FEE_RATE, float(cal_t2_swp), 50000.0))
+    total_available_funds = state["available_cash"] + cap_t1_swp + cap_t2_swp
+    rem_cash = total_available_funds
+
     buy_orders = []
-    total_est_buy_cost = 0.0
+    planned_buy_qty: Dict[str, int] = {}
     for s in syms:
-        if s in trapped_sell_syms:
+        if s in blocked_buy_syms:
             continue
         cur_q = current_shares[s]
         tgt_q = target_shares.get(s, 0)
         if tgt_q > cur_q:
-            diff = tgt_q - cur_q
-            diff = (diff // LOT_SIZE) * LOT_SIZE
+            diff = ((tgt_q - cur_q) // LOT_SIZE) * LOT_SIZE
+            p = last_close_prices.get(s, 0.0)
+            lot_cost = LOT_SIZE * p * (1.0 + BROKER_FEE)
+            if lot_cost > 0:
+                afford_lots = int(max(0.0, rem_cash) // lot_cost) * LOT_SIZE
+                diff = min(diff, afford_lots)
+            else:
+                diff = 0
             if diff > 0:
-                p = last_close_prices.get(s, 0.0)
                 buy_val = diff * p * (1.0 + BROKER_FEE)
-                total_est_buy_cost += buy_val
+                rem_cash -= buy_val
+                planned_buy_qty[s] = diff
                 buy_orders.append({
                     "action": "BUY",
                     "symbol": s,
@@ -1207,30 +1335,17 @@ def generate_next_day_orders(
                     "target_weight": float(today_target_w[syms.index(s)])
                 })
 
-    # Greedy Cash Sweep: Allocates idle cash if > 15% NAV (using borrow cap to reserve advance fee)
-    cal_t1_swp, cal_t2_swp = _compute_settlement_calendar_days(session_date, list(dates))
-    cap_t1_swp = float(sim._calc_borrow_cap(state["receivable_cash_t1"], ADVANCE_FEE_RATE, float(cal_t1_swp), 50000.0))
-    cap_t2_swp = float(sim._calc_borrow_cap(state["receivable_cash_t2"], ADVANCE_FEE_RATE, float(cal_t2_swp), 50000.0))
-    total_available_funds = state["available_cash"] + cap_t1_swp + cap_t2_swp
-    rem_cash = total_available_funds - total_est_buy_cost
-    
-    if enable_greedy_sweep and rem_cash > 0.15 * real_nav:
-        sma50 = ops.ts_mean(raw_close, 50)
-        top_candidates = []
-        alpha_today = alpha[-1]
-        for i, s in enumerate(syms):
-            if s in trapped_sell_syms:
-                continue
-            if tradable_mask[-1, i] and raw_close[-1, i] > sma50[-1, i]:
-                top_candidates.append((alpha_today[i], s, last_close_prices[s], i))
-        top_candidates.sort(key=lambda x: x[0], reverse=True)
-        top_candidates = top_candidates[:4]
-        
-        while rem_cash > 0.10 * real_nav and top_candidates:
+    # Greedy Cash Sweep: Allocates idle cash if > 15% NAV (bounded by effective_target_shares & rem_cash)
+    sweep_candidates = [c for c in top_candidates if c[1] not in blocked_buy_syms]
+    if enable_greedy_sweep and rem_cash > 0.15 * real_nav and sweep_candidates:
+        while rem_cash > 0.10 * real_nav and sweep_candidates:
             allocated = False
-            for cand_alpha, cand_sym, cand_price, cand_idx in top_candidates:
+            for cand_alpha, cand_sym, cand_price, cand_idx in sweep_candidates:
+                cur_plus_buy = current_shares.get(cand_sym, 0) + planned_buy_qty.get(cand_sym, 0)
+                if cur_plus_buy + LOT_SIZE > effective_target_shares.get(cand_sym, 0):
+                    continue
                 lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE)
-                if rem_cash >= lot_cost and rem_cash - lot_cost >= 0.05 * real_nav:
+                if lot_cost > 0 and rem_cash >= lot_cost and rem_cash - lot_cost >= 0.05 * real_nav:
                     found = False
                     for bo in buy_orders:
                         if bo["symbol"] == cand_sym:
@@ -1247,12 +1362,16 @@ def generate_next_day_orders(
                             "est_value": float(LOT_SIZE * cand_price),
                             "target_weight": float(today_target_w[cand_idx])
                         })
+                    planned_buy_qty[cand_sym] = planned_buy_qty.get(cand_sym, 0) + LOT_SIZE
                     rem_cash -= lot_cost
                     allocated = True
             if not allocated:
                 break
 
     orders.extend(buy_orders)
+    assert {o["symbol"] for o in orders if o.get("action") == "SELL"}.isdisjoint(
+        {o["symbol"] for o in orders if o.get("action") == "BUY"}
+    ), "Self-crossing SELL and BUY orders detected for the same symbol!"
     state["pending_orders"] = orders
     state["trapped_sell_orders"] = [
         dict(o) for o in orders if o.get("action") == "SELL" and int(o.get("trapped_days", 0)) > 0
@@ -1306,7 +1425,7 @@ def print_portfolio_dashboard(
             t1 = h.get("locked_t1", 0)
             t2 = h.get("locked_t2", 0)
             tot = sellable + t1 + t2
-            c_p = today_market_slice.get(sym, {}).get("raw_close", 0.0)
+            c_p = _resolve_valid_close_price(sym, today_market_slice, h, state)
             val = tot * c_p
             total_stock_val += val
             print(f"{sym:<8} | {sellable:<10,d} | {t1:<10,d} | {t2:<10,d} | {tot:<12,d} | {c_p:>11,.0f} VND | {val:>16,.0f} VND")
@@ -1492,20 +1611,29 @@ def build_telegram_summary(
 # 8. 10-DAY REPLAY TEST AUDIT (--test-replay 10)
 # ==============================================================================
 
-def run_test_replay_10(parquet_file: str, days: int = 10) -> None:
+def run_test_replay_10(
+    parquet_file: str,
+    days: int = 10,
+    state_file: Optional[str] = None,
+    history_file: Optional[str] = None
+) -> None:
     """
     Executes an end-to-end simulation of 10 sequential trading sessions from Parquet,
-    verifying atomic JSON state updates and continuous CSV logging.
+    verifying atomic JSON state updates and continuous CSV logging in isolated replay files.
     """
     print("\n" + "#" * 90)
     print(f"### EXECUTING {days}-SESSION PAPER TRADING REPLAY TEST (100,000,000 VND) ###")
     print("#" * 90)
 
-    replay_state_file = os.path.join(DEFAULT_DATA_DIR, "paper_portfolio_state.json")
-    replay_history_file = os.path.join(DEFAULT_DATA_DIR, "paper_nav_history.csv")
+    replay_state_file = state_file or DEFAULT_REPLAY_STATE_FILE
+    replay_history_file = history_file or DEFAULT_REPLAY_HISTORY_FILE
 
-    if os.path.exists(replay_history_file):
-        os.remove(replay_history_file)
+    for stale_path in (replay_history_file, f"{replay_state_file}.bak"):
+        if os.path.exists(stale_path):
+            try:
+                os.remove(stale_path)
+            except Exception:
+                pass
     state = init_empty_state(DEFAULT_INITIAL_CAPITAL)
     save_portfolio_state(state, replay_state_file)
 
@@ -1571,7 +1699,8 @@ def main():
         default="auto",
         help="Operational execution mode: 'eod' (15:15 EOD reconciliation & T+2.5 ledger roll), 'pre-open' (08:15 Morning ATO order ticket staging), 'auto' (Standard catch-up loop)."
     )
-    parser.add_argument("--test-replay", type=int, default=0, help="Run simulation replay of last N sessions (e.g. --test-replay 10)")
+    parser.add_argument("--test-replay", nargs="?", const=10, type=int, default=0, help="Run simulation replay of last N sessions (e.g. --test-replay 10)")
+    parser.add_argument("--days", type=int, default=None, help="Number of days for test replay")
     parser.add_argument("--reset", action="store_true", help="Reset portfolio state to initial capital")
     parser.add_argument("--send-telegram", action="store_true", help="Dispatch current portfolio report to Telegram")
     parser.add_argument("--bot-daemon", action="store_true", help="Launch interactive 2-way Telegram Bot service daemon")
@@ -1589,8 +1718,9 @@ def main():
                 print("[ERROR] Could not import telegram_bot_service module!")
         return
 
-    if args.test_replay > 0:
-        run_test_replay_10(args.parquet, days=args.test_replay)
+    if args.test_replay is not None and (args.test_replay > 0 or args.days is not None):
+        days_cnt = args.days if args.days is not None else (args.test_replay if args.test_replay > 0 else 10)
+        run_test_replay_10(args.parquet, days=days_cnt)
         return
 
     if args.reset:
@@ -1711,6 +1841,9 @@ def main():
 
     tg_text = build_telegram_summary(state, dates_to_run[-1].isoformat(), last_orders, last_exec_reps, dates_to_run)
     send_telegram_alert(tg_text)
+    if state.get("recovered_from_bak"):
+        state.pop("recovered_from_bak", None)
+        save_portfolio_state(state, args.state_file)
 
     try:
         from services import dashboard
