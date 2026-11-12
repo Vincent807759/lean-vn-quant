@@ -102,6 +102,7 @@ if not os.path.exists(DEFAULT_DATA_DIR):
 DEFAULT_INITIAL_CAPITAL = 100_000_000.0  # 100M VND
 DEFAULT_STATE_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_portfolio_state.json")
 DEFAULT_HISTORY_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_nav_history.csv")
+DEFAULT_FILL_LOG_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_fill_log.csv")
 DEFAULT_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_production.parquet")
 DEFAULT_LIVE_PARQUET_FILE = os.path.join(DEFAULT_DATA_DIR, "vn30_live_paper.parquet")
 DEFAULT_REPLAY_STATE_FILE = os.path.join(DEFAULT_DATA_DIR, "paper_replay_state.json")
@@ -270,9 +271,12 @@ def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
     headers = [
         "date", "real_nav", "available_cash", "receivable_cash", "stock_value",
         "naive_nav", "implementation_shortfall_pct", "daily_return_real",
-        "daily_return_naive", "orders_executed"
+        "daily_return_naive", "orders_executed",
+        "daily_return_benchmark", "benchmark"
     ]
     rec_date = str(record["date"])
+    bm_ret = record.get("daily_return_benchmark")
+    bm_nav = record.get("benchmark")
     new_line = ",".join([
         rec_date,
         f"{record['real_nav']:.2f}",
@@ -283,7 +287,9 @@ def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
         f"{record['implementation_shortfall_pct']:.4f}",
         f"{record['daily_return_real']:.6f}",
         f"{record['daily_return_naive']:.6f}",
-        str(record["orders_executed"])
+        str(record["orders_executed"]),
+        f"{float(bm_ret):.6f}" if bm_ret is not None else "",
+        f"{float(bm_nav):.2f}" if bm_nav is not None else ""
     ])
     with _state_file_lock(history_file):
         kept_rows: List[str] = []
@@ -294,6 +300,10 @@ def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
                     if not s_ln or s_ln.startswith("date,"):
                         continue
                     if s_ln.split(",", 1)[0].strip() != rec_date:
+                        # Pad legacy rows written before benchmark columns existed (empty -> null)
+                        n_missing = len(headers) - len(s_ln.split(","))
+                        if n_missing > 0:
+                            s_ln = s_ln + "," * n_missing
                         kept_rows.append(s_ln)
         kept_rows.append(new_line)
         tmp_csv = f"{history_file}.{os.getpid()}.tmp"
@@ -305,6 +315,79 @@ def append_nav_history(history_file: str, record: Dict[str, Any]) -> None:
                 wf.flush()
                 os.fsync(wf.fileno())
             os.replace(tmp_csv, history_file)
+        finally:
+            if os.path.exists(tmp_csv):
+                try:
+                    os.remove(tmp_csv)
+                except Exception:
+                    pass
+
+
+FILL_LOG_HEADERS = [
+    "date", "symbol", "action", "status", "qty_requested", "fill_qty",
+    "est_price", "raw_open", "fill_price", "overnight_gap_pct",
+    "exec_vs_open_bps", "exec_vs_est_bps"
+]
+
+
+def build_fill_log_rows(session_date: str, reports: List[Dict[str, Any]]) -> List[str]:
+    """
+    Builds per-order fill audit CSV rows (observational only, never feeds back into trading).
+    - overnight_gap_pct: (raw_open / est_price - 1) * 100, signed market move from staging close to ATO open.
+    - exec_vs_open_bps / exec_vs_est_bps: ADVERSE execution cost in bps (positive = worse for us);
+      BUY: (fill / ref - 1), SELL: (1 - fill / ref). Empty when the order did not fill.
+    """
+    rows: List[str] = []
+    for rep in reports:
+        est_p = float(rep.get("est_price") or 0.0)
+        open_p = float(rep.get("raw_open") or 0.0)
+        fill_p = float(rep.get("fill_price") or 0.0)
+        fill_qty = int(rep.get("fill_qty") or 0)
+        side = str(rep.get("action", ""))
+        sgn = 1.0 if side == "BUY" else -1.0
+        gap = f"{(open_p / est_p - 1.0) * 100.0:.4f}" if est_p > 0 and open_p > 0 else ""
+        vs_open = f"{sgn * (fill_p / open_p - 1.0) * 1e4:.2f}" if fill_qty > 0 and open_p > 0 else ""
+        vs_est = f"{sgn * (fill_p / est_p - 1.0) * 1e4:.2f}" if fill_qty > 0 and est_p > 0 else ""
+        rows.append(",".join([
+            str(session_date),
+            str(rep.get("symbol", "")).replace(",", " "),
+            side.replace(",", " "),
+            str(rep.get("status", "")).replace(",", " "),
+            str(int(rep.get("qty") or 0)),
+            str(fill_qty),
+            f"{est_p:.2f}",
+            f"{open_p:.2f}",
+            f"{fill_p:.2f}",
+            gap, vs_open, vs_est
+        ]))
+    return rows
+
+
+def append_fill_log(fill_log_file: str, session_date: str, reports: List[Dict[str, Any]]) -> None:
+    """Writes per-order fill audit rows for session_date into CSV idempotently (replaces rows of same date)."""
+    os.makedirs(os.path.dirname(os.path.abspath(fill_log_file)), exist_ok=True)
+    rec_date = str(session_date)
+    new_rows = build_fill_log_rows(rec_date, reports)
+    with _state_file_lock(fill_log_file):
+        kept_rows: List[str] = []
+        if os.path.exists(fill_log_file) and os.path.getsize(fill_log_file) > 0:
+            with open(fill_log_file, "r", encoding="utf-8") as rf:
+                for raw_ln in rf:
+                    s_ln = raw_ln.strip()
+                    if not s_ln or s_ln.startswith("date,"):
+                        continue
+                    if s_ln.split(",", 1)[0].strip() != rec_date:
+                        kept_rows.append(s_ln)
+        kept_rows.extend(new_rows)
+        tmp_csv = f"{fill_log_file}.{os.getpid()}.tmp"
+        try:
+            with open(tmp_csv, "w", encoding="utf-8", newline="") as wf:
+                wf.write(",".join(FILL_LOG_HEADERS) + "\n")
+                for r_ln in kept_rows:
+                    wf.write(r_ln + "\n")
+                wf.flush()
+                os.fsync(wf.fileno())
+            os.replace(tmp_csv, fill_log_file)
         finally:
             if os.path.exists(tmp_csv):
                 try:
@@ -959,6 +1042,11 @@ def execute_pending_orders_and_settle(
         rep["note"] = f"Purchased {fill_qty:,} shares @ {exec_price:,.0f} VND (Total outlay: {total_buy_cost:,.0f} VND). Locked in T+2."
         executed_reports.append(rep)
 
+    # Fill audit (observational only): attach the session's raw ATO open to every report so
+    # append_fill_log can measure overnight gap and execution vs open. Does not affect fills.
+    for rep in executed_reports:
+        rep.setdefault("raw_open", float((today_market_slice.get(rep.get("symbol")) or {}).get("raw_open") or 0.0))
+
     state["pending_orders"] = remaining_pending
     state["trapped_sell_orders"] = [
         dict(o) for o in remaining_pending if o.get("action") == "SELL" and int(o.get("trapped_days", 0)) > 0
@@ -1042,7 +1130,22 @@ def mark_to_market(
                 naive_daily_ret += w * ret
                 
     naive_nav = prev_naive_nav * (1.0 + naive_daily_ret)
-    
+
+    # VN30 Equal-Weight benchmark (observational only): daily-rebalanced close-to-close mean return
+    # over symbols with valid positive closes on both sessions. Never feeds back into order generation.
+    bm_rets = []
+    for sym, info in today_market_slice.items():
+        try:
+            p_today = float((info or {}).get("raw_close") or 0.0)
+            p_prev = float(prev_close_map.get(sym) or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(p_today) and np.isfinite(p_prev) and p_today > 0.0 and p_prev > 0.0:
+            bm_rets.append(p_today / p_prev - 1.0)
+    bm_daily_ret = float(np.mean(bm_rets)) if bm_rets else 0.0
+    benchmark_nav = float(state.get("benchmark_nav", state["initial_capital"])) * (1.0 + bm_daily_ret)
+    state["benchmark_nav"] = benchmark_nav
+
     # Implementation Shortfall (% of initial capital)
     initial_cap = state["initial_capital"]
     shortfall_pct = (naive_nav - real_nav) / initial_cap * 100.0
@@ -1066,7 +1169,9 @@ def mark_to_market(
         "implementation_shortfall_pct": shortfall_pct,
         "daily_return_real": daily_ret_real,
         "daily_return_naive": naive_daily_ret,
-        "orders_executed": orders_executed
+        "orders_executed": orders_executed,
+        "daily_return_benchmark": bm_daily_ret,
+        "benchmark": benchmark_nav
     }
 
 
@@ -1692,6 +1797,7 @@ def main():
     parser.add_argument("--parquet", type=str, default=DEFAULT_PARQUET_FILE, help="Path to VN30 Parquet file")
     parser.add_argument("--state-file", type=str, default=DEFAULT_STATE_FILE, help="Path to state JSON file")
     parser.add_argument("--history-file", type=str, default=DEFAULT_HISTORY_FILE, help="Path to history CSV file")
+    parser.add_argument("--fill-log-file", type=str, default=DEFAULT_FILL_LOG_FILE, help="Path to per-order fill audit CSV")
     parser.add_argument(
         "--mode",
         type=str,
@@ -1728,6 +1834,8 @@ def main():
         save_portfolio_state(state, args.state_file)
         if os.path.exists(args.history_file):
             os.remove(args.history_file)
+        if os.path.exists(args.fill_log_file):
+            os.remove(args.fill_log_file)
         print(f"[RESET] Reset account to initial capital of {args.capital:,.0f} VND.")
         return
 
@@ -1826,6 +1934,10 @@ def main():
 
         state, exec_reps = execute_pending_orders_and_settle(state, today_market, session_date_str, trading_dates=all_dates)
         last_exec_reps = exec_reps
+        try:
+            append_fill_log(args.fill_log_file, session_date_str, exec_reps)
+        except Exception as e:
+            print(f"[FILL LOG WARNING] Could not write fill log: {sanitize_error_message(str(e))}")
 
         hist_record = mark_to_market(state, today_market, prev_close_map, session_date_str, len(exec_reps))
         append_nav_history(args.history_file, hist_record)
