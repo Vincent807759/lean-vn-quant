@@ -1,0 +1,4 @@
+# Pre-registration of live paper-trading evaluation criteria (Project 1, Gen-1 VN30)
+# File itself lives in gitignored local_docs/; this hash pins its content at commit time.
+# Frozen code: main @ 3f0c103. Verify with: sha256sum -c experiments/paper_eval_criteria.sha256
+54fa3e43bdc2d9f0d7bdfde5ffddd5937d21fc5680de8f1c81b4a6d41141a5fd  local_docs/TIEU_CHI_DANH_GIA_PAPER_TRADING.md
