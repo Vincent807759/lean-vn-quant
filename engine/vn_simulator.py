@@ -707,6 +707,7 @@ def _simulate_vn_microstructure_core(
                     net_proceeds = gross_val - b_fee - s_tax
                     pending_cash_t0 += net_proceeds
                     shares_held[i] -= q_trap
+                    shares_sellable[i] -= q_trap  # trapped lot stayed in sellable while queued; remove it now so C2 cannot sell it again
                     daily_turnover_traded += q_trap * p_open
                     trapped_sell_shares[i] = 0.0
                     trapped_days[i] = 0
