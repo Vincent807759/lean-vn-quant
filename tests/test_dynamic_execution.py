@@ -93,7 +93,8 @@ def test_phase2_orderly_liquidation():
         target_weights=w_liq,
         initial_cash=1.0e9,
         in_pit_universe=pit_liq,
-        warn_unlagged=False
+        warn_unlagged=False,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     assert res_liq["sell_tax"][1] == 0.0, "No sell at t=1"
     assert res_liq["sell_tax"][2] == 0.0, "No sell at t=2 (shares locked in settlement)"

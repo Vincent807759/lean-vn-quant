@@ -113,7 +113,7 @@ SLIPPAGE = 0.0010         # 0.10% slippage per leg
 SELL_TAX = 0.0010         # 0.10% personal income tax on gross sales
 ADVANCE_FEE_RATE = 0.00035 # 0.035%/day advance sales cash borrowing rate
 LOT_SIZE = 100            # HOSE compulsory round-lot 100 shares
-MAX_ADV_PARTICIPATION = 0.05 # Max 5% ADV20 participation
+MAX_ADV_PARTICIPATION = 0.03 # Max 3% ADV20 participation (same as vn_simulator.simulate_vietnam)
 
 
 # ==============================================================================
@@ -780,8 +780,8 @@ def _enrich_market_dataframe(df_market: pl.DataFrame) -> pl.DataFrame:
         vol_eod = pl.col("raw_close").pct_change().rolling_std(window_size=20, min_periods=5).over("symbol").fill_null(0.015)
     df_with_eod = df_masked.with_columns(vol_eod.alias("_vol_eod"))
     return df_with_eod.with_columns([
-        pl.col("adv20").shift(1).over("symbol").fill_null(pl.col("adv20")).fill_null(1.0e11).alias("adv20"),
-        pl.col("_vol_eod").shift(1).over("symbol").fill_null(pl.col("_vol_eod")).fill_null(0.015).alias("daily_vol"),
+        pl.col("adv20").shift(1).over("symbol").fill_null(1.0e11).alias("adv20"),
+        pl.col("_vol_eod").shift(1).over("symbol").fill_null(0.015).alias("daily_vol"),
     ]).drop("_vol_eod").sort(["date", "symbol"])
 
 
@@ -793,7 +793,7 @@ def execute_pending_orders_and_settle(
     clamp_and_round: bool = True,
     round_adverse: bool = False,
     trading_dates: Optional[List[Any]] = None,
-    sell_adv_cap: bool = False,
+    sell_adv_cap: bool = True,
     penalty_rate_per_day: float = 0.0,
     min_advance_notional: float = 0.0
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
@@ -1218,9 +1218,9 @@ def generate_next_day_orders(
     state: Dict[str, Any],
     df_market_history: pl.DataFrame,
     session_date: str,
-    strict_t25_ato_lock: bool = False,
-    enable_greedy_sweep: bool = True,
-    use_adv20_tie_break: bool = False
+    strict_t25_ato_lock: bool = True,
+    enable_greedy_sweep: bool = False,
+    use_adv20_tie_break: bool = True
 ) -> List[Dict[str, Any]]:
     """
     Computes Alpha signals at session close and generates morning ATO order ticket:
@@ -1229,11 +1229,12 @@ def generate_next_day_orders(
     3. Rebalancing & Odd-lot 100 rounding.
     4. Sells strictly capped at current sellable_qty.
        Note on T+2.5 timing: this function runs at the end of session T (after MTM of T,
-       prior to advance_t25_settlement of morning T+1). Under default T+2.5 (strict_t25_ato_lock=False),
+       prior to advance_t25_settlement of morning T+1). Under the legacy T+2.5 mode (strict_t25_ato_lock=False),
        shares in locked_t1 at end of T will be unlocked to sellable_qty on morning T+1 by
        advance_t25_settlement before ATO match, so current_sellable includes locked_t1.
-       When strict_t25_ato_lock=True, shares in locked_t1 cannot be sold at morning T+1 ATO.
-    5. Greedy Cash Sweep: Allocates idle cash (> 15% NAV) across Top 4 Alpha stocks.
+       Default strict_t25_ato_lock=True: shares in locked_t1 cannot be sold at morning T+1 ATO
+       (HOSE delivers T+2 shares around midday, so the first ATO sale is T+3).
+    5. Greedy Cash Sweep (off by default; not modelled in vn_simulator): allocates idle cash (> 15% NAV) across Top 4 Alpha stocks.
     """
     df_masked = dp.build_tradable_mask(df_market_history, min_adv=1.0e10, window=20)
     raw_close, dates, syms = dp.pivot_to_matrix(df_masked, "raw_close")
@@ -1352,7 +1353,7 @@ def generate_next_day_orders(
                     0,
                     ((current_shares.get(cand_sym, 0) - effective_target_shares.get(cand_sym, 0)) // LOT_SIZE) * LOT_SIZE,
                 )
-                lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE)
+                lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE + SLIPPAGE)
                 while extra_held >= LOT_SIZE and lot_cost > 0 and unallocated_nav >= lot_cost and unallocated_nav - lot_cost >= 0.05 * real_nav:
                     effective_target_shares[cand_sym] = effective_target_shares.get(cand_sym, 0) + LOT_SIZE
                     unallocated_nav -= lot_cost
@@ -1363,7 +1364,7 @@ def generate_next_day_orders(
             while unallocated_nav > 0.10 * real_nav and top_candidates:
                 allocated_target = False
                 for cand_alpha, cand_sym, cand_price, cand_idx in top_candidates:
-                    lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE)
+                    lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE + SLIPPAGE)
                     if lot_cost > 0 and unallocated_nav >= lot_cost and unallocated_nav - lot_cost >= 0.05 * real_nav:
                         effective_target_shares[cand_sym] = effective_target_shares.get(cand_sym, 0) + LOT_SIZE
                         unallocated_nav -= lot_cost
@@ -1421,14 +1422,14 @@ def generate_next_day_orders(
         if tgt_q > cur_q:
             diff = ((tgt_q - cur_q) // LOT_SIZE) * LOT_SIZE
             p = last_close_prices.get(s, 0.0)
-            lot_cost = LOT_SIZE * p * (1.0 + BROKER_FEE)
+            lot_cost = LOT_SIZE * p * (1.0 + BROKER_FEE + SLIPPAGE)
             if lot_cost > 0:
                 afford_lots = int(max(0.0, rem_cash) // lot_cost) * LOT_SIZE
                 diff = min(diff, afford_lots)
             else:
                 diff = 0
             if diff > 0:
-                buy_val = diff * p * (1.0 + BROKER_FEE)
+                buy_val = diff * p * (1.0 + BROKER_FEE + SLIPPAGE)
                 rem_cash -= buy_val
                 planned_buy_qty[s] = diff
                 buy_orders.append({
@@ -1449,7 +1450,7 @@ def generate_next_day_orders(
                 cur_plus_buy = current_shares.get(cand_sym, 0) + planned_buy_qty.get(cand_sym, 0)
                 if cur_plus_buy + LOT_SIZE > effective_target_shares.get(cand_sym, 0):
                     continue
-                lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE)
+                lot_cost = LOT_SIZE * cand_price * (1.0 + BROKER_FEE + SLIPPAGE)
                 if lot_cost > 0 and rem_cash >= lot_cost and rem_cash - lot_cost >= 0.05 * real_nav:
                     found = False
                     for bo in buy_orders:

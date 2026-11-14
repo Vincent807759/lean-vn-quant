@@ -73,7 +73,8 @@ def test_simulation_microstructure_costs_positive():
         initial_cash=1.0e9,
         broker_fee=0.0015,
         slippage=0.0,
-        sell_tax=0.0010
+        sell_tax=0.0010,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
 
     b_fees = res["broker_fees"]
@@ -109,7 +110,8 @@ def test_simulation_microstructure_costs_positive():
         slippage=0.0,
         sell_tax=0.0010,
         advance_fee_rate=0.00035,
-        min_advance_fee=50000.0
+        min_advance_fee=50000.0,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     assert res_adv["advance_fees"][-1] >= 50000.0, f"Expected advance fee >= 50k, got {res_adv['advance_fees'][-1]}"
 
@@ -440,7 +442,8 @@ def test_exec_price_clamp_and_hose_tick_rounding():
     r_raw = sim.simulate_vietnam(
         ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
         dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=False,
-        warn_unlagged=False
+        warn_unlagged=False,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     # Single exit of 10,000 sh at ~32,420 (50,000 x (1 - 0.35 penalty - slippage)), below the 46,500 floor.
     # Pre-fix value (~818M) included a phantom second sale + buy-back from the trapped-sell double count.
@@ -450,7 +453,8 @@ def test_exec_price_clamp_and_hose_tick_rounding():
     r_clamped = sim.simulate_vietnam(
         ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
         dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=True,
-        round_exec_adverse=False, warn_unlagged=False
+        round_exec_adverse=False, warn_unlagged=False,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     # 1e9 - 501M buy (10,000 x 50,100) - 751.5k fee + 465M sell at floor - 697.5k fee - 465k tax
     assert r_clamped["equity"][-1] == 962_086_000.0
@@ -460,7 +464,8 @@ def test_exec_price_clamp_and_hose_tick_rounding():
     r_adv = sim.simulate_vietnam(
         ro_syn, rc_syn, ceil_syn, flr_syn, adv_syn, w_syn,
         dates=dates_syn, penalty_rate_per_day=0.07, clamp_and_round_exec_price=True,
-        round_exec_adverse=True, warn_unlagged=False
+        round_exec_adverse=True, warn_unlagged=False,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     assert r_adv["equity"][-1] == 962_086_000.0
     assert np.all(r_adv["cash_history"] >= -1e-6)

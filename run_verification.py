@@ -546,7 +546,8 @@ def test_5_phase1_microstructure_audit():
         initial_cash=1.0e9,
         broker_fee=0.0015,
         slippage=0.0,
-        sell_tax=0.0010
+        sell_tax=0.0010,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing); this test checks fee accounting
     )
     
     b_fees = res["broker_fees"]
@@ -792,7 +793,8 @@ def test_6_phase2_pit_and_market_impact():
         adv20_shares=adv_liq,
         target_weights=w_liq,
         initial_cash=1.0e9,
-        in_pit_universe=pit_liq, warn_unlagged=False
+        in_pit_universe=pit_liq, warn_unlagged=False,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing); this test checks PIT liquidation
     )
     # Stock bought at t=1, settles at t=3, then immediately liquidated on t=3 due to pit exclusion
     assert res_liq["sell_tax"][1] == 0.0, "[FAIL] No sell at t=1"
