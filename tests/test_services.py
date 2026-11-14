@@ -737,9 +737,9 @@ def test_paper_trader_market_enrichment_and_execution_parity_flags():
     )
     sell_rep = [r for r in reps_flags if r["action"] == "SELL"][0]
     buy_rep = [r for r in reps_flags if r["action"] == "BUY"][0]
-    assert sell_rep["fill_qty"] == 500  # 5% of (200M / 20k = 10,000 shares) = 500 shares
+    assert sell_rep["fill_qty"] == int(200_000_000.0 * dpt.MAX_ADV_PARTICIPATION / 20_000.0)  # 3% of 10,000 shares = 300
     assert sell_rep["fill_price"] == pytest.approx(20_000.0 * (1.0 - dpt.SLIPPAGE))  # 0.0 penalty rate
-    assert any(p["action"] == "SELL" and p["qty"] == 1500 for p in st_flags["pending_orders"])
+    assert any(p["action"] == "SELL" and p["qty"] == 2000 - sell_rep["fill_qty"] for p in st_flags["pending_orders"])
     assert buy_rep["fill_qty"] == 200  # Scaled down to available_cash (6M VND -> 200 shs) without advance loan
     assert st_flags["total_advance_fees"] == 0.0
 

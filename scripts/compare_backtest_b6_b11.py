@@ -3,7 +3,7 @@ import os
 import sys
 
 parser = argparse.ArgumentParser(description="Compare backtest performance pre vs post B6-B11")
-parser.add_argument("--strict-t25-ato-lock", action="store_true", default=False, help="Enforce strict T+2.5 lock blocking ATO sell on T+2 (unlock at T+3 ATO)")
+parser.add_argument("--strict-t25-ato-lock", action=argparse.BooleanOptionalAction, default=True, help="Strict T+2.5 lock: shares bought at T are first sellable at T+3 ATO (default on; --no-strict-t25-ato-lock restores the old T+2 ATO unlock)")
 parser.add_argument("--warmup", type=int, default=0, help="Initial warmup sessions where weights are zeroed out (default 0)")
 parser.add_argument("--exclude-filtered", action="store_true", default=False, help="Disqualify trend-filtered stocks (<= -900.0) from allocation")
 parser.add_argument("--rank-ic-ties", type=str, default="ordinal", choices=["ordinal", "average"], help="Method for handling ties in rank IC calculation (default 'ordinal')")

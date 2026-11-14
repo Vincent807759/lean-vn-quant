@@ -147,7 +147,8 @@ def test_cash_advance_no_ghost_fee_when_t1_is_zero():
         daily_vol=daily_vol,
         max_adv_participation=1.0,
         penalty_rate_per_day=0.0,
-        min_advance_notional=0.0
+        min_advance_notional=0.0,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
 
     adv_fees_t3 = res["advance_fees"][3] - res["advance_fees"][2]

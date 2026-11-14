@@ -1134,7 +1134,7 @@ def simulate_vietnam(
     min_advance_notional: float = 0.0,
     half_spread_floor: float = 0.0012,
     dividend_tax_rate: float = 0.05,
-    strict_t25_ato_lock: bool = False,
+    strict_t25_ato_lock: bool = True,
     warn_unlagged: bool = True,
     strict_lag_check: bool = False,
     clamp_and_round_exec_price: bool = False,

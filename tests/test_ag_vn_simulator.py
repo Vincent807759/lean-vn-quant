@@ -405,7 +405,8 @@ def test_simulate_vietnam_stock_dividend_locked_until_listing_date():
         ro, rc, ceil, flr, adv, w,
         initial_cash=100_000_000.0, broker_fee=0.0, slippage=0.0, sell_tax=0.001,
         half_spread_floor=0.0, daily_vol=np.zeros((T, N)), max_adv_participation=1.0,
-        corp_action_stock_ratio=stock_ratio, corp_action_stock_list_t=stock_list_t
+        corp_action_stock_ratio=stock_ratio, corp_action_stock_list_t=stock_list_t,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     # Tổng tài sản bảo toàn qua ex-date t=3 nhờ locked_corp_action_shares_val
     assert res["locked_corp_action_shares_val"][3] == pytest.approx(2000.0 * 25000.0)
@@ -476,12 +477,14 @@ def test_simulate_vietnam_weekend_calendar_days_affect_advance_interest():
     r_flat = sim.simulate_vietnam(
         ro, rc, ceil, flr, adv, w,
         initial_cash=500_000_000.0, slippage=0.0, half_spread_floor=0.0, daily_vol=vol,
-        max_adv_participation=1.0, dates=dates_flat, min_advance_fee=0.0
+        max_adv_participation=1.0, dates=dates_flat, min_advance_fee=0.0,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     r_wknd = sim.simulate_vietnam(
         ro, rc, ceil, flr, adv, w,
         initial_cash=500_000_000.0, slippage=0.0, half_spread_floor=0.0, daily_vol=vol,
-        max_adv_participation=1.0, dates=dates_wknd, min_advance_fee=0.0
+        max_adv_participation=1.0, dates=dates_wknd, min_advance_fee=0.0,
+        strict_t25_ato_lock=False,  # scenario sells at T+2 ATO (legacy timing)
     )
     assert r_wknd["advance_fees"][3] > r_flat["advance_fees"][3] * 1.5
 
