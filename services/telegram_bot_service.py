@@ -50,23 +50,27 @@ ENV_FILE_PATHS = [
 # ==============================================================================
 
 def load_env() -> Dict[str, str]:
-    """Finds and parses local .env file without external dependencies."""
-    env = {}
-    for p in ENV_FILE_PATHS:
-        if os.path.exists(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#") and "=" in line:
-                            k, v = line.split("=", 1)
-                            k = k.strip()
-                            v = v.strip().strip('"').strip("'")
-                            if k not in env:
-                                env[k] = v
-            except Exception:
-                pass
-    return env
+    """Finds and parses local .env files via the shared loader in daily_paper_trader."""
+    try:
+        from services.daily_paper_trader import load_env_variables
+        return load_env_variables(search_paths=ENV_FILE_PATHS)
+    except ImportError:
+        env: Dict[str, str] = {}
+        for p in ENV_FILE_PATHS:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and not line.startswith("#") and "=" in line:
+                                k, v = line.split("=", 1)
+                                k = k.strip()
+                                v = v.strip().strip('"').strip("'")
+                                if k not in env:
+                                    env[k] = v
+                except Exception:
+                    pass
+        return env
 
 
 def mask_token(text: str, token: Optional[str] = None) -> str:
@@ -237,15 +241,50 @@ def _resolve_latest_close_map(state: Dict[str, Any]) -> Dict[str, float]:
     return close_map
 
 
+def _read_state_safe(state_file: str) -> Dict[str, Any]:
+    """Reads portfolio state JSON under shared file lock with retry and .bak fallback (NEW-4)."""
+    import contextlib
+    try:
+        from services.daily_paper_trader import _state_file_lock
+    except ImportError:
+        @contextlib.contextmanager
+        def _state_file_lock(_path: str):
+            yield
+
+    bak_file = f"{state_file}.bak"
+    last_err: Optional[Exception] = None
+    with _state_file_lock(state_file):
+        for attempt in range(3):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except PermissionError as e:
+                last_err = e
+                time.sleep(0.05 * (attempt + 1))
+            except Exception as e:
+                last_err = e
+                break
+
+        if os.path.exists(bak_file):
+            try:
+                with open(bak_file, "r", encoding="utf-8") as bf:
+                    return json.load(bf)
+            except Exception:
+                pass
+
+    if last_err is not None:
+        raise last_err
+    raise OSError(f"Unable to read state file: {state_file}")
+
+
 def handle_status() -> str:
     """Handles /status and /nav commands."""
     state_file = get_state_file_path()
-    if not os.path.exists(state_file):
+    if not os.path.exists(state_file) and not os.path.exists(f"{state_file}.bak"):
         return "⚠️ <i>State file paper_portfolio_state.json not found.</i>"
         
     try:
-        with open(state_file, "r", encoding="utf-8") as f:
-            state = json.load(f)
+        state = _read_state_safe(state_file)
             
         real_nav = state.get("last_real_nav", state.get("initial_capital", 1e8))
         init_cap = state.get("initial_capital", 1e8)
@@ -302,12 +341,11 @@ def handle_status() -> str:
 def handle_holdings() -> str:
     """Handles /holdings command."""
     state_file = get_state_file_path()
-    if not os.path.exists(state_file):
+    if not os.path.exists(state_file) and not os.path.exists(f"{state_file}.bak"):
         return "⚠️ <i>Holdings data not found.</i>"
         
     try:
-        with open(state_file, "r", encoding="utf-8") as f:
-            state = json.load(f)
+        state = _read_state_safe(state_file)
             
         holdings = state.get("holdings", {})
         if not holdings:
@@ -343,12 +381,11 @@ def handle_holdings() -> str:
 def handle_orders() -> str:
     """Handles /orders command."""
     state_file = get_state_file_path()
-    if not os.path.exists(state_file):
+    if not os.path.exists(state_file) and not os.path.exists(f"{state_file}.bak"):
         return "⚠️ <i>Order ticket data not found.</i>"
         
     try:
-        with open(state_file, "r", encoding="utf-8") as f:
-            state = json.load(f)
+        state = _read_state_safe(state_file)
             
         orders = state.get("pending_orders", [])
         if not orders:

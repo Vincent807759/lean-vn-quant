@@ -114,6 +114,12 @@ SELL_TAX = 0.0010         # 0.10% personal income tax on gross sales
 ADVANCE_FEE_RATE = 0.00035 # 0.035%/day advance sales cash borrowing rate
 LOT_SIZE = 100            # HOSE compulsory round-lot 100 shares
 MAX_ADV_PARTICIPATION = 0.03 # Max 3% ADV20 participation (same as vn_simulator.simulate_vietnam)
+VN_TZ = datetime.timezone(datetime.timedelta(hours=7))
+
+
+def now_vn() -> datetime.datetime:
+    """Return current datetime in Vietnam time (UTC+7)."""
+    return datetime.datetime.now(VN_TZ)
 
 
 # ==============================================================================
@@ -460,7 +466,7 @@ def detect_corporate_action_on_overlap(
     if len(joined) == 0:
         return []
     holdings_map = holdings or {}
-    det_str = detected_date or datetime.date.today().isoformat()
+    det_str = detected_date or now_vn().date().isoformat()
     alerts_by_sym: Dict[str, Dict[str, Any]] = {}
     for row in joined.iter_rows(named=True):
         c_old = float(row["adj_close"])
@@ -546,9 +552,8 @@ def fetch_or_update_data(
     cache_dates = sorted(df_market["date"].unique().to_list())
     latest_dt = cache_dates[-1]
     
-    vn_tz = datetime.timezone(datetime.timedelta(hours=7))
-    now_vn = datetime.datetime.now(vn_tz)
-    today = now_vn.date()
+    now_vn_dt = now_vn()
+    today = now_vn_dt.date()
     
     if today >= latest_dt:
         overlap_idx = max(0, len(cache_dates) - 20)
@@ -564,7 +569,7 @@ def fetch_or_update_data(
             
             if df_new is not None and len(df_new) > 0:
                 # T3: Drop incomplete intraday bar of today if called before market close (15:05 ICT)
-                if now_vn.time() < datetime.time(15, 5):
+                if now_vn_dt.time() < datetime.time(15, 5):
                     df_new = df_new.filter(pl.col("date") < today)
                     
                 if len(df_new) == 0:
@@ -621,6 +626,16 @@ def fetch_or_update_data(
                                 pl.lit(default_val).cast(col_dtype).alias(col_name)
                             )
                     df_new_aligned = df_new_aligned.select(df_market.columns).cast(dict(df_market.schema))
+                    expected_count = len(df_market.filter(pl.col("date") == latest_dt).select("symbol").unique())
+                    new_latest_dt = df_new_aligned["date"].max()
+                    if expected_count >= 2 and new_latest_dt is not None and new_latest_dt > latest_dt:
+                        actual_new_count = len(df_new_aligned.filter(pl.col("date") == new_latest_dt).select("symbol").unique())
+                        if actual_new_count < expected_count:
+                            print(
+                                f"[DATA WARNING] Incomplete market bar for {new_latest_dt}: "
+                                f"{actual_new_count}/{expected_count} symbols fetched. Keeping cached storage untouched."
+                            )
+                            return df_market
                     combined = (
                         pl.concat([df_market, df_new_aligned], how="vertical")
                         .unique(subset=["date", "symbol"], keep="first", maintain_order=True)
@@ -723,6 +738,25 @@ def advance_t25_settlement(state: Dict[str, Any], session_date: str) -> bool:
 
 
 VN_FIXED_HOLIDAYS = {(1, 1), (4, 30), (5, 1), (9, 2), (9, 3)}
+VN_LUNAR_HOLIDAYS = {
+    # Tet Nguyen Dan 2026 & Hung Kings 2026
+    datetime.date(2026, 2, 16),
+    datetime.date(2026, 2, 17),
+    datetime.date(2026, 2, 18),
+    datetime.date(2026, 2, 19),
+    datetime.date(2026, 2, 20),
+    datetime.date(2026, 4, 26),
+    datetime.date(2026, 4, 27),
+    # Tet Dinh Mui 2027 (04/02 - 10/02/2027, resumes Thu 11/02) & Hung Kings 2027 (16/04/2027)
+    datetime.date(2027, 2, 4),
+    datetime.date(2027, 2, 5),
+    datetime.date(2027, 2, 6),
+    datetime.date(2027, 2, 7),
+    datetime.date(2027, 2, 8),
+    datetime.date(2027, 2, 9),
+    datetime.date(2027, 2, 10),
+    datetime.date(2027, 4, 16),
+}
 
 
 def _to_date_obj(val: Any) -> datetime.date:
@@ -735,7 +769,7 @@ def _to_date_obj(val: Any) -> datetime.date:
 
 def _next_business_day(d: datetime.date) -> datetime.date:
     cur = d + datetime.timedelta(days=1)
-    while cur.weekday() >= 5 or (cur.month, cur.day) in VN_FIXED_HOLIDAYS:
+    while cur.weekday() >= 5 or (cur.month, cur.day) in VN_FIXED_HOLIDAYS or cur in VN_LUNAR_HOLIDAYS:
         cur += datetime.timedelta(days=1)
     return cur
 
@@ -847,14 +881,33 @@ def execute_pending_orders_and_settle(
             
         sellable = state["holdings"].get(sym, {}).get("sellable_qty", 0)
         fill_qty = min(qty_requested, sellable)
+        zero_adv_sell = False
         if sell_adv_cap:
-            adv20_s = float(mkt.get("adv20", mkt.get("adv", 1e11)))
-            max_sell_adv = int((adv20_s * MAX_ADV_PARTICIPATION) / max(raw_open, 1.0))
-            max_sell_adv = max(LOT_SIZE, (max_sell_adv // LOT_SIZE) * LOT_SIZE)
+            adv20_raw = mkt.get("adv20", mkt.get("adv", 1e11))
+            adv20_s = float(adv20_raw) if adv20_raw is not None else 0.0
+            if not np.isfinite(adv20_s) or adv20_s <= 0.0:
+                max_sell_adv = 0
+            else:
+                raw_sell_cap = int((adv20_s * MAX_ADV_PARTICIPATION) / max(raw_open, 1.0))
+                max_sell_adv = (raw_sell_cap // LOT_SIZE) * LOT_SIZE
+            zero_adv_sell = max_sell_adv <= 0
             fill_qty = min(fill_qty, max_sell_adv)
         fill_qty = (fill_qty // LOT_SIZE) * LOT_SIZE
         
         if fill_qty <= 0:
+            if sellable > 0 and zero_adv_sell:
+                rep = dict(o)
+                rep["status"] = "REJECTED (ZERO ADV LIQUIDITY)"
+                rep["fill_qty"] = 0
+                rep["fill_price"] = raw_open
+                rep["trapped_days"] = o.get("trapped_days", 0) + 1
+                rep["note"] = "Zero/insufficient ADV20 liquidity for 1 lot; retaining sell order in pending queue."
+                executed_reports.append(rep)
+                o_rem_adv = dict(o)
+                o_rem_adv["qty"] = int(min(qty_requested, sellable))
+                o_rem_adv["trapped_days"] = rep["trapped_days"]
+                remaining_pending.append(o_rem_adv)
+                continue
             rep = dict(o)
             rep["status"] = "REJECTED (T+2.5 LOCKED)"
             rep["fill_qty"] = 0
@@ -936,9 +989,21 @@ def execute_pending_orders_and_settle(
             continue
             
         floor_p = mkt.get("floor_price", raw_open * 0.93)
-        adv20 = mkt.get("adv20", 1e11)
-        max_shares_adv = int((adv20 * MAX_ADV_PARTICIPATION) / max(raw_open, 1.0))
-        max_shares_adv = max(LOT_SIZE, (max_shares_adv // LOT_SIZE) * LOT_SIZE)
+        adv20_raw_b = mkt.get("adv20", 1e11)
+        adv20 = float(adv20_raw_b) if adv20_raw_b is not None else 0.0
+        if not np.isfinite(adv20) or adv20 <= 0.0:
+            max_shares_adv = 0
+        else:
+            raw_buy_cap = int((adv20 * MAX_ADV_PARTICIPATION) / max(raw_open, 1.0))
+            max_shares_adv = (raw_buy_cap // LOT_SIZE) * LOT_SIZE
+        if max_shares_adv <= 0:
+            rep = dict(o)
+            rep["status"] = "REJECTED (ZERO ADV LIQUIDITY)"
+            rep["fill_qty"] = 0
+            rep["fill_price"] = raw_open
+            rep["note"] = "Zero/insufficient ADV20 liquidity for minimum 100-share lot."
+            executed_reports.append(rep)
+            continue
         capped_qty = min(qty_requested, max_shares_adv)
 
         adv20_val = float(mkt.get("adv20", mkt.get("adv", 0.0)))
@@ -1311,7 +1376,7 @@ def generate_next_day_orders(
         trapped_qty_s = min((int(trapped_info_s.get("qty", 0)) // LOT_SIZE) * LOT_SIZE, avail_sell_s) if trapped_info_s else 0
         if trapped_days_s > 0 and trapped_qty_s >= LOT_SIZE:
             trapped_sell_syms.add(s)
-            target_shares[s] = 0
+            target_shares[s] = min(int(target_shares.get(s, 0)), max(0, current_shares[s] - trapped_qty_s))
 
     top_candidates = []
     if enable_greedy_sweep:
@@ -1590,16 +1655,17 @@ def print_portfolio_dashboard(
 # 7. TELEGRAM BOT ALERTS & ENVIRONMENT VARIABLES
 # ==============================================================================
 
-def load_env_variables() -> Dict[str, str]:
-    """Finds and parses local .env configuration without python-dotenv."""
+def load_env_variables(search_paths: Optional[List[str]] = None) -> Dict[str, str]:
+    """Finds and parses local .env configuration files."""
     env_vars = {}
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    search_paths = [
-        os.path.join(ROOT_DIR, ".env"),
-        os.path.join(base_dir, ".env"),
-        os.path.join(base_dir, "..", ".env"),
-        os.path.join(os.getcwd(), ".env"),
-    ]
+    if search_paths is None:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        search_paths = [
+            os.path.join(ROOT_DIR, ".env"),
+            os.path.join(base_dir, ".env"),
+            os.path.join(base_dir, "..", ".env"),
+            os.path.join(os.getcwd(), ".env"),
+        ]
     for p in search_paths:
         if os.path.exists(p):
             try:
@@ -1792,6 +1858,34 @@ def run_test_replay_10(
 # 9. MAIN ENTRY POINT WITH MULTI-DAY CATCH-UP LOOP
 # ==============================================================================
 
+def validate_session_market_completeness(
+    today_market: Dict[str, Any],
+    state: Dict[str, Any],
+    expected_symbols: Optional[List[str]] = None,
+) -> List[str]:
+    """Verify today_market has valid OHLC prices for active holdings, pending orders, and universe symbols."""
+    required_syms = set(state.get("holdings", {}).keys()) | {
+        str(o.get("symbol")) for o in state.get("pending_orders", []) if o.get("symbol")
+    }
+    if expected_symbols:
+        required_syms.update(str(s) for s in expected_symbols)
+    missing: List[str] = []
+    for sym in sorted(required_syms):
+        row = today_market.get(sym)
+        if not row:
+            missing.append(sym)
+            continue
+        try:
+            ro = float(row.get("raw_open", 0.0) or 0.0)
+            rc = float(row.get("raw_close", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            missing.append(sym)
+            continue
+        if not (np.isfinite(ro) and ro > 0.0 and np.isfinite(rc) and rc > 0.0):
+            missing.append(sym)
+    return missing
+
+
 def main():
     parser = argparse.ArgumentParser(description="Lean VN-Quant: Daily Paper Trader (Forward-Testing Engine)")
     parser.add_argument("--capital", type=float, default=DEFAULT_INITIAL_CAPITAL, help="Initial capital (default 100,000,000 VND)")
@@ -1851,7 +1945,7 @@ def main():
             save_portfolio_state(state, args.state_file)
         all_dates = sorted(df_market.select("date").unique()["date"].to_list())
         latest_date = all_dates[-1]
-        today_str = datetime.date.today().isoformat()
+        today_str = now_vn().date().isoformat()
 
         # Check overnight FinGraph contagion scores if bridge/data exists
         contagion_path = os.path.join(ROOT_DIR, "fingraph", "data", "event_contagion_alpha.parquet")
@@ -1906,8 +2000,8 @@ def main():
                 args.state_file,
                 args.history_file
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[DASHBOARD] Could not export HTML: {sanitize_error_message(str(e))}")
         return
 
     if len(dates_to_run) > 1:
@@ -1932,6 +2026,20 @@ def main():
             prev_date = all_dates[cur_idx - 1]
             df_prev = df_market.filter(pl.col("date") == prev_date)
             prev_close_map = {row["symbol"]: row["raw_close"] for row in df_prev.iter_rows(named=True)}
+
+        expected_syms = list(prev_close_map.keys()) if len(prev_close_map) >= 2 else None
+        missing_syms = validate_session_market_completeness(
+            today_market, state, expected_symbols=expected_syms
+        )
+        if missing_syms:
+            warn_msg = (
+                f"[DATA HALT] Incomplete market bar for session {session_date_str}: "
+                f"missing/invalid symbols ({len(missing_syms)}): {missing_syms[:10]}. "
+                f"Aborting session settlement to preserve ledger integrity."
+            )
+            print(warn_msg)
+            send_telegram_alert(f"🚨 <b>{html.escape(warn_msg)}</b>")
+            return
 
         state, exec_reps = execute_pending_orders_and_settle(state, today_market, session_date_str, trading_dates=all_dates)
         last_exec_reps = exec_reps

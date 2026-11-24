@@ -21,11 +21,14 @@ Multi-factor quantitative research and machine learning combiner module:
 import os
 import sys
 import json
+import logging
 import argparse
 import numpy as np
 import polars as pl
 from typing import Dict, Any, List, Tuple
 from scipy import stats
+
+logger = logging.getLogger(__name__)
 
 # Ensure UTF-8 console output
 if hasattr(sys.stdout, "reconfigure"):
@@ -232,15 +235,22 @@ def purged_walk_forward_combiner(
         if sum_ic > 1e-6:
             w_k = np.array([ic / sum_ic for ic in pos_ics], dtype=np.float64)
         else:
-            w_k = np.full(K, 1.0 / K, dtype=np.float64)
+            active_k = [k for k in range(K) if np.any(tradable_mask[t] & np.isfinite(ortho_alphas[k][t]))]
+            if active_k:
+                w_k = np.zeros(K, dtype=np.float64)
+                for k in active_k:
+                    w_k[k] = 1.0 / len(active_k)
+            else:
+                w_k = np.full(K, 1.0 / K, dtype=np.float64)
 
         factor_weights_history[t] = w_k
         
         for k in range(K):
-            composite_alpha[t] += w_k[k] * ortho_alphas[k][t]
+            if w_k[k] > 0.0:
+                composite_alpha[t] += w_k[k] * np.nan_to_num(ortho_alphas[k][t], nan=0.0)
 
     # Warm-up phase defaults to Alpha 1
-    for t in range(window + embargo):
+    for t in range(min(T, window + embargo)):
         composite_alpha[t] = ortho_alphas[0][t]
         factor_weights_history[t, 0] = 1.0
 
@@ -252,10 +262,10 @@ def purged_walk_forward_combiner(
 # ==============================================================================
 
 def run_comparative_experiment(parquet_path: str = DEFAULT_PARQUET) -> Dict[str, Any]:
-    """Executes the full institutional verification pipeline and outputs comparison table."""
-    print("\n" + "=" * 90)
-    print("      MULTI-FACTOR PERFORMANCE AUDIT (PURGED WALK-FORWARD MULTI-ALPHA COMBINER)")
-    print("=" * 90)
+    """Executes the full verification pipeline and outputs comparison table."""
+    logger.info("\n" + "=" * 90)
+    logger.info("      MULTI-FACTOR PERFORMANCE AUDIT (PURGED WALK-FORWARD MULTI-ALPHA COMBINER)")
+    logger.info("=" * 90)
 
     if not os.path.exists(parquet_path):
         raise FileNotFoundError(f"Parquet data file not found at: {parquet_path}")
@@ -276,22 +286,22 @@ def run_comparative_experiment(parquet_path: str = DEFAULT_PARQUET) -> Dict[str,
 
     T, N = raw_close.shape
     adv20_shares = np.where(raw_close > 0, adv20 / np.maximum(raw_close, 1e-4), 1e6)
-    print(f"-> Ingested dataset: {T} trading sessions ({dates[0]} to {dates[-1]}), {N} VN30 constituents.")
+    logger.info(f"-> Ingested dataset: {T} trading sessions ({dates[0]} to {dates[-1]}), {N} VN30 constituents.")
 
     # 2. Factor generation & QR orthogonalization
     raw_alphas, factor_names = generate_five_alphas(raw_open, raw_high, raw_low, raw_close, volume, tradable_mask)
     ortho_alphas, raw_corr, ortho_corr = orthogonalize_factor_library(raw_alphas, factor_names, tradable_mask)
 
-    print("\n--- TABLE 1: CROSS-CORRELATION BEFORE & AFTER QR ORTHOGONALIZATION (MAX CORR) ---")
-    print(f"{'Alpha Factor':<30} | {'Raw Max Correlation':<22} | {'Ortho Max Correlation':<24}")
-    print("-" * 80)
+    logger.info("\n--- TABLE 1: CROSS-CORRELATION BEFORE & AFTER QR ORTHOGONALIZATION (MAX CORR) ---")
+    logger.info(f"{'Alpha Factor':<30} | {'Raw Max Correlation':<22} | {'Ortho Max Correlation':<24}")
+    logger.info("-" * 80)
     for i in range(len(factor_names)):
         max_r_raw = np.max([abs(raw_corr[i, j]) for j in range(len(factor_names)) if i != j])
         max_r_ortho = np.max([abs(ortho_corr[i, j]) for j in range(len(factor_names)) if i != j])
-        print(f"{factor_names[i]:<30} | {max_r_raw:>20.3f}   | {max_r_ortho:>22.3f}")
+        logger.info(f"{factor_names[i]:<30} | {max_r_raw:>20.3f}   | {max_r_ortho:>22.3f}")
 
     # 3. Purged Walk-Forward combination
-    print("\n-> Running Purged Walk-Forward Cross-Validation (Window=120, Embargo=T+3)...")
+    logger.info("\n-> Running Purged Walk-Forward Cross-Validation (Window=120, Embargo=T+3)...")
     composite_alpha, w_history = purged_walk_forward_combiner(ortho_alphas, raw_close, tradable_mask, window=120, embargo=3)
     composite_ranked = ops.rank(composite_alpha, mask=tradable_mask)
 
@@ -315,7 +325,6 @@ def run_comparative_experiment(parquet_path: str = DEFAULT_PARQUET) -> Dict[str,
     )
 
     # 5. Realistic Vietnam Microstructure Simulator
-    # B6 Fix: Enforce strictly causal execution by lagging target weights 1 session.
     # Signal computed from close of session t is executed at ATO open of session t+1.
     w_single_exec = np.zeros_like(w_single)
     w_single_exec[1:] = w_single[:-1]
@@ -335,22 +344,22 @@ def run_comparative_experiment(parquet_path: str = DEFAULT_PARQUET) -> Dict[str,
     m_multi = sim.evaluate_strategy(res_multi["equity"], w_multi_exec, naive_multi)
 
     # 6. Benchmark Comparison Table
-    print("\n" + "=" * 90)
-    print("         TABLE 2: HEAD-TO-HEAD QUANTITATIVE BENCHMARK PERFORMANCE COMPARISON")
-    print("=" * 90)
-    print(f"{'Quantitative Metric':<32} | {'Single-Alpha (Breakout)':<25} | {'Multi-Alpha Combiner':<25}")
-    print("-" * 90)
-    print(f"{'Total Cumulative Return':<32} | {m_single['total_return']*100:>23.2f}% | {m_multi['total_return']*100:>23.2f}%")
-    print(f"{'CAGR (Annualized Return)':<32} | {m_single['cagr']*100:>23.2f}% | {m_multi['cagr']*100:>23.2f}%")
-    print(f"{'Sharpe Ratio (Post Fee & Tax)':<32} | {m_single['sharpe_ratio']:>24.2f}  | {m_multi['sharpe_ratio']:>24.2f} ")
-    print(f"{'Sortino Ratio (Downside Risk)':<32} | {m_single['sortino_ratio']:>24.2f}  | {m_multi['sortino_ratio']:>24.2f} ")
-    print(f"{'Annualized Volatility':<32} | {m_single['annualized_vol']*100:>23.2f}% | {m_multi['annualized_vol']*100:>23.2f}%")
-    print(f"{'Maximum Drawdown (MaxDD)':<32} | {m_single['max_drawdown']*100:>23.2f}% | {m_multi['max_drawdown']*100:>23.2f}%")
-    print(f"{'Average Daily Turnover':<32} | {m_single['daily_turnover']*100:>23.2f}% | {m_multi['daily_turnover']*100:>23.2f}%")
-    print(f"{'Implementation Shortfall':<32} | {m_single['implementation_shortfall_pct']:>23.2f}% | {m_multi['implementation_shortfall_pct']:>23.2f}%")
-    print(f"{'Total Brokerage & Tax Fees':<32} | {res_single['trading_fees'][-1]/1e6:>20.1f}M VND | {res_multi['trading_fees'][-1]/1e6:>20.1f}M VND")
-    print(f"{'T+2 Advance Interest Cost':<32} | {res_single['advance_interest_fees'][-1]/1e6:>20.1f}M VND | {res_multi['advance_interest_fees'][-1]/1e6:>20.1f}M VND")
-    print("=" * 90)
+    logger.info("\n" + "=" * 90)
+    logger.info("         TABLE 2: HEAD-TO-HEAD QUANTITATIVE BENCHMARK PERFORMANCE COMPARISON")
+    logger.info("=" * 90)
+    logger.info(f"{'Quantitative Metric':<32} | {'Single-Alpha (Breakout)':<25} | {'Multi-Alpha Combiner':<25}")
+    logger.info("-" * 90)
+    logger.info(f"{'Total Cumulative Return':<32} | {m_single['total_return']*100:>23.2f}% | {m_multi['total_return']*100:>23.2f}%")
+    logger.info(f"{'CAGR (Annualized Return)':<32} | {m_single['cagr']*100:>23.2f}% | {m_multi['cagr']*100:>23.2f}%")
+    logger.info(f"{'Sharpe Ratio (Post Fee & Tax)':<32} | {m_single['sharpe_ratio']:>24.2f}  | {m_multi['sharpe_ratio']:>24.2f} ")
+    logger.info(f"{'Sortino Ratio (Downside Risk)':<32} | {m_single['sortino_ratio']:>24.2f}  | {m_multi['sortino_ratio']:>24.2f} ")
+    logger.info(f"{'Annualized Volatility':<32} | {m_single['annualized_vol']*100:>23.2f}% | {m_multi['annualized_vol']*100:>23.2f}%")
+    logger.info(f"{'Maximum Drawdown (MaxDD)':<32} | {m_single['max_drawdown']*100:>23.2f}% | {m_multi['max_drawdown']*100:>23.2f}%")
+    logger.info(f"{'Average Daily Turnover':<32} | {m_single['daily_turnover']*100:>23.2f}% | {m_multi['daily_turnover']*100:>23.2f}%")
+    logger.info(f"{'Implementation Shortfall':<32} | {m_single['implementation_shortfall_pct']:>23.2f}% | {m_multi['implementation_shortfall_pct']:>23.2f}%")
+    logger.info(f"{'Total Brokerage & Tax Fees':<32} | {res_single['trading_fees'][-1]/1e6:>20.1f}M VND | {res_multi['trading_fees'][-1]/1e6:>20.1f}M VND")
+    logger.info(f"{'T+2 Advance Interest Cost':<32} | {res_single['advance_interest_fees'][-1]/1e6:>20.1f}M VND | {res_multi['advance_interest_fees'][-1]/1e6:>20.1f}M VND")
+    logger.info("=" * 90)
 
     comparison_results = {
         "dates_count": T,
@@ -411,6 +420,7 @@ def load_and_decay_fingraph_alpha(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Multi-Alpha Orthogonal Combiner & Purged Walk-Forward Engine")
     parser.add_argument("--parquet", type=str, default=DEFAULT_PARQUET, help="Path to VN30 Parquet file")
     args = parser.parse_args()

@@ -18,11 +18,14 @@ import datetime
 import logging
 import warnings
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import numpy as np
 import polars as pl
 import duckdb
 
 logger = logging.getLogger("DataPipeline")
+_ORIG_REQUESTS_GET = requests.get
 
 # Standard VN30 constituents
 VN30_SYMBOLS = [
@@ -72,24 +75,24 @@ def compute_hose_limits(ref_price: float) -> Tuple[float, float]:
     Computes HOSE Ceiling (+7% rounded DOWN to tick) and Floor (-7% rounded UP to tick).
     """
     # Tick size for ceiling
-    raw_ceil = ref_price * 1.07
+    raw_ceil = (ref_price * 107.0) / 100.0
     if raw_ceil < 10000.0:
         ceil_tick = 10.0
     elif raw_ceil < 50000.0:
         ceil_tick = 50.0
     else:
         ceil_tick = 100.0
-    ceiling = np.floor(raw_ceil / ceil_tick) * ceil_tick
+    ceiling = np.floor(raw_ceil / ceil_tick + 1e-12) * ceil_tick
 
     # Tick size for floor
-    raw_flr = ref_price * 0.93
+    raw_flr = (ref_price * 93.0) / 100.0
     if raw_flr < 10000.0:
         flr_tick = 10.0
     elif raw_flr < 50000.0:
         flr_tick = 50.0
     else:
         flr_tick = 100.0
-    floor = np.ceil(raw_flr / flr_tick) * flr_tick
+    floor = np.ceil(raw_flr / flr_tick - 1e-12) * flr_tick
 
     return ceiling, floor
 
@@ -307,63 +310,87 @@ def fetch_vn_ohlcv(
     records = []
     success_count = 0
     successful_symbols = set()
-    
-    for symbol in symbols:
-        url = "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
-        try:
-            resp = requests.get(
-                url,
-                params={"symbol": symbol, "resolution": "1D", "from": from_ts, "to": to_ts},
-                timeout=4,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                t_arr = data.get("t", [])
-                o_arr = data.get("o", [])
-                h_arr = data.get("h", [])
-                l_arr = data.get("l", [])
-                c_arr = data.get("c", [])
-                v_arr = data.get("v", [])
-                
-                if len(t_arr) > 0 and len(t_arr) == len(c_arr):
-                    sector = SECTOR_MAP.get(symbol, "General")
-                    last_c = None
-                    for i in range(len(t_arr)):
-                        # Entrade returns prices in thousands of VND
-                        d = datetime.datetime.fromtimestamp(t_arr[i], tz=datetime.timezone(datetime.timedelta(hours=7))).date()
-                        c_val = float(c_arr[i]) * 1000.0
-                        o_val = float(o_arr[i]) * 1000.0
-                        h_val = float(h_arr[i]) * 1000.0
-                        l_val = float(l_arr[i]) * 1000.0
-                        v_val = float(v_arr[i])
-                        
-                        ref_p = last_c if last_c is not None else o_val  # At i==0 (warmup t<49, w=0), prior close precedes slice so ref_p uses o_val
-                        ceil_p, flr_p = compute_hose_limits(ref_p)
-                        last_c = c_val
-                        
-                        adv_val = c_val * v_val
-                        records.append({
-                            "date": d,
-                            "symbol": symbol,
-                            "sector": sector,
-                            "raw_open": o_val,
-                            "raw_high": h_val,
-                            "raw_low": l_val,
-                            "raw_close": c_val,
-                            "ref_price": ref_p,
-                            "ceiling_price": ceil_p,
-                            "floor_price": flr_p,
-                            "adj_close": c_val,
-                            "volume": v_val,
-                            "adv": adv_val,
-                            "is_listed": True,
-                            "data_source": "entrade",
-                            "price_basis": "entrade_adjusted"
-                        })
-                    success_count += 1
-                    successful_symbols.add(symbol)
-        except Exception as exc:
-            logger.warning(f"Lỗi tải dữ liệu cho mã {symbol}: {exc}")
+
+    use_mocked_get = requests.get is not _ORIG_REQUESTS_GET
+    session: Optional[requests.Session] = None
+    if not use_mocked_get:
+        session = requests.Session()
+        retry_cfg = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+        )
+        adapter = HTTPAdapter(max_retries=retry_cfg)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+    try:
+        for symbol in symbols:
+            url = "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
+            req_params = {"symbol": symbol, "resolution": "1D", "from": from_ts, "to": to_ts}
+            try:
+                if use_mocked_get:
+                    resp = None
+                    for attempt in range(3):
+                        resp = requests.get(url, params=req_params, timeout=4)
+                        if resp is not None and getattr(resp, "status_code", None) not in (429, 500, 502, 503, 504):
+                            break
+                else:
+                    resp = session.get(url, params=req_params, timeout=4)
+                if resp is not None and resp.status_code == 200:
+                    data = resp.json()
+                    t_arr = data.get("t", [])
+                    o_arr = data.get("o", [])
+                    h_arr = data.get("h", [])
+                    l_arr = data.get("l", [])
+                    c_arr = data.get("c", [])
+                    v_arr = data.get("v", [])
+
+                    if len(t_arr) > 0 and len(t_arr) == len(c_arr):
+                        sector = SECTOR_MAP.get(symbol, "General")
+                        last_c = None
+                        for i in range(len(t_arr)):
+                            # Entrade returns prices in thousands of VND
+                            d = datetime.datetime.fromtimestamp(t_arr[i], tz=datetime.timezone(datetime.timedelta(hours=7))).date()
+                            c_val = float(c_arr[i]) * 1000.0
+                            o_val = float(o_arr[i]) * 1000.0
+                            h_val = float(h_arr[i]) * 1000.0
+                            l_val = float(l_arr[i]) * 1000.0
+                            v_val = float(v_arr[i])
+
+                            ref_p = last_c if last_c is not None else o_val  # At i==0 (warmup t<49, w=0), prior close precedes slice so ref_p uses o_val
+                            ceil_p, flr_p = compute_hose_limits(ref_p)
+                            last_c = c_val
+
+                            adv_val = c_val * v_val
+                            records.append({
+                                "date": d,
+                                "symbol": symbol,
+                                "sector": sector,
+                                "raw_open": o_val,
+                                "raw_high": h_val,
+                                "raw_low": l_val,
+                                "raw_close": c_val,
+                                "ref_price": ref_p,
+                                "ceiling_price": ceil_p,
+                                "floor_price": flr_p,
+                                "adj_close": c_val,
+                                "volume": v_val,
+                                "adv": adv_val,
+                                "is_listed": True,
+                                "data_source": "entrade",
+                                "price_basis": "entrade_adjusted"
+                            })
+                        success_count += 1
+                        successful_symbols.add(symbol)
+            except Exception as exc:
+                logger.warning(f"Lỗi tải dữ liệu cho mã {symbol}: {exc}")
+    finally:
+        if session is not None:
+            session.close()
             
     # S1 Invariant: NEVER silently overwrite with synthetic data on network/API failure
     if success_count < len(symbols) * 0.5 or len(records) == 0:

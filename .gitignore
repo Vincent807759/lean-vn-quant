@@ -5,8 +5,6 @@ research/
 refs/
 private_alphas/
 local_docs/
-AGENTS.md
-GEMINI.md
 danh_sach_alpha_chuan_bi_nop.md
 *.ipynb_checkpoints/
 
@@ -76,7 +74,3 @@ venv.bak/
 scratch/
 tmp/
 inspect_output.py
-# ==============================================================================
-# AGENT SKILLS & RUNTIME CONFIGURATION
-# ==============================================================================
-.agent/

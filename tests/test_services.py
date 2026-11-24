@@ -1139,3 +1139,268 @@ def test_m8_replay_isolation_overlap_backfill_mtm_fallback_and_bak_flag_reset(tm
     st_mtm["prev_close_map"] = {"ACB": 24_000.0}
     rec_mtm = dpt.mark_to_market(st_mtm, {"FPT": {"raw_close": None}, "ACB": {"raw_close": 0.0}}, {}, "2026-10-22", 0)
     assert rec_mtm["stock_value"] == pytest.approx(100 * 95_000.0 + 100 * 24_000.0)
+
+
+def test_h1_validate_session_market_completeness_and_fetch_guard(tmp_path, monkeypatch):
+    """H1: Incomplete session bars halt settlement and abort partial latest-date parquet appends."""
+    import datetime
+    import polars as pl
+    from engine import data_pipeline as dp
+    from services import daily_paper_trader as dpt
+
+    st = dpt.init_empty_state(100_000_000.0)
+    st["holdings"] = {"HPG": {"sellable_qty": 100, "locked_t1": 0, "locked_t2": 0, "avg_cost": 25000.0}}
+    st["pending_orders"] = [{"action": "BUY", "symbol": "FPT", "qty": 100}]
+
+    complete_mkt = {
+        "HPG": {"raw_open": 25000.0, "raw_close": 25500.0},
+        "FPT": {"raw_open": 100000.0, "raw_close": 101000.0},
+        "ACB": {"raw_open": 20000.0, "raw_close": 20100.0},
+    }
+    assert dpt.validate_session_market_completeness(complete_mkt, st, expected_symbols=["HPG", "FPT", "ACB"]) == []
+
+    missing_mkt = {
+        "FPT": {"raw_open": float("nan"), "raw_close": 101000.0},
+        "ACB": {"raw_open": 20000.0, "raw_close": 20100.0},
+    }
+    missing = dpt.validate_session_market_completeness(missing_mkt, st, expected_symbols=["HPG", "FPT", "ACB"])
+    assert missing == ["FPT", "HPG"]
+
+    live_pq = tmp_path / "vn30_live_paper.parquet"
+    d1 = datetime.date(2026, 10, 20)
+    d2 = datetime.date(2026, 10, 21)
+    df_cached = pl.DataFrame({
+        "date": [d1, d1],
+        "symbol": ["ACB", "FPT"],
+        "raw_open": [20000.0, 100000.0],
+        "raw_high": [20500.0, 101000.0],
+        "raw_low": [19800.0, 99000.0],
+        "raw_close": [20200.0, 100500.0],
+        "adj_close": [20200.0, 100500.0],
+        "volume": [1000000.0, 2000000.0],
+        "data_source": ["entrade", "entrade"],
+    })
+    df_cached.write_parquet(live_pq)
+
+    df_partial_new = pl.DataFrame({
+        "date": [d1, d1, d2],
+        "symbol": ["ACB", "FPT", "ACB"],
+        "raw_open": [20000.0, 100000.0, 20300.0],
+        "raw_high": [20500.0, 101000.0, 20600.0],
+        "raw_low": [19800.0, 99000.0, 20000.0],
+        "raw_close": [20200.0, 100500.0, 20400.0],
+        "adj_close": [20200.0, 100500.0, 20400.0],
+        "volume": [1000000.0, 2000000.0, 900000.0],
+        "data_source": ["entrade", "entrade", "entrade"],
+    })
+    monkeypatch.setattr(dp, "fetch_vn_ohlcv", lambda **kwargs: df_partial_new)
+    res_df = dpt.fetch_or_update_data(str(live_pq), is_replay=False)
+    assert len(res_df) == 2
+    assert len(pl.read_parquet(live_pq)) == 2
+
+
+def test_new1_zero_adv20_blocks_buy_and_sell_without_lot_minimum():
+    """Zero or non-positive ADV20 must reject both BUY and SELL ATO orders (0 shares filled)."""
+    from services import daily_paper_trader as dpt
+
+    state = dpt.init_empty_state(50_000_000.0)
+    state["holdings"] = {
+        "HPG": {"sellable_qty": 500, "locked_t1": 0, "locked_t2": 0, "avg_cost": 25_000.0, "last_close": 25_000.0},
+    }
+    state["pending_orders"] = [
+        {"action": "SELL", "symbol": "HPG", "qty": 300},
+        {"action": "BUY", "symbol": "FPT", "qty": 200},
+    ]
+    today_mkt = {
+        "HPG": {
+            "raw_open": 25_000.0, "raw_close": 25_000.0,
+            "floor_price": 23_250.0, "ceiling_price": 26_750.0, "adv20": 0.0,
+        },
+        "FPT": {
+            "raw_open": 100_000.0, "raw_close": 100_000.0,
+            "floor_price": 93_000.0, "ceiling_price": 107_000.0, "adv20": 0.0,
+        },
+    }
+    new_state, reps = dpt.execute_pending_orders_and_settle(
+        state, today_mkt, "2026-10-20", sell_adv_cap=True
+    )
+    assert len(reps) == 2
+    assert all(r["fill_qty"] == 0 for r in reps)
+    assert all(r["status"] == "REJECTED (ZERO ADV LIQUIDITY)" for r in reps)
+    assert new_state["available_cash"] == pytest.approx(50_000_000.0)
+    assert new_state["holdings"]["HPG"]["sellable_qty"] == 500
+    assert any(o["action"] == "SELL" and o["symbol"] == "HPG" and o["qty"] == 300 for o in new_state["pending_orders"])
+
+
+def test_new2_lunar_holidays_2026_2027_settlement_days():
+    """Lunar Tet & Hung Kings 2026-2027 holidays accurately extend T+1/T+2 calendar borrowing days."""
+    from services import daily_paper_trader as dpt
+
+    assert dpt._compute_settlement_calendar_days("2026-02-13") == (10, 11)
+    assert dpt._compute_settlement_calendar_days("2027-02-03") == (8, 9)
+    assert dpt._compute_settlement_calendar_days("2027-04-15") == (4, 5)
+
+
+def test_new3_partial_floor_trap_preserves_remaining_target_shares(monkeypatch):
+    """Partial floor-trapped sell retains remaining target shares instead of liquidating the full position."""
+    import datetime
+    import numpy as np
+    import polars as pl
+    from engine import alpha_ops as ops
+    from services import daily_paper_trader as dpt
+
+    dates = []
+    cur = datetime.date(2026, 7, 1)
+    while len(dates) < 65:
+        if cur.weekday() < 5:
+            dates.append(cur)
+        cur += datetime.timedelta(days=1)
+
+    rows = []
+    for d in dates:
+        for sym, px in (("ACB", 25_000.0), ("FPT", 50_000.0)):
+            rows.append({
+                "date": d,
+                "symbol": sym,
+                "raw_open": px,
+                "raw_high": px,
+                "raw_low": px,
+                "raw_close": px,
+                "adj_close": px,
+                "volume": 2_000_000.0,
+                "adv": px * 2_000_000.0,
+                "is_listed": True,
+            })
+    df_hist = pl.DataFrame(rows)
+
+    T = len(dates)
+    monkeypatch.setattr(dpt, "compute_strategy_signal", lambda rc, m, df=None: np.ones((T, 2)))
+    w_mat = np.full((T, 2), 0.5, dtype=np.float64)
+    monkeypatch.setattr(ops, "dampen_turnover", lambda *a, **kw: w_mat)
+
+    state = dpt.init_empty_state(50_000_000.0)
+    state["last_real_nav"] = 50_000_000.0
+    state["available_cash"] = 25_000_000.0
+    state["holdings"] = {
+        "ACB": {"sellable_qty": 1000, "locked_t1": 0, "locked_t2": 0, "avg_cost": 25_000.0, "last_close": 25_000.0},
+    }
+    state["pending_orders"] = [
+        {"action": "SELL", "symbol": "ACB", "qty": 300, "trapped_days": 1},
+    ]
+
+    orders = dpt.generate_next_day_orders(state, df_hist, dates[-1].isoformat())
+    acb_sells = [o for o in orders if o["symbol"] == "ACB" and o["action"] == "SELL"]
+    assert len(acb_sells) == 1
+    assert acb_sells[0]["qty"] == 300
+    assert acb_sells[0]["trapped_days"] == 1
+
+
+def test_new4_dashboard_and_telegram_safe_state_bak_recovery(tmp_path, monkeypatch):
+    """Dashboard and Telegram bot recover transparently from .bak when primary state JSON is corrupted."""
+    import json
+    from services import dashboard
+    from services import telegram_bot_service as tbs
+
+    state_path = tmp_path / "paper_portfolio_state.json"
+    bak_path = tmp_path / "paper_portfolio_state.json.bak"
+    hist_path = tmp_path / "paper_nav_history.csv"
+
+    state_path.write_text("{corrupt json", encoding="utf-8")
+    bak_payload = {
+        "initial_capital": 1_000_000_000.0,
+        "available_cash": 200_000_000.0,
+        "receivable_cash_t1": 0.0,
+        "receivable_cash_t2": 0.0,
+        "last_real_nav": 777_000_000.0,
+        "naive_nav": 780_000_000.0,
+        "last_updated_date": "2026-11-23",
+        "holdings": {
+            "FPT": {"sellable_qty": 1000, "locked_t1": 0, "locked_t2": 0, "avg_cost": 100_000.0, "last_close": 105_000.0},
+        },
+        "pending_orders": [
+            {"action": "BUY", "symbol": "ACB", "qty": 500, "est_price": 25_000.0, "est_value": 12_500_000.0},
+        ],
+    }
+    bak_path.write_text(json.dumps(bak_payload), encoding="utf-8")
+    hist_path.write_text("date,real_nav\n", encoding="utf-8")
+
+    dash_data = dashboard.load_portfolio_data(str(state_path), str(hist_path))
+    assert dash_data["state"]["last_real_nav"] == pytest.approx(777_000_000.0)
+    assert dash_data["state"].get("recovered_from_bak") is True
+
+    monkeypatch.setattr(tbs, "get_state_file_path", lambda: str(state_path))
+    assert "777,000,000" in tbs.handle_status()
+    assert "FPT" in tbs.handle_holdings()
+    assert "ACB" in tbs.handle_orders()
+
+
+def test_m5_m6_l1_l2_services_hardening(tmp_path, monkeypatch):
+    """M5/M6/L1/L2: UTC+7 clock helper, Chart.js SRI tag, shared .env loader, and HTTP 503 retry."""
+    import datetime
+    import requests
+    from engine import data_pipeline as dp
+    from services import daily_paper_trader as dpt
+    from services import dashboard
+    from services import telegram_bot_service as tbs
+
+    # M5: now_vn() UTC+7
+    vn_dt = dpt.now_vn()
+    assert vn_dt.tzinfo is not None
+    assert vn_dt.utcoffset() == datetime.timedelta(hours=7)
+
+    # L2: Chart.js SRI attribute
+    state_path = tmp_path / "st.json"
+    hist_path = tmp_path / "hist.csv"
+    out_html = tmp_path / "dashboard.html"
+    state_path.write_text('{"initial_capital": 1000000000, "last_real_nav": 1000000000, "holdings": {}, "pending_orders": []}', encoding="utf-8")
+    hist_path.write_text("date,real_nav,naive_nav,available_cash,receivable_cash,stock_value,implementation_shortfall_pct,daily_return_real,daily_return_naive,orders_executed,daily_return_benchmark,benchmark\n", encoding="utf-8")
+    dashboard.export_html_dashboard(str(out_html), str(state_path), str(hist_path))
+    html_src = out_html.read_text(encoding="utf-8")
+    assert 'integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4"' in html_src
+    assert 'crossorigin="anonymous"' in html_src
+
+    # L1: shared .env loader via telegram_bot_service
+    env_file = tmp_path / ".env"
+    env_file.write_text('TELEGRAM_BOT_TOKEN="123456:ABC_test_token"\nTELEGRAM_CHAT_ID=998877\n', encoding="utf-8")
+    monkeypatch.setattr(tbs, "ENV_FILE_PATHS", [str(env_file)])
+    loaded = tbs.load_env()
+    assert loaded["TELEGRAM_BOT_TOKEN"] == "123456:ABC_test_token"
+    assert loaded["TELEGRAM_CHAT_ID"] == "998877"
+
+    # M6: retry on HTTP 503 in fetch_vn_ohlcv
+    class _Resp:
+        def __init__(self, status_code, payload=None):
+            self.status_code = status_code
+            self._payload = payload or {}
+
+        def json(self):
+            return self._payload
+
+    calls = {"n": 0}
+    ts1 = int(datetime.datetime(2026, 10, 1, 0, 0).timestamp())
+    ts2 = int(datetime.datetime(2026, 10, 2, 0, 0).timestamp())
+
+    def _fake_get(url, params=None, timeout=4):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _Resp(503)
+        return _Resp(200, {
+            "t": [ts1, ts2],
+            "o": [25.0, 25.2],
+            "h": [25.5, 25.6],
+            "l": [24.8, 25.0],
+            "c": [25.2, 25.4],
+            "v": [100000, 120000],
+        })
+
+    monkeypatch.setattr(requests, "get", _fake_get)
+    df_out = dp.fetch_vn_ohlcv(
+        symbols=["ACB"],
+        start_date="2026-10-01",
+        end_date="2026-10-05",
+        save_parquet=None,
+        force_fallback=False,
+    )
+    assert calls["n"] == 2
+    assert len(df_out) == 2
+    assert df_out["data_source"][0] == "entrade"
