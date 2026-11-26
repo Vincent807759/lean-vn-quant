@@ -20,6 +20,7 @@ Professional real-time visualization module for the Lean VN-Quant execution engi
 import os
 import sys
 import json
+import time
 import html as html_lib
 import argparse
 import datetime
@@ -67,12 +68,39 @@ DEFAULT_OUTPUT_HTML = os.path.join(BASE_DIR, "dashboard.html")
 
 
 def load_portfolio_data(state_file: str = DEFAULT_STATE_FILE, history_file: str = DEFAULT_HISTORY_FILE) -> Dict[str, Any]:
-    """Loads and synchronizes current portfolio state and NAV history."""
-    state = {}
-    if os.path.exists(state_file):
+    """Loads and synchronizes current portfolio state and NAV history under shared state lock."""
+    state: Dict[str, Any] = {}
+    try:
         try:
-            with open(state_file, "r", encoding="utf-8") as f:
-                state = json.load(f)
+            from services.daily_paper_trader import _state_file_lock
+        except ImportError:
+            from daily_paper_trader import _state_file_lock
+    except ImportError:
+        import contextlib
+        @contextlib.contextmanager
+        def _state_file_lock(_path: str, timeout: float = 10.0):
+            yield
+
+    if os.path.exists(state_file) or os.path.exists(f"{state_file}.bak"):
+        try:
+            with _state_file_lock(state_file):
+                for attempt in range(3):
+                    try:
+                        with open(state_file, "r", encoding="utf-8") as f:
+                            state = json.load(f)
+                        break
+                    except PermissionError:
+                        if attempt == 2:
+                            raise
+                        time.sleep(0.05)
+                    except Exception:
+                        bak_file = f"{state_file}.bak"
+                        if os.path.exists(bak_file):
+                            with open(bak_file, "r", encoding="utf-8") as f_bak:
+                                state = json.load(f_bak)
+                                state["recovered_from_bak"] = True
+                            break
+                        raise
         except Exception as e:
             print(f"[DASHBOARD] Error reading state JSON: {sanitize_error_message(str(e))}")
 
@@ -275,7 +303,7 @@ def generate_html_content(data: Dict[str, Any]) -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lean VN-Quant | Production Dashboard</title>
     <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>

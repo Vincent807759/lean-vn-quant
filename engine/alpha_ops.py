@@ -292,9 +292,6 @@ def _ts_corr_numba(x: np.ndarray, y: np.ndarray, d: int) -> np.ndarray:
         for j in range(N):
             sx = 0.0
             sy = 0.0
-            sxx = 0.0
-            syy = 0.0
-            sxy = 0.0
             has_nan = False
             for k in range(d):
                 vx = x[t - k, j]
@@ -304,15 +301,21 @@ def _ts_corr_numba(x: np.ndarray, y: np.ndarray, d: int) -> np.ndarray:
                     break
                 sx += vx
                 sy += vy
-                sxx += vx * vx
-                syy += vy * vy
-                sxy += vx * vy
             if not has_nan:
                 mx = sx / d
                 my = sy / d
-                var_x = (sxx / d) - (mx * mx)
-                var_y = (syy / d) - (my * my)
-                cov_xy = (sxy / d) - (mx * my)
+                var_x = 0.0
+                var_y = 0.0
+                cov_xy = 0.0
+                for k in range(d):
+                    dx = x[t - k, j] - mx
+                    dy = y[t - k, j] - my
+                    var_x += dx * dx
+                    var_y += dy * dy
+                    cov_xy += dx * dy
+                var_x /= d
+                var_y /= d
+                cov_xy /= d
                 if var_x > 1e-12 and var_y > 1e-12:
                     r = cov_xy / np.sqrt(var_x * var_y)
                     if r > 1.0:
@@ -839,15 +842,9 @@ def dampen_turnover(
             w_t = weights[t - 1] + diff * (max_daily_turnover / step_to)
             
         s = np.sum(np.abs(w_t))
-        if invalid_below is None:
-            if s > 1e-12:
-                w_t = w_t / s
-            else:
-                w_t = np.zeros(N, dtype=np.float64)
-        else:
-            if s > 1.0:
-                w_t = w_t / s
-            
+        if s > 1.0:
+            w_t = w_t / s
+
         weights[t] = w_t
         
     return weights
